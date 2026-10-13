@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Play the active instrument with the computer keyboard, and record it.
+"""Play the active instrument with the computer keyboard (or a MIDI keyboard), and record it.
 
 Layout (like a piano on a QWERTY keyboard)::
 
@@ -8,6 +8,9 @@ Layout (like a piano on a QWERTY keyboard)::
 
 While recording and while the scene plays, every held key becomes a stroke on
 the active layer, at the row of its note, from press to release.
+
+A connected MIDI keyboard plays too (velocity = volume, sustain pedal held notes);
+see :mod:`midi_input`.
 """
 
 from collections import OrderedDict
@@ -15,7 +18,7 @@ from collections import OrderedDict
 import bpy
 import numpy as np
 
-from . import board, engine, interpret, reader, synth
+from . import board, engine, interpret, midi_input, reader, synth  # noqa: F401
 from .operators import active_composition
 
 KEYMAP = {"A": 0, "W": 1, "S": 2, "E": 3, "D": 4, "F": 5, "T": 6, "G": 7, "Y": 8, "H": 9,
@@ -55,13 +58,15 @@ def note_buffer(instrument, pitch, sample_rate=44100):
     return buffer
 
 
-def note_on(instrument, pitch, sample_rate=44100):
+def note_on(instrument, pitch, sample_rate=44100, volume=1.0):
     out = device()
     if out is None:
         return None
     import aud
-    return out.play(aud.Sound.buffer(note_buffer(instrument, pitch, sample_rate),
-                                     float(sample_rate)))
+    sound = aud.Sound.buffer(note_buffer(instrument, pitch, sample_rate), float(sample_rate))
+    if volume != 1.0:
+        sound = sound.volume(float(volume))
+    return out.play(sound)
 
 
 def note_off(handle):
@@ -80,6 +85,11 @@ def note_off(handle):
         except Exception:
             return None
     bpy.app.timers.register(fade, first_interval=0.0)
+
+
+def velocity_volume(velocity):
+    """MIDI velocity (1-127) to playback volume, with a gentle curve."""
+    return 0.15 + 0.85 * (max(min(velocity, 127), 1) / 127.0) ** 1.5
 
 
 def instrument_of(comp):
@@ -127,7 +137,7 @@ def record_stroke(comp, scene, pitch, t0, t1, material_index):
 
 
 class GP2M_OT_play_keyboard(bpy.types.Operator):
-    """Suona lo strumento attivo con la tastiera del computer (R registra mentre la scena è in play)"""
+    """Suona lo strumento attivo con la tastiera del computer o una tastiera MIDI (R registra mentre la scena è in play)"""
 
     bl_idname = "gp2m.play_keyboard"
     bl_label = "Suona con la tastiera"
@@ -141,49 +151,109 @@ class GP2M_OT_play_keyboard(bpy.types.Operator):
         from . import music, prefs
         style = prefs.get_prefs().note_naming
         state = "● REGISTRA" if self.recording else "R = registra"
+        midi = f" · MIDI: {self.midi.name}" if self.midi is not None else ""
         text = (f"Tastiera: A W S E D F T G Y H U J K = {music.note_name(self.base, style)}… "
-                f"· Z/X ottava · {state} · Spazio = play · Esc = esci")
+                f"· Z/X ottava · {state} · Spazio = play · Esc = esci{midi}")
         if context.area is not None:
             context.area.header_text_set(text)
+
+    def _open_midi(self):
+        from . import midi_input, prefs
+        p = prefs.get_prefs()
+        if not p.use_midi_input or midi_input.rtmidi() is None:
+            return None
+        try:
+            return midi_input.Input(p.midi_port)
+        except midi_input.MidiInputError as error:
+            if p.midi_port.strip():  # only complain when a port was asked for
+                self.report({"WARNING"}, str(error))
+            return None
 
     def invoke(self, context, _event):
         comp = active_composition(context)
         self.comp_name = comp.name
         self.base = min(max((comp.gp2m.low_note // 12 + 1) * 12, 12), 108)
         self.recording = False
+        self.sustain = False
         self.held = {}  # key -> (handle, pitch, start seconds)
+        self.sustained = {}  # MIDI keys released while the pedal is down
+        self.midi = self._open_midi()
+        self.timer = None
+        if self.midi is not None:
+            self.timer = context.window_manager.event_timer_add(0.005, window=context.window)
         context.window_manager.modal_handler_add(self)
         self._header(context)
         return {"RUNNING_MODAL"}
 
     def _finish(self, context):
-        for handle, _pitch, _start in self.held.values():
+        for handle, _pitch, _start in list(self.held.values()) + list(self.sustained.values()):
             note_off(handle)
         self.held.clear()
+        self.sustained.clear()
+        if self.timer is not None:
+            context.window_manager.event_timer_remove(self.timer)
+            self.timer = None
+        if self.midi is not None:
+            self.midi.close()
+            self.midi = None
         if context.area is not None:
             context.area.header_text_set(None)
+
+    def _press(self, context, comp, key, pitch, volume=1.0):
+        if key in self.held:
+            self._release(context, comp, key)
+        if key in self.sustained:
+            self._end_note(context, comp, *self.sustained.pop(key))
+        scene = context.scene
+        instrument, _index = instrument_of(comp)
+        handle = note_on(instrument, pitch, int(comp.gp2m.sample_rate), volume)
+        start = composition_seconds(comp, scene, scene.frame_current)
+        self.held[key] = (handle, pitch, start)
+
+    def _release(self, context, comp, key):
+        note = self.held.pop(key, None)
+        if note is None:
+            return
+        if self.sustain and isinstance(key, int):
+            self.sustained[key] = note
+            return
+        self._end_note(context, comp, *note)
+
+    def _end_note(self, context, comp, handle, pitch, start):
+        note_off(handle)
+        scene = context.scene
+        playing = context.screen is not None and context.screen.is_animation_playing
+        if self.recording and playing:
+            _instrument, index = instrument_of(comp)
+            end = composition_seconds(comp, scene, scene.frame_current)
+            record_stroke(comp, scene, pitch, start, end, index)
+
+    def _poll_midi(self, context, comp):
+        for kind, note, value in self.midi.events():
+            if kind == "on":
+                self._press(context, comp, note, note, velocity_volume(value))
+            elif kind == "off":
+                self._release(context, comp, note)
+            elif kind == "sustain":
+                self.sustain = value >= 64
+                if not self.sustain:
+                    for key in list(self.sustained):
+                        self._end_note(context, comp, *self.sustained.pop(key))
 
     def modal(self, context, event):
         comp = bpy.data.objects.get(self.comp_name)
         if comp is None or event.type == "ESC":
             self._finish(context)
             return {"FINISHED"}
-        scene = context.scene
+        if event.type == "TIMER":
+            if self.midi is not None:
+                self._poll_midi(context, comp)
+            return {"PASS_THROUGH"}
         if event.type in KEYMAP:
-            pitch = self.base + KEYMAP[event.type]
             if event.value == "PRESS" and not event.is_repeat and event.type not in self.held:
-                instrument, _index = instrument_of(comp)
-                handle = note_on(instrument, pitch, int(comp.gp2m.sample_rate))
-                start = composition_seconds(comp, scene, scene.frame_current)
-                self.held[event.type] = (handle, pitch, start)
-            elif event.value == "RELEASE" and event.type in self.held:
-                handle, pitch, start = self.held.pop(event.type)
-                note_off(handle)
-                playing = context.screen is not None and context.screen.is_animation_playing
-                if self.recording and playing:
-                    _instrument, index = instrument_of(comp)
-                    end = composition_seconds(comp, scene, scene.frame_current)
-                    record_stroke(comp, scene, pitch, start, end, index)
+                self._press(context, comp, event.type, self.base + KEYMAP[event.type])
+            elif event.value == "RELEASE":
+                self._release(context, comp, event.type)
             return {"RUNNING_MODAL"}
         if event.value == "PRESS" and event.type in ("Z", "X"):
             self.base = min(max(self.base + (12 if event.type == "X" else -12), 12), 108)

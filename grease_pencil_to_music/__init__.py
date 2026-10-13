@@ -8,7 +8,8 @@ sound. Inspired by the drawn sound of Norman McLaren and Daphne Oram.
 
 import bpy
 
-from . import handlers, keyboard, midi_import, operators, prefs, props, timeline, ui
+from . import (handlers, keyboard, midi_import, midi_input,  # noqa: F401
+               operators, prefs, props, timeline, ui)
 
 _classes = (props.classes + prefs.classes + operators.classes + midi_import.classes
             + keyboard.classes + timeline.classes + ui.classes)

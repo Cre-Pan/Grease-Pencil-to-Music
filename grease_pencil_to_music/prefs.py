@@ -2,7 +2,7 @@
 """Add-on preferences: how each Grease Pencil attribute becomes sound."""
 
 import bpy
-from bpy.props import BoolProperty, EnumProperty, FloatProperty, IntProperty
+from bpy.props import BoolProperty, EnumProperty, FloatProperty, IntProperty, StringProperty
 
 from . import music
 from .board import KEY_LABEL_ITEMS
@@ -133,6 +133,13 @@ class GP2M_Preferences(bpy.types.AddonPreferences):
                                     max=1.0, subtype="FACTOR",
                                     description="Spessore dei tratti registrati con la "
                                     "tastiera, rispetto all'altezza della riga")
+    use_midi_input: BoolProperty(name="Tastiera MIDI", default=True,
+                                 description="Nella modalità 'Suona con la tastiera' ascolta "
+                                 "anche una tastiera MIDI collegata")
+    midi_port: StringProperty(name="Porta MIDI", default="",
+                              search=lambda _self, _context, _text: _midi_ports(),
+                              description="Nome della porta MIDI (vuoto = la prima trovata; "
+                              "accetta * come jolly)")
 
     def draw(self, _context):
         layout = self.layout
@@ -168,6 +175,18 @@ class GP2M_Preferences(bpy.types.AddonPreferences):
         col.prop(self, "debounce")
         col.prop(self, "mp3_bitrate")
         col.prop(self, "record_thickness")
+        box = layout.box()
+        box.label(text="Tastiera MIDI", icon="EVENT_M")
+        row = box.row()
+        row.prop(self, "use_midi_input", text="")
+        sub = row.row()
+        sub.active = self.use_midi_input
+        sub.prop(self, "midi_port", text="Porta")
+
+
+def _midi_ports():
+    from . import midi_input
+    return midi_input.port_names()
 
 
 class _Defaults:
@@ -196,6 +215,8 @@ class _Defaults:
     new_instruments = "ONE"
     new_sample_rate = "44100"
     record_thickness = 0.25
+    use_midi_input = True
+    midi_port = ""
 
 
 def new_instrument_idents():

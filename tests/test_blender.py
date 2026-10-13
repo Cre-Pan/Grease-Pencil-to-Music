@@ -691,6 +691,50 @@ def test_keyboard_recording_and_notes(comp):
     assert keyboard.composition_seconds(comp, scene, scene.frame_start) == 0.0
 
 
+def test_midi_keyboard_plays_and_records(comp):
+    """MIDI notes (velocity, sustain pedal) go through the same path as PC keys."""
+    from types import SimpleNamespace
+    keyboard, midi_input, engine = sub("keyboard"), sub("midi_input"), sub("engine")
+    assert midi_input.rtmidi() is not None, "the bundled rtmidi2 wheel is installed"
+    assert isinstance(midi_input.port_names(), list)  # no MIDI backend here: empty
+    scene = bpy.context.scene
+    fps = scene.render.fps / scene.render.fps_base
+
+    class Port:
+        def __init__(self):
+            self.queue = []
+
+        def events(self):
+            out, self.queue = self.queue, []
+            return out
+
+    methods = keyboard.GP2M_OT_play_keyboard.__dict__
+    Fake = type("Fake", (), {k: methods[k] for k in
+                             ("_press", "_release", "_end_note", "_poll_midi")})
+    op = Fake()
+    op.held, op.sustained, op.sustain, op.recording, op.midi = {}, {}, False, True, Port()
+    context = SimpleNamespace(scene=scene, screen=SimpleNamespace(is_animation_playing=True))
+
+    def at(seconds, *events):
+        scene.frame_current = scene.frame_start + round(seconds * fps)
+        op.midi.queue = [midi_input.decode(e) for e in events]
+        op._poll_midi(context, comp)
+
+    at(1.0, [0x90, 60, 100])
+    at(1.5, [0x80, 60, 0])
+    at(2.0, [0x90, 64, 90], [0xB0, 64, 127])
+    at(2.5, [0x90, 64, 0])  # released while the pedal is down: keeps sounding
+    assert 64 in op.sustained
+    at(3.0, [0xB0, 64, 0])
+    assert not op.held and not op.sustained
+    result = engine.regenerate(comp)
+    notes = sorted((n.pitch, round(n.start, 2), round(n.end, 1))
+                   for n in result.notes)
+    assert notes == [(60, 1.0, 1.5), (64, 2.0, 3.0)]
+    assert keyboard.velocity_volume(127) == pytest.approx(1.0)
+    assert 0.15 < keyboard.velocity_volume(1) < keyboard.velocity_volume(64) < 1.0
+
+
 @pytest.mark.parametrize("rate", ["44100", "48000"])
 def test_sound_is_written_at_any_rate_and_length(comp, tmp_path, rate):
     """Blender's FFmpeg WAV writer fails at 48 kHz on some lengths: WAV must not use it."""

@@ -518,3 +518,15 @@ def test_sfz_regions_inheritance_and_note_names(tmp_path):
     _o, high = synth.render_voice(voice(synth.LIBRARY_PREFIX + "test-sfz", 76), SR)
     assert dominant_frequency(low[: SR // 2, 0]) == pytest.approx(220.0, rel=0.02)
     assert dominant_frequency(high[: SR // 2, 0]) == pytest.approx(659.3, rel=0.02)
+
+
+def test_midi_input_decoding():
+    from grease_pencil_to_music import midi_input
+    assert midi_input.decode([0x90, 60, 100]) == ("on", 60, 100)
+    assert midi_input.decode([0x93, 61, 1]) == ("on", 61, 1)  # any channel
+    assert midi_input.decode([0x90, 60, 0]) == ("off", 60, 0)  # note on, velocity 0
+    assert midi_input.decode([0x80, 60, 64]) == ("off", 60, 0)
+    assert midi_input.decode([0xB0, 64, 127]) == ("sustain", 0, 127)
+    assert midi_input.decode([0xB0, 7, 127]) is None  # other controllers ignored
+    assert midi_input.decode([0xF8]) is None  # clock
+    assert midi_input.decode(None) is None
