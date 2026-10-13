@@ -16,7 +16,7 @@ import aud
 import bpy
 import numpy as np
 
-from . import interpret, midi, mixer, music, prefs, props, reader, synth
+from . import board, interpret, midi, mixer, music, prefs, props, reader, synth
 
 STRIP_PREFIX = "GP2M · "
 
@@ -195,7 +195,7 @@ def _place_strip(scene, obj, path, frames):
     editor = scene.sequence_editor or scene.sequence_editor_create()
     old = editor.strips.get(strip_name(obj))
     if (old is not None and old.sound is not None and old.sound.users == 1
-            and old.duration == frames and old.left_handle == scene.frame_start):
+            and old.duration == frames):
         old.sound.filepath = path  # reloads the audio
         return old
     channel = old.channel if old is not None else _free_channel(editor)
@@ -216,13 +216,84 @@ def _strip_file_ok(strip):
     return os.path.exists(bpy.path.abspath(strip.sound.filepath))
 
 
-def _sync_scene_range(scene, settings):
-    if not settings.loop:
+def scene_compositions(scene):
+    comps = [obj for obj in scene.objects
+             if obj.type == "GREASEPENCIL" and obj.gp2m.is_composition]
+    return sorted(comps, key=lambda o: (o.gp2m.order, o.name))
+
+
+def _fps(scene):
+    return scene.render.fps / scene.render.fps_base
+
+
+def _active_composition(scene):
+    layer = bpy.context.view_layer if bpy.context.scene == scene else scene.view_layers[0]
+    obj = layer.objects.active if layer is not None else None
+    if obj is not None and obj.type == "GREASEPENCIL" and obj.gp2m.is_composition:
+        return obj
+    return None
+
+
+def arrange(scene):
+    """Place, mute and time every composition of the scene for the play mode.
+
+    TOGETHER: all start at the scene start. SOLO: only the active composition
+    is heard. SEQUENCE: one after another, by "order" then name. The scene
+    range follows (so playback loops on what you hear). Writes only changes.
+    """
+    comps = scene_compositions(scene)
+    if not comps:
         return
-    fps = scene.render.fps / scene.render.fps_base
-    end = scene.frame_start + max(1, int(round(settings.length * fps))) - 1
-    if scene.frame_end != end:
-        scene.frame_end = end
+    play = scene.gp2m_play
+    fps = _fps(scene)
+    lengths = {obj.name: max(1, int(round(obj.gp2m.length * fps))) for obj in comps}
+    solo = _active_composition(scene) if play.mode == "SOLO" else None
+    if play.mode == "SOLO" and solo is None:
+        solo = next((o for o in comps if o.name == _last_solo.get(scene.name)),
+                                 comps[0])
+    if solo is not None:
+        _last_solo[scene.name] = solo.name
+
+    offset = 0
+    for obj in comps:
+        st = state(obj)
+        start_offset = offset if play.mode == "SEQUENCE" else 0
+        if play.mode == "SEQUENCE":
+            offset += lengths[obj.name]
+        st["offset_frames"] = start_offset
+        board.set_playhead_offset(obj, start_offset)
+        strip = find_strip(scene, obj)
+        if strip is None:
+            continue
+        target = scene.frame_start + start_offset
+        if strip.content_start != target:
+            strip.content_start = target
+        mute = obj.gp2m.mute or (solo is not None and obj != solo)
+        if strip.mute != mute:
+            strip.mute = mute
+
+    if play.fit_range:
+        if play.mode == "SEQUENCE":
+            total = offset
+        elif solo is not None:
+            total = lengths[solo.name]
+        else:
+            total = max(lengths.values())
+        end = scene.frame_start + total - 1
+        if scene.frame_end != end:
+            scene.frame_end = end
+
+
+_last_solo = {}
+
+
+def arrange_safe(scene):
+    try:
+        arrange(scene)
+        from . import timeline
+        timeline.tag_redraw()
+    except Exception:
+        traceback.print_exc()
 
 
 PEAKS_PER_SECOND = 100
@@ -238,8 +309,11 @@ def timeline_data(result, settings):
     top = max(float(peaks.max()) if len(peaks) else 0.0, 1e-6)
     notes = [(n.start, n.end, n.pitch, synth.get_instrument(n.instrument).color)
              for n in result.notes]
+    curves = [(start, pitch, synth.get_instrument(ident).color)
+              for start, pitch, ident in result.curves]
     return {"peaks": (peaks / top).astype(np.float32), "rate": PEAKS_PER_SECOND,
-            "notes": notes, "low": settings.low_note,
+            "notes": notes, "curves": curves, "curve_rate": interpret.CONTROL_RATE / 4,
+            "low": settings.low_note,
             "high": settings.low_note + settings.octaves * 12, "length": settings.length}
 
 
@@ -275,9 +349,7 @@ def regenerate(obj, scene=None, force=False):
         st["timeline"] = timeline_data(result, s)
         from . import timeline
         timeline.tag_redraw()
-    if strip is not None and strip.mute != s.mute:
-        strip.mute = s.mute
-    _sync_scene_range(scene, s)
+    arrange(scene)
     st["stats"] = {
         "notes": len(result.notes),
         "voices": result.voice_count,

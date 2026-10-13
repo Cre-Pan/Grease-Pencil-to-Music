@@ -10,7 +10,8 @@ import bpy
 
 from . import handlers, operators, prefs, props, timeline, ui
 
-_classes = props.classes + prefs.classes + operators.classes + ui.classes
+_classes = (props.classes + prefs.classes + operators.classes + ui.classes
+            + timeline.classes)
 
 
 def register():

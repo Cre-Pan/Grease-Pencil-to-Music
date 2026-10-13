@@ -21,6 +21,8 @@ _popup_queue = []
 _cleanup_needed = [False]
 _object_signature = [None]
 _was_playing = [False]
+_scaled = set()  # compositions whose object scale changed
+_msgbus_owner = object()
 
 
 def compositions():
@@ -84,20 +86,66 @@ def _signature():
     return hash(tuple(sorted(bpy.data.objects.keys())))
 
 
+def transform_running():
+    """True while an interactive transform (G, R, S) is in progress."""
+    wm = getattr(bpy.context, "window_manager", None)
+    if wm is None:
+        return False
+    for window in wm.windows:
+        for operator in getattr(window, "modal_operators", ()):
+            if operator.bl_idname.startswith("TRANSFORM_OT"):
+                return True
+    return False
+
+
+def apply_scale(obj):
+    """Object scale X = loop length, Z = octaves; the strokes are not stretched.
+
+    Called once the transform is finished: the scale goes back to 1 and the
+    board is rebuilt bigger or smaller.
+    """
+    sx, sz = abs(obj.scale.x), abs(obj.scale.z)
+    if abs(sx - 1.0) < 1e-4 and abs(sz - 1.0) < 1e-4 and abs(abs(obj.scale.y) - 1.0) < 1e-4:
+        return False
+    s = obj.gp2m
+    length = min(max(s.length * sx, 1.0), 300.0)
+    octaves = int(min(max(round(s.octaves * sz), 1), 7))
+    obj.scale = (1.0, 1.0, 1.0)
+    if abs(length - s.length) > 1e-6:
+        s.length = length
+    if octaves != s.octaves:
+        s.octaves = octaves
+    board.rebuild(obj, engine.scene_of(obj))
+    return True
+
+
 def _tick():
     wait = prefs.get_prefs().debounce - (time.monotonic() - _last_change[0])
     if wait > 0.0:
         return wait
+    if _scaled:
+        if transform_running():
+            return 0.25  # wait for the end of the S drag
+        for name in list(_scaled):
+            obj = bpy.data.objects.get(name)
+            if obj is not None and obj.gp2m.is_composition and apply_scale(obj):
+                _dirty.add(name)
+        _scaled.clear()
     if _cleanup_needed[0]:
         _cleanup_needed[0] = False
         try:
             engine.cleanup_orphans()
+            # Shift+D / Alt+D: every composition keeps its own rules.
+            for obj in board.make_independent(compositions()):
+                _dirty.add(obj.name)
         except Exception as error:
             print(f"[Grease Pencil to Music] cleanup failed: {error!r}")
         # Duplicated (Shift+D) or renamed compositions need their own strip.
         for obj in compositions():
             if engine.find_strip(engine.scene_of(obj), obj) is None:
                 _dirty.add(obj.name)
+        for scene in bpy.data.scenes:
+            engine.arrange_safe(scene)
     flush()
     _show_popups()
     return None
@@ -147,6 +195,9 @@ def on_depsgraph_update(_scene, depsgraph):
                 _check_stack(original)
                 if update.is_updated_geometry or update.is_updated_shading:
                     mark_dirty(original)
+                if update.is_updated_transform and tuple(original.scale) != (1.0, 1.0, 1.0):
+                    _scaled.add(original.name)
+                    _ensure_timer()
         elif isinstance(original, bpy.types.Material):
             mark_material_dirty(original)
         elif isinstance(original, (bpy.types.Scene, bpy.types.Collection)):
@@ -168,8 +219,22 @@ def on_load_post(*_args):
         # Sound files live in a temporary folder: recreate them for this session,
         # even when automatic updates are off.
         _dirty.add(obj.name)
-    if _dirty:
-        _ensure_timer()
+    _cleanup_needed[0] = True  # also makes shared data independent
+    subscribe()
+    _ensure_timer()
+
+
+def _on_active_object():
+    """Solo mode follows the active composition."""
+    for scene in bpy.data.scenes:
+        if scene.gp2m_play.mode == "SOLO":
+            engine.arrange_safe(scene)
+
+
+def subscribe():
+    bpy.msgbus.clear_by_owner(_msgbus_owner)
+    bpy.msgbus.subscribe_rna(key=(bpy.types.LayerObjects, "active"), owner=_msgbus_owner,
+                             args=(), notify=_on_active_object)
 
 
 @persistent
@@ -216,12 +281,14 @@ def register():
         if func not in handler_list:
             handler_list.append(func)
     _object_signature[0] = None
+    subscribe()
 
 
 def unregister():
     for handler_list, func in _HANDLERS:
         if func in handler_list:
             handler_list.remove(func)
+    bpy.msgbus.clear_by_owner(_msgbus_owner)
     for timer in (_tick, _resume_playback):
         if bpy.app.timers.is_registered(timer):
             bpy.app.timers.unregister(timer)

@@ -40,6 +40,7 @@ class RenderResult:
     notes: list  # interpret.MidiNote, all layers
     key: str  # changes whenever the audio would change
     voice_count: int = 0
+    curves: list = field(default_factory=list)  # (start, pitch curve, instrument) glides
 
 
 class _LRU:
@@ -92,7 +93,9 @@ def _render_stroke(stroke, spec, mapping, mode, fill_mode, radius_ref, sample_ra
         return key, cached
     interp = interpret.interpret_stroke(stroke, spec, mapping, mode, radius_ref, fill_mode)
     rendered = [synth.render_voice(v, sample_rate, mapping.vibrato_rate) for v in interp.voices]
-    value = (rendered, interp.notes)
+    curves = [(v.start, v.pitch[::4].astype(np.float32), v.instrument) for v in interp.voices
+              if len(v.pitch) > 1 and float(np.ptp(v.pitch)) > 0.05]
+    value = (rendered, interp.notes, curves)
     _stroke_cache.put(key, value)
     return key, value
 
@@ -107,6 +110,7 @@ def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.
 
     master = np.zeros((loop_n, 2), dtype=np.float32)
     notes = []
+    curves = []
     layer_keys = []
     voice_count = 0
     for layer in layers:
@@ -118,6 +122,7 @@ def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.
             stroke_keys.append(key)
             stroke_results.append(value)
             notes.extend(value[1])
+            curves.extend(value[2])
             voice_count += len(value[0])
 
         layer_key = hashlib.blake2b(
@@ -125,10 +130,10 @@ def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.
             digest_size=16).hexdigest()
         buffer = _layer_cache.get(layer_key)
         if buffer is None:
-            end = max([off + len(buf) for rendered, _n in stroke_results
+            end = max([off + len(buf) for rendered, _n, _c in stroke_results
                        for off, buf in rendered], default=0)
             buffer = np.zeros((max(end, loop_n), 2), dtype=np.float32)
-            for rendered, _n in stroke_results:
+            for rendered, _n, _c in stroke_results:
                 for offset, buf in rendered:
                     start = max(offset, 0)
                     clip = buf[start - offset:]
@@ -157,4 +162,5 @@ def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.
     key = hashlib.blake2b(
         repr((layer_keys, loop, round(master_volume, 4), context_key)).encode(),
         digest_size=16).hexdigest()
-    return RenderResult(master.astype(np.float32), sample_rate, notes, key, voice_count)
+    return RenderResult(master.astype(np.float32), sample_rate, notes, key, voice_count,
+                        curves)

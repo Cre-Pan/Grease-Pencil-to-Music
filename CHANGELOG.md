@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.0.3
+
+- **Tastiera**: tasti neri sul lato della griglia (come un pianoforte vero), nomi
+  delle note sul lato libero.
+- **Controller nella Timeline**: pulsante con la nota musicale accanto agli Overlay
+  (acceso/spento + menu). Sorgente: composizione attiva, tutte, una a scelta, mix del
+  Sequencer, un canale del Sequencer, Speaker. Forma d'onda: picchi, piena, contorno,
+  inviluppo RMS o nessuna; note MIDI; **flusso ottico** (curve di altezza dei tratti
+  in lettura ottica); altezza, opacità e colore.
+- **Ogni composizione ha le sue regole**: materiali-strumento propri (muto, volume e
+  strumento non si influenzano più tra composizioni); dopo Shift+D / Alt+D dati e
+  materiali vengono separati automaticamente.
+- **Ascolto**: *Tutte insieme*, *Solo l'attiva* (segue la composizione su cui disegni),
+  *Una dopo l'altra* (in fila per "Ordine", con la testina che parte al momento giusto).
+  L'intervallo della scena si adatta.
+- **Scala in Object Mode**: S + X allunga o accorcia la composizione, S + Z mostra più
+  o meno ottave; i tratti non vengono deformati.
+- Lista strumenti: il riquadro colore è separato dal nome.
+
 ## 0.0.2
 
 - **Un unico oggetto**: tavola, tastiera, etichette e testina sono livelli bloccati

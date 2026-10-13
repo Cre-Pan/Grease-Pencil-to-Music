@@ -3,7 +3,7 @@
 
 import bpy
 from bpy.props import (BoolProperty, CollectionProperty, EnumProperty, FloatProperty,
-                       IntProperty, PointerProperty, StringProperty)
+                       FloatVectorProperty, IntProperty, PointerProperty, StringProperty)
 
 from . import music, synth
 from .board import KEY_LABEL_ITEMS
@@ -29,6 +29,22 @@ def _board_changed(self, _context):
 def _instrument_changed(self, _context):
     from . import handlers
     handlers.mark_material_dirty(self)
+
+
+def _arrangement_changed(self, context):
+    from . import engine
+    scene = self.id_data if isinstance(self.id_data, bpy.types.Scene) else context.scene
+    if scene is not None:
+        engine.arrange_safe(scene)
+
+
+def _timeline_changed(_self, _context):
+    from . import timeline
+    timeline.tag_redraw()
+
+
+def _composition_poll(_self, obj):
+    return obj.type == "GREASEPENCIL" and obj.gp2m.is_composition
 
 
 LAYER_MODES = (
@@ -74,6 +90,9 @@ SAMPLE_RATES = (("44100", "44.1 kHz", ""), ("48000", "48 kHz", ""))
 
 class GP2M_CompositionSettings(bpy.types.PropertyGroup):
     is_composition: BoolProperty(default=False)
+    order: IntProperty(name="Ordine", default=0, min=0, max=999,
+                       description="Posizione nella riproduzione 'Una dopo l'altra'",
+                       update=_arrangement_changed)
     mute: BoolProperty(name="Muto", default=False,
                        description="Silenzia questa composizione (la tavola resta visibile)",
                        update=_sound_changed)
@@ -117,8 +136,8 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
     master_volume: FloatProperty(name="Volume", default=0.9, min=0.0, max=2.0,
                                  subtype="FACTOR", update=_sound_changed)
     loop: BoolProperty(name="Loop", default=True,
-                       description="Le code (eco, riverbero) rientrano dall'inizio del loop "
-                       "e l'intervallo della scena coincide con la composizione",
+                       description="Le code (eco, riverbero, note lunghe) rientrano "
+                       "dall'inizio del loop",
                        update=_sound_changed)
     auto_update: BoolProperty(name="Aggiornamento automatico", default=True,
                               description="Rigenera il suono a ogni modifica dei tratti")
@@ -147,11 +166,75 @@ def _set_active_layer(gp_data, index):
         if not is_board_layer(layers[index]):
             layers.active = layers[index]
 
-classes = (GP2M_LayerSettings, GP2M_CompositionSettings)
+PLAY_MODES = (
+    ("TOGETHER", "Tutte insieme", "Tutte le composizioni suonano contemporaneamente"),
+    ("SOLO", "Solo l'attiva",
+     "Suona solo la composizione attiva (quella su cui stai disegnando)"),
+    ("SEQUENCE", "Una dopo l'altra",
+     "Le composizioni suonano in fila, nell'ordine indicato da 'Ordine'"),
+)
+
+
+class GP2M_PlaySettings(bpy.types.PropertyGroup):
+    """How the compositions of a scene are heard together."""
+
+    mode: EnumProperty(name="Ascolto", items=PLAY_MODES, default="TOGETHER",
+                       update=_arrangement_changed)
+    fit_range: BoolProperty(name="Adatta l'intervallo della scena", default=True,
+                            description="Inizio e fine della scena seguono le composizioni "
+                            "(così il play va in loop)", update=_arrangement_changed)
+
+
+TIMELINE_SOURCES = (
+    ("ACTIVE", "Composizione attiva", "La composizione attiva (o tutte, se nessuna è attiva)"),
+    ("ALL", "Tutte le composizioni", "Tutte le composizioni della scena, al loro posto"),
+    ("PICK", "Una composizione", "Solo la composizione scelta qui sotto"),
+    ("VSE_MIX", "Mix del Sequencer", "Somma di tutte le strip audio udibili del Sequencer"),
+    ("VSE_CHANNEL", "Canale del Sequencer", "Solo le strip audio di un canale"),
+    ("SPEAKERS", "Speaker", "I suoni degli oggetti Speaker (strip NLA)"),
+)
+WAVE_STYLES = (
+    ("PEAKS", "Picchi", "Una barra verticale per ogni istante"),
+    ("FILLED", "Pieno", "Forma d'onda piena e simmetrica"),
+    ("OUTLINE", "Contorno", "Solo il bordo della forma d'onda"),
+    ("RMS", "Inviluppo RMS", "Volume medio, più morbido dei picchi"),
+    ("NONE", "Nessuna", "Nessuna forma d'onda"),
+)
+
+
+class GP2M_TimelineSettings(bpy.types.PropertyGroup):
+    """What is drawn in the Timeline / Dope Sheet."""
+
+    enabled: BoolProperty(name="Mostra suono nella Timeline", default=True,
+                          update=_timeline_changed)
+    source: EnumProperty(name="Sorgente", items=TIMELINE_SOURCES, default="ACTIVE",
+                         update=_timeline_changed)
+    composition: PointerProperty(name="Composizione", type=bpy.types.Object,
+                                 poll=_composition_poll, update=_timeline_changed)
+    channel: IntProperty(name="Canale", default=1, min=1, max=128, update=_timeline_changed)
+    wave_style: EnumProperty(name="Forma d'onda", items=WAVE_STYLES, default="PEAKS",
+                             update=_timeline_changed)
+    show_notes: BoolProperty(name="Note (MIDI)", default=True, update=_timeline_changed,
+                             description="Blocchetti delle note, come un piano roll")
+    show_optical: BoolProperty(name="Flusso ottico", default=True, update=_timeline_changed,
+                               description="Curve di altezza dei tratti in lettura ottica")
+    height: FloatProperty(name="Altezza", default=1.0, min=0.1, max=1.0, subtype="FACTOR",
+                          update=_timeline_changed)
+    opacity: FloatProperty(name="Opacità", default=0.8, min=0.05, max=1.0, subtype="FACTOR",
+                           update=_timeline_changed)
+    wave_color: FloatVectorProperty(name="Colore onda", subtype="COLOR", size=3, min=0.0,
+                                    max=1.0, default=(0.85, 0.9, 1.0),
+                                    update=_timeline_changed)
+
+
+classes = (GP2M_LayerSettings, GP2M_CompositionSettings, GP2M_PlaySettings,
+           GP2M_TimelineSettings)
 
 
 def register_properties():
     bpy.types.Object.gp2m = PointerProperty(type=GP2M_CompositionSettings)
+    bpy.types.Scene.gp2m_play = PointerProperty(type=GP2M_PlaySettings)
+    bpy.types.Scene.gp2m_timeline = PointerProperty(type=GP2M_TimelineSettings)
     bpy.types.GreasePencil.gp2m_layers = CollectionProperty(type=GP2M_LayerSettings)
     bpy.types.Material.gp2m_instrument = EnumProperty(
         name="Strumento", items=INSTRUMENT_ITEMS, default=synth.DEFAULT_INSTRUMENT,
@@ -168,6 +251,8 @@ def unregister_properties():
     del bpy.types.Material.gp2m_volume
     del bpy.types.Material.gp2m_instrument
     del bpy.types.GreasePencil.gp2m_layers
+    del bpy.types.Scene.gp2m_timeline
+    del bpy.types.Scene.gp2m_play
     del bpy.types.Object.gp2m
 
 

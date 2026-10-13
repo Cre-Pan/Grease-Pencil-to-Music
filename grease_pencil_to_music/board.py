@@ -78,27 +78,65 @@ def _fill_color(color):
     return (color[0], color[1], color[2], 0.45)
 
 
-def instrument_material(inst):
-    """The Grease Pencil material of an instrument, reused if already present.
+LABEL_KEY = "gp2m_label"  # instrument name shown in the UI (without .001 suffixes)
 
-    Filled shapes (clusters) get the instrument color, half transparent.
+
+def instrument_material(inst):
+    """A new Grease Pencil material for an instrument.
+
+    Every composition gets its own materials, so mute, volume and instrument
+    of one composition never change another one. Filled shapes (clusters) get
+    the instrument color, half transparent.
     """
-    material = bpy.data.materials.get(inst.label)
-    if material is None or material.grease_pencil is None or material.get(BOARD_FLAG):
-        material = bpy.data.materials.new(inst.label)
-        bpy.data.materials.create_gpencil_data(material)
-        _set_gp_style(material, inst.color, None)
-        material.grease_pencil.fill_color = _fill_color(inst.color)
-        material.gp2m_instrument = inst.ident
-        material.diffuse_color = inst.color
-    elif tuple(material.grease_pencil.fill_color) == (0.0, 0.0, 0.0, 1.0):
-        material.grease_pencil.fill_color = _fill_color(inst.color)  # 0.0.1 materials
+    material = bpy.data.materials.new(inst.label)
+    bpy.data.materials.create_gpencil_data(material)
+    _set_gp_style(material, inst.color, None)
+    material.grease_pencil.fill_color = _fill_color(inst.color)
+    material.gp2m_instrument = inst.ident
+    material.diffuse_color = inst.color
+    material[LABEL_KEY] = inst.label
     return material
 
 
 def instrument_materials(idents=None):
     return [instrument_material(inst) for inst in synth.INSTRUMENTS
             if idents is None or inst.ident in idents]
+
+
+def material_label(material):
+    if material is None:
+        return ""
+    return material.get(LABEL_KEY) or material.name
+
+
+def make_independent(compositions):
+    """Give every composition its own data and instrument materials.
+
+    Shift+D (or Alt+D) may share Grease Pencil data or materials between
+    compositions; the first one (by name) keeps them, the others get copies.
+    """
+    changed = []
+    owners = {}
+    for obj in sorted(compositions, key=lambda o: o.name):
+        if obj.data.name in owners:
+            obj.data = obj.data.copy()
+            changed.append(obj)
+        owners[obj.data.name] = obj
+    used = {}
+    for obj in sorted(compositions, key=lambda o: o.name):
+        gp = obj.data
+        for index, material in enumerate(gp.materials):
+            if material is None or is_board_material(material):
+                continue
+            if material.name in used and used[material.name] != obj.name:
+                copy = material.copy()
+                copy[LABEL_KEY] = material_label(material)
+                gp.materials[index] = copy
+                if obj not in changed:
+                    changed.append(obj)
+            else:
+                used[material.name] = obj.name
+    return changed
 
 
 def is_board_material(material):
@@ -220,7 +258,8 @@ def _keys(s, index, rows):
                        index["GP2M Tasto bianco"], "both"))
     for r in range(rows):
         if music.is_black(s.low_note + r):
-            specs.append((_rect(-kw, r * h + inset, -kw * 0.42, (r + 1) * h - inset), 0.001,
+            # Black keys sit on the grid side, like a piano roll.
+            specs.append((_rect(-kw * 0.58, r * h + inset, 0.0, (r + 1) * h - inset), 0.001,
                           index["GP2M Tasto nero"], "fill"))
     return specs
 
@@ -240,7 +279,8 @@ def _labels(s, index, rows, top):
             continue
         text = music.note_name(midi, style)
         baseline = r * h + (h - height) / 2.0
-        for line in glyphs.text_polylines(text, -0.03, baseline, height, "RIGHT"):
+        # Labels on the free (left) side of the keys.
+        for line in glyphs.text_polylines(text, -key_width(s) + 0.03, baseline, height, "LEFT"):
             specs.append((line, height * 0.06, index["GP2M Etichetta tasti"], "line"))
     height = 0.12
     for sec in range(int(math.floor(s.length + 1e-6)) + 1):
@@ -291,7 +331,24 @@ def _remove_legacy_children(comp):
                 bpy.data.curves.remove(data)
 
 
-def _set_playhead_driver(gp, scene, seconds_width):
+def _playhead_expression(seconds_width, offset_frames):
+    return (f"(frame - start - {int(offset_frames)}) * base / fps * {seconds_width:.6f}")
+
+
+def set_playhead_offset(comp, offset_frames):
+    """Shift the playhead when the composition starts later (sequence mode)."""
+    data = comp.data.animation_data
+    if data is None:
+        return
+    curve = data.drivers.find(f'layers["{HEAD_LAYER}"].translation', index=0)
+    if curve is None:
+        return
+    expression = _playhead_expression(comp.gp2m.seconds_width, offset_frames)
+    if curve.driver.expression != expression:
+        curve.driver.expression = expression
+
+
+def _set_playhead_driver(gp, scene, seconds_width, offset_frames=0):
     path = f'layers["{HEAD_LAYER}"].translation'
     try:
         gp.driver_remove(path, 0)
@@ -306,8 +363,8 @@ def _set_playhead_driver(gp, scene, seconds_width):
         var.targets[0].id_type = "SCENE"
         var.targets[0].id = scene
         var.targets[0].data_path = prop
-    # x = seconds since the loop start * seconds_width, every frame.
-    driver.expression = f"(frame - start) * base / fps * {seconds_width:.6f}"
+    # x = seconds since the composition start * seconds_width, every frame.
+    driver.expression = _playhead_expression(seconds_width, offset_frames)
 
 
 def ensure_order(gp):
@@ -359,7 +416,9 @@ def rebuild(comp, scene=None):
     _add_strokes(head.frames.new(frame).drawing,
                  [([(0.0, -0.12), (0.0, top + 0.04)], 0.012, index["GP2M Testina"], "line")])
     head.lock = True
-    _set_playhead_driver(gp, scene, s.seconds_width)
+    from . import engine
+    offset = engine.state(comp).get("offset_frames", 0)
+    _set_playhead_driver(gp, scene, s.seconds_width, offset)
 
     layer = gp.layers.get(active_name) if active_name else None
     if layer is None or is_board_layer(layer):

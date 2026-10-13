@@ -263,7 +263,10 @@ class MockLayout:
     def _child(self, *_args, **_kwargs):
         return MockLayout(self.log)
 
-    row = column = box = split = grid_flow = _child
+    def column(self, *_args, **_kwargs):
+        return MockLayout(self.log)
+
+    row = box = split = grid_flow = _child
 
     def label(self, **_kwargs):
         pass
@@ -294,6 +297,10 @@ class MockLayout:
                 ui_list.draw_item(fake, bpy.context, MockLayout(self.log), data, item, 0,
                                   active_data, active_prop)
         self.log.append(("list", list_id))
+
+    def popover(self, panel, **_kwargs):
+        assert hasattr(bpy.types, panel), panel
+        self.log.append(("popover", panel))
 
     def operator_menu_enum(self, idname, prop, **_kwargs):
         self.operator(idname)
@@ -424,3 +431,107 @@ def test_instrument_and_layer_list_operators(comp):
     assert bpy.ops.gp2m.remove_layer() == {"FINISHED"}
     assert [l.name for l in board.user_layers(comp.data)] == ["Livello 1", "Livello 2",
                                                               "Livello 3"]
+
+
+def _fresh(addon):
+    assert bpy.ops.gp2m.add_composition() == {"FINISHED"}
+    return bpy.context.view_layer.objects.active
+
+
+def test_compositions_have_their_own_instruments(comp):
+    board = sub("board")
+    other = _fresh(None)
+    mine = {slot.material.name for slot in comp.material_slots}
+    theirs = {slot.material.name for slot in other.material_slots
+              if not board.is_board_material(slot.material)}
+    assert not (mine & theirs)  # muting/volume in one never touches the other
+    assert board.material_label(other.material_slots[0].material) == "Flauto"
+
+
+def test_duplicates_become_independent(comp):
+    board = sub("board")
+    linked = comp.copy()  # like Alt+D: same data and materials
+    bpy.context.collection.objects.link(linked)
+    assert linked.data == comp.data
+    changed = board.make_independent([comp, linked])
+    assert linked in changed and linked.data != comp.data
+    mats = lambda o: {s.material.name for s in o.material_slots
+                      if not board.is_board_material(s.material)}
+    assert not (mats(comp) & mats(linked))
+
+
+def test_play_modes(comp):
+    engine = sub("engine")
+    scene = bpy.context.scene
+    for obj in engine.scene_compositions(scene):
+        if obj != comp:
+            bpy.data.objects.remove(obj, do_unlink=True)
+    engine.cleanup_orphans()
+    second = _fresh(None)
+    second.gp2m.length = 4.0
+    engine.regenerate(second)
+    fps = scene.render.fps / scene.render.fps_base
+    play = scene.gp2m_play
+    first = engine.scene_compositions(scene)[0]
+    other = engine.scene_compositions(scene)[1]
+
+    play.mode = "TOGETHER"
+    engine.arrange(scene)
+    strips = [engine.find_strip(scene, o) for o in (first, other)]
+    assert all(s.content_start == scene.frame_start and not s.mute for s in strips)
+    assert scene.frame_end - scene.frame_start + 1 == round(8 * fps)
+
+    play.mode = "SEQUENCE"
+    engine.arrange(scene)
+    lengths = [round(o.gp2m.length * fps) for o in (first, other)]
+    assert engine.find_strip(scene, other).content_start == scene.frame_start + lengths[0]
+    assert scene.frame_end - scene.frame_start + 1 == sum(lengths)
+    curve = other.data.animation_data.drivers.find(
+        f'layers["{sub("board").HEAD_LAYER}"].translation', index=0)
+    assert f"- {lengths[0]})" in curve.driver.expression
+
+    play.mode = "SOLO"
+    bpy.context.view_layer.objects.active = other
+    engine.arrange(scene)
+    assert engine.find_strip(scene, first).mute and not engine.find_strip(scene, other).mute
+    assert scene.frame_end - scene.frame_start + 1 == round(other.gp2m.length * fps)
+    play.mode = "TOGETHER"
+    engine.arrange(scene)
+
+
+def test_object_scale_changes_length_and_octaves(comp):
+    handlers, board = sub("handlers"), sub("board")
+    stroke = add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
+    before = [tuple(p.position) for p in stroke.points]
+    comp.scale = (2.0, 1.0, 5.0 / 3.0)
+    assert handlers.apply_scale(comp)
+    assert tuple(comp.scale) == (1.0, 1.0, 1.0)
+    assert comp.gp2m.length == pytest.approx(16.0) and comp.gp2m.octaves == 5
+    after = [tuple(p.position) for p in board.user_layers(comp.data)[0].frames[0].drawing.strokes[0].points]
+    assert after == before  # the strokes are not stretched
+
+
+def test_timeline_sources(comp):
+    engine, timeline = sub("engine"), sub("timeline")
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
+    engine.regenerate(comp)
+    settings = bpy.context.scene.gp2m_timeline
+    for source in ("ACTIVE", "ALL", "VSE_MIX", "VSE_CHANNEL"):
+        settings.source = source
+        settings.channel = engine.find_strip(bpy.context.scene, comp).channel
+        segments, items = timeline.collect(bpy.context, settings)
+        assert segments, source
+        assert any(len(s["peaks"]) and s["peaks"].max() > 0 for s in segments)
+        assert bool(items) == (source in ("ACTIVE", "ALL"))
+    settings.source = "SPEAKERS"
+    assert timeline.collect(bpy.context, settings) == ([], [])
+    settings.source = "ACTIVE"
+
+
+def test_timeline_header_and_popover_draw(comp):
+    timeline = sub("timeline")
+    log = []
+    timeline.GP2M_PT_timeline.draw(_Drawer(log), bpy.context)
+    timeline.draw_header_button(_Drawer(log), bpy.context)
+    drawn = {entry[1] for entry in log}
+    assert {"source", "wave_style", "show_notes", "show_optical", "enabled"} <= drawn

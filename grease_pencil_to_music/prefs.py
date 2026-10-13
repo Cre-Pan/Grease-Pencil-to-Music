@@ -34,13 +34,6 @@ NAMING_ITEMS = (
     ("EN", "C D E F G A B", "Nomi inglesi (C4 = Do centrale)"),
     ("IT", "Do Re Mi Fa Sol La Si", "Nomi italiani (Do4 = Do centrale)"),
 )
-TIMELINE_ITEMS = (
-    ("BOTH", "Onda + note", "Forma d'onda e blocchetti delle note nella Timeline"),
-    ("WAVE", "Forma d'onda", "Solo la forma d'onda"),
-    ("NOTES", "Note", "Solo i blocchetti delle note (come un piano roll)"),
-    ("NONE", "Nessuno", "Niente nella Timeline"),
-)
-
 
 def _changed(_self, _context):
     from . import handlers
@@ -53,18 +46,11 @@ def _naming_changed(_self, _context):
         board.request_rebuild(obj)
 
 
-def _timeline_changed(_self, _context):
-    from . import timeline
-    timeline.tag_redraw()
-
-
 class GP2M_Preferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
     note_naming: EnumProperty(name="Nomi delle note", items=NAMING_ITEMS, default="EN",
                               update=_naming_changed)
-    timeline_display: EnumProperty(name="Nella Timeline", items=TIMELINE_ITEMS,
-                                   default="BOTH", update=_timeline_changed)
     resume_after_undo: BoolProperty(name="Riprendi il play dopo Ctrl+Z", default=True,
                                     description="Se Ctrl+Z ferma la riproduzione, la fa "
                                     "ripartire subito")
@@ -90,10 +76,9 @@ class GP2M_Preferences(bpy.types.AddonPreferences):
     def draw(self, _context):
         layout = self.layout
         box = layout.box()
-        box.label(text="Tavola e Timeline", icon="SEQ_PREVIEW")
+        box.label(text="Tavola e riproduzione", icon="SEQ_PREVIEW")
         grid = box.grid_flow(row_major=True, columns=2, even_columns=True, align=True)
-        for attr, label in (("note_naming", "Nomi delle note"),
-                            ("timeline_display", "Nella Timeline")):
+        for attr, label in (("note_naming", "Nomi delle note"),):
             grid.label(text=label)
             grid.prop(self, attr, text="")
         box.prop(self, "resume_after_undo")
@@ -116,7 +101,6 @@ class GP2M_Preferences(bpy.types.AddonPreferences):
 
 class _Defaults:
     note_naming = "EN"
-    timeline_display = "BOTH"
     resume_after_undo = True
     map_thickness = "VOLUME"
     map_opacity = "BRIGHTNESS"

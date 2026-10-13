@@ -26,6 +26,9 @@ colore = voce).
 | Effetti | per livello: eco (ping-pong), riverbero (convoluzione), lo-fi |
 | Uscite | strip nel Video Sequencer (Play in Blender), export WAV, MP3, MIDI, overlay nella Timeline |
 | Oggetto | un solo oggetto per composizione: la tavola è fatta di livelli bloccati dentro di esso |
+| Indipendenza | ogni composizione ha dati e materiali-strumento propri (anche dopo Shift+D / Alt+D) |
+| Ascolto | per scena: tutte insieme, solo l'attiva, una dopo l'altra (strip spostate, testina con offset) |
+| Scala oggetto | X = durata del loop, Z = ottave; la scala torna a 1 a fine trasformazione |
 | Edit / Sculpt Mode | qualsiasi modifica ai tratti rigenera il suono |
 | Modificatori GP | ignorati per default (avviso), letti con "Usa modificatori"; gli effetti visivi non suonano |
 | Dipendenze | nessuna: NumPy e `aud` sono già in Blender (anche l'MP3) |
@@ -43,7 +46,8 @@ engine.py      render → WAV in cartella temporanea → strip nel VSE; export  
 handlers.py    depsgraph / undo / load → rigenerazione con debounce        [bpy]
 board.py       tavola, tastiera, etichette, testina come livelli della composizione  [bpy]
 glyphs.py      font a tratto singolo per le etichette                     [puro]
-timeline.py    forma d'onda e note nella Timeline (draw handler POST_PIXEL)  [bpy]
+timeline.py    suono nella Timeline: sorgenti, stili, note, flusso ottico;
+               pulsante nell'header del Dope Sheet (draw handler POST_PIXEL)  [bpy]
 props.py prefs.py operators.py ui.py                                       [bpy]
 ```
 
@@ -64,6 +68,9 @@ Note tecniche su Blender 5.2 emerse durante lo sviluppo:
   dopo ogni aggiunta il gruppo della testina torna in cima;
 - la testina è un livello la cui `translation` è pilotata da un driver sui dati GP;
 - l'icona dell'occhio di `hide` cambia da sola: non va passata un'icona esplicita;
+- `Window.modal_operators` dice se uno Scala è ancora in corso: la scala dell'oggetto
+  viene convertita in durata/ottave solo a trasformazione finita;
+- `SoundStrip.content_start` sposta una strip senza tagliarla (`frame_start` è deprecato);
 - cambiare `Sound.filepath` ricarica l'audio senza ricreare la strip (ma la durata
   della strip non si aggiorna: se cambia la lunghezza del loop la strip viene ricreata).
 

@@ -7,7 +7,7 @@ disegna su una tavola, e la tavola suona.
 ![La tavola musicale](docs/tavola.png)
 
 - **X = tempo** (linee verticali = secondi, più tenui i battiti)
-- **Z = altezza** (una riga per semitono, tastiera verticale a sinistra con i tasti alti quanto le righe)
+- **Z = altezza** (una riga per semitono, tastiera verticale a sinistra: tasti alti quanto le righe, neri verso la griglia)
 - **Materiale = strumento**, con volume per strumento
 - **Spessore, opacità, vertex color, morbidezza** modellano il suono (configurabile)
 - **Forme piene = cluster** (note della scala coperte dalla forma, oppure banda di rumore)
@@ -29,16 +29,32 @@ disegna su una tavola, e la tavola suona.
    frontale, *Solid → Texture*, e si entra in **Draw Mode**.
 2. Disegna. Appena stacchi la penna il suono viene rigenerato.
 3. Premi **Spazio**: la testina rossa scorre e senti il disegno, in loop.
-   Nella **Timeline** vedi la forma d'onda e i blocchetti delle note.
+   Nella **Timeline** vedi la forma d'onda e i blocchetti delle note (vedi sotto).
 4. Modifica in **Edit Mode** o **Sculpt Mode**: il suono si aggiorna.
 5. **Shift+D** duplica tutta la composizione: ogni copia è un nuovo "piano di lavoro"
-   con il suo suono (tasto muto nel pannello per ascoltarne una sola).
+   con le sue regole (strumenti, volumi, muti) e il suo suono.
+6. **Ascolto** (pannello principale): *Tutte insieme*, *Solo l'attiva* oppure
+   *Una dopo l'altra*.
+7. In **Object Mode**, **S X** allunga o accorcia la composizione e **S Z** mostra più o
+   meno ottave, senza deformare i tratti.
+
+### Suono nella Timeline
+
+Nell'header della Timeline / Dope Sheet, accanto agli Overlay, c'è il pulsante con la
+**nota musicale**: lo accende e lo spegne, la freccia apre le opzioni.
+
+| Opzione | Scelte |
+|---|---|
+| Sorgente | composizione attiva, tutte le composizioni, una composizione, mix del Sequencer, un canale del Sequencer, Speaker |
+| Forma d'onda | picchi, piena, contorno, inviluppo RMS, nessuna |
+| Mostra | note (MIDI), flusso ottico (curve dei tratti in lettura ottica) |
+| Aspetto | altezza, opacità, colore |
 
 Tutto si controlla dalla barra laterale **N → Musica**:
 
 | Pannello | Cosa contiene |
 |---|---|
-| Grease Pencil to Music | stato, muto, avvisi, *Auto* (aggiornamento automatico), *Genera suono* |
+| Grease Pencil to Music | stato, muto, avvisi, *Auto* (aggiornamento automatico), *Genera suono*, **Ascolto** (insieme / solo l'attiva / una dopo l'altra) |
 | Tavola e tempo | BPM, durata del loop, nota più bassa, ottave, **etichette dei tasti** (solo Do, tasti bianchi, tutte, nessuna), griglia |
 | Lettura | scala e tonica, quantizzazione ritmica, **swing**, nota minima, volume, **Usa modificatori** |
 | Strumenti | lista con **+ / −**: colore, nome, **volume**, occhio = nascosto e muto; sotto, il tipo di strumento |
@@ -67,7 +83,6 @@ le note General MIDI della batteria.
 | Voce | Opzioni (default in grassetto) |
 |---|---|
 | Nomi delle note | **C D E F G A B**, Do Re Mi Fa Sol La Si |
-| Nella Timeline | **Onda + note**, Forma d'onda, Note, Nessuno |
 | Riprendi il play dopo Ctrl+Z | **sì** |
 | Spessore | **Volume**, Volume + Vibrato, Vibrato, Brillantezza, Nessuno |
 | Opacità | **Brillantezza**, Volume, Nessuno |

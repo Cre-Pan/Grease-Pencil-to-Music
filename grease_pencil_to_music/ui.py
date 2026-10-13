@@ -53,14 +53,14 @@ class GP2M_UL_instruments(bpy.types.UIList):
     def draw_item(self, _context, layout, _data, slot, _icon, _active_data, _active_prop,
                   _index=0, _flt_flag=0):
         material = slot.material
-        row = layout.row(align=True)
+        row = layout.row(align=False)  # the color box stands apart from the name
         if material is None or material.grease_pencil is None:
             row.label(text="(vuoto)")
             return
-        swatch = row.row(align=True)
+        swatch = row.row()
         swatch.ui_units_x = 1.0
         swatch.prop(material.grease_pencil, "color", text="")
-        row.prop(material, "name", text="", emboss=False)
+        row.label(text=board.material_label(material))
         volume = row.row(align=True)
         volume.ui_units_x = 4
         volume.prop(material, "gp2m_volume", text="", slider=True)
@@ -114,6 +114,14 @@ class GP2M_PT_main(_Panel, bpy.types.Panel):
         row = layout.row(align=True)
         row.prop(comp.gp2m, "auto_update", text="Auto", toggle=True, icon="FILE_REFRESH")
         row.operator("gp2m.regenerate", icon="PLAY_SOUND")
+
+        play = context.scene.gp2m_play
+        box = layout.box()
+        box.label(text="Ascolto delle composizioni", icon="SPEAKER")
+        box.row().prop(play, "mode", expand=True)
+        if play.mode == "SEQUENCE":
+            box.prop(comp.gp2m, "order")
+        box.prop(play, "fit_range")
 
 
 class GP2M_PT_board(_CompositionPanel, bpy.types.Panel):

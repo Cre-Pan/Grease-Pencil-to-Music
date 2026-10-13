@@ -326,16 +326,38 @@ def test_noise_cluster_follows_the_shape():
     assert inside > 10 * outside
 
 
-def test_timeline_geometry():
-    data = {"peaks": np.ones(800, dtype=np.float32), "rate": 100,
-            "notes": [(1.0, 2.0, 60, (1, 0, 0, 1)), (3.0, 3.5, 64, (0, 0, 1, 1))],
-            "low": 48, "high": 84, "length": 8.0}
-    # 24 fps, frame 1 at x=0, 10 pixels per frame, 2000 px wide region.
-    wave, notes = timeline.build_geometry(data, 1, 24.0, -10.0, 10.0, 2000, 0.0, 100.0)
-    assert len(wave) > 0 and wave[:, 0].min() >= -2 and wave[:, 0].max() <= 2002
-    red = notes[(1, 0, 0)]
+def test_timeline_wave_sums_sources():
+    seg = {"start": 1.0, "peaks": np.full(800, 0.4, dtype=np.float32), "rate": 100,
+           "frame_from": 1.0, "frame_to": 193.0}
+    frames, amp = timeline.build_wave([seg], 0.0, 200.0, 24.0)
+    assert amp[(frames > 10) & (frames < 150)].min() == pytest.approx(0.4, abs=1e-6)
+    assert amp[frames > 195].max() == 0.0
+    _f, both = timeline.build_wave([seg, dict(seg)], 0.0, 200.0, 24.0)
+    assert both.max() == pytest.approx(0.8, abs=1e-6)  # the mix adds up
+
+
+@pytest.mark.parametrize("style,primitives", [("PEAKS", ["LINES"]), ("FILLED", ["TRIS"]),
+                                              ("OUTLINE", ["LINES"]),
+                                              ("RMS", ["TRIS", "LINES"]), ("NONE", [])])
+def test_timeline_wave_styles(style, primitives):
+    x = np.linspace(0, 100, 50)
+    amp = np.abs(np.sin(x))
+    parts = timeline.wave_geometry(x, amp, 0.0, 40.0, style)
+    assert [p[0] for p in parts] == primitives
+    for _primitive, vertices, _weight in parts:
+        assert vertices[:, 1].min() >= -1e-4 and vertices[:, 1].max() <= 40.0 + 1e-4
+
+
+def test_timeline_notes_and_optical_curves():
+    data = {"notes": [(1.0, 2.0, 60, (1, 0, 0, 1))], "low": 48, "high": 84,
+            "curves": [(0.0, np.linspace(60, 64, 20), (0, 0, 1, 1))], "curve_rate": 10.0}
+    def to_x(frames):
+        return np.asarray(frames) * 10.0
+    tris, lines = timeline.note_geometry(data, 0.0, 24.0, to_x, 2000, 0.0, 74.0)
+    red = tris[(1, 0, 0)]
     assert red[:, 0].min() == pytest.approx(240.0) and red[:, 0].max() == pytest.approx(480.0)
-    assert set(notes) == {(1, 0, 0), (0, 0, 1)}
-    none, nothing = timeline.build_geometry(data, 1, 24.0, -10.0, 10.0, 2000, 0.0, 100.0,
-                                            show_wave=False, show_notes=False)
-    assert len(none) == 0 and not nothing
+    blue = lines[(0, 0, 1)]
+    assert blue[:, 1].min() < blue[:, 1].max()  # the glide rises
+    none_t, none_l = timeline.note_geometry(data, 0.0, 24.0, to_x, 2000, 0.0, 74.0,
+                                            show_notes=False, show_curves=False)
+    assert not none_t and not none_l
