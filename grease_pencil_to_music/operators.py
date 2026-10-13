@@ -8,7 +8,7 @@ import bpy
 from bpy.props import EnumProperty, IntProperty, StringProperty
 from mathutils import Euler, Vector
 
-from . import board, engine, props
+from . import board, engine, props, synth
 
 
 def active_composition(context):
@@ -47,6 +47,9 @@ def frame_view(context, comp):
         region_3d.view_rotation = Euler((math.pi / 2.0, 0.0, 0.0)).to_quaternion()
         region_3d.view_location = center
         region_3d.view_distance = max(width + kw, top) * 0.85
+        shading = area.spaces.active.shading
+        shading.type = "SOLID"
+        shading.color_type = "TEXTURE"  # flat material colors: the board reads well
         area.tag_redraw()
 
 
@@ -193,38 +196,92 @@ class GP2M_OT_export(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class GP2M_OT_set_active_material(bpy.types.Operator):
-    """Disegna con questo strumento"""
+def _composition_poll(context):
+    return active_composition(context) is not None
 
-    bl_idname = "gp2m.set_active_material"
-    bl_label = "Usa strumento"
-    bl_options = {"INTERNAL", "UNDO"}
 
-    index: IntProperty()
+class GP2M_OT_add_instrument(bpy.types.Operator):
+    """Aggiungi uno strumento (un materiale Grease Pencil) alla composizione"""
+
+    bl_idname = "gp2m.add_instrument"
+    bl_label = "Aggiungi strumento"
+    bl_options = {"REGISTER", "UNDO"}
+
+    instrument: EnumProperty(name="Strumento", items=props.INSTRUMENT_ITEMS)
+
+    @classmethod
+    def poll(cls, context):
+        return _composition_poll(context)
 
     def execute(self, context):
         comp = active_composition(context)
-        if comp is None:
-            return {"CANCELLED"}
-        comp.active_material_index = self.index
+        material = board.instrument_material(synth.get_instrument(self.instrument))
+        gp = comp.data
+        names = [m.name if m else "" for m in gp.materials]
+        if material.name not in names:
+            # Keep instruments before the board materials.
+            gp.materials.append(material)
+            names.append(material.name)
+            first_board = next((i for i, m in enumerate(gp.materials)
+                                if board.is_board_material(m)), None)
+            if first_board is not None:
+                _move_material_slot(comp, len(names) - 1, first_board)
+                names = [m.name if m else "" for m in gp.materials]
+        comp.active_material_index = names.index(material.name)
         return {"FINISHED"}
 
 
-class GP2M_OT_set_active_layer(bpy.types.Operator):
-    """Disegna su questo livello"""
+def _move_material_slot(comp, src, dst):
+    """Move a material slot keeping every stroke on its material."""
+    gp = comp.data
+    if src == dst:
+        return
+    materials = list(gp.materials)
+    order = list(range(len(materials)))
+    order.insert(dst, order.pop(src))
+    remap = {old: new for new, old in enumerate(order)}
+    for layer in gp.layers:
+        for frame in layer.frames:
+            for stroke in frame.drawing.strokes:
+                stroke.material_index = remap.get(stroke.material_index, stroke.material_index)
+    for index, old in enumerate(order):
+        gp.materials[index] = materials[old]
 
-    bl_idname = "gp2m.set_active_layer"
-    bl_label = "Usa livello"
-    bl_options = {"INTERNAL", "UNDO"}
 
-    name: StringProperty()
+class GP2M_OT_remove_instrument(bpy.types.Operator):
+    """Togli lo strumento attivo dalla composizione (i suoi tratti passano al primo strumento)"""
+
+    bl_idname = "gp2m.remove_instrument"
+    bl_label = "Togli strumento"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        comp = active_composition(context)
+        if comp is None or not comp.material_slots:
+            return False
+        material = comp.material_slots[comp.active_material_index].material
+        return not board.is_board_material(material)
 
     def execute(self, context):
         comp = active_composition(context)
-        layer = comp.data.layers.get(self.name) if comp else None
-        if layer is None:
-            return {"CANCELLED"}
-        comp.data.layers.active = layer
+        gp = comp.data
+        index = comp.active_material_index
+        for layer in board.user_layers(gp):
+            for frame in layer.frames:
+                for stroke in frame.drawing.strokes:
+                    if stroke.material_index == index:
+                        stroke.material_index = 0
+                    elif stroke.material_index > index:
+                        stroke.material_index -= 1
+        for layer in gp.layers:
+            if board.is_board_layer(layer):
+                for frame in layer.frames:
+                    for stroke in frame.drawing.strokes:
+                        if stroke.material_index > index:
+                            stroke.material_index -= 1
+        gp.materials.pop(index=index)
+        comp.active_material_index = max(0, index - 1)
         return {"FINISHED"}
 
 
@@ -237,18 +294,79 @@ class GP2M_OT_add_layer(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return active_composition(context) is not None
+        return _composition_poll(context)
 
     def execute(self, context):
         gp = active_composition(context).data
-        index = len(gp.layers) + 1
+        index = len(board.user_layers(gp)) + 1
         while gp.layers.get(f"Livello {index}") is not None:
             index += 1
         layer = gp.layers.new(f"Livello {index}")
         layer.use_lights = False
         layer.frames.new(min(1, context.scene.frame_start))
+        board.ensure_order(gp)  # new layers start on top: keep the playhead above them
         gp.layers.active = layer
         props.ensure_layer_settings(gp)
+        return {"FINISHED"}
+
+
+class GP2M_OT_remove_layer(bpy.types.Operator):
+    """Elimina il livello attivo con i suoi tratti"""
+
+    bl_idname = "gp2m.remove_layer"
+    bl_label = "Elimina livello"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        comp = active_composition(context)
+        if comp is None:
+            return False
+        active = comp.data.layers.active
+        return (active is not None and not board.is_board_layer(active)
+                and len(board.user_layers(comp.data)) > 1)
+
+    def execute(self, context):
+        gp = active_composition(context).data
+        layer = gp.layers.active
+        name = layer.name
+        layers = board.user_layers(gp)
+        position = [l.name for l in layers].index(name)
+        gp.layers.remove(layer)
+        for index, item in enumerate(gp.gp2m_layers):
+            if item.name == name:
+                gp.gp2m_layers.remove(index)
+                break
+        layers = board.user_layers(gp)
+        gp.layers.active = layers[max(0, position - 1)]
+        return {"FINISHED"}
+
+
+class GP2M_OT_move_layer(bpy.types.Operator):
+    """Sposta il livello attivo sopra o sotto"""
+
+    bl_idname = "gp2m.move_layer"
+    bl_label = "Sposta livello"
+    bl_options = {"REGISTER", "UNDO"}
+
+    direction: EnumProperty(items=(("UP", "Su", ""), ("DOWN", "Giù", "")))
+
+    @classmethod
+    def poll(cls, context):
+        comp = active_composition(context)
+        return (comp is not None and comp.data.layers.active is not None
+                and not board.is_board_layer(comp.data.layers.active))
+
+    def execute(self, context):
+        gp = active_composition(context).data
+        layer = gp.layers.active
+        layers = list(gp.layers)
+        index = [l.name for l in layers].index(layer.name)
+        neighbour = index + (1 if self.direction == "UP" else -1)
+        # Never cross the board (below) or the playhead (above).
+        if not 0 <= neighbour < len(layers) or board.is_board_layer(layers[neighbour]):
+            return {"CANCELLED"}
+        gp.layers.move(layer, self.direction)
         return {"FINISHED"}
 
 
@@ -257,7 +375,9 @@ classes = (
     GP2M_OT_regenerate,
     GP2M_OT_rebuild_board,
     GP2M_OT_export,
-    GP2M_OT_set_active_material,
-    GP2M_OT_set_active_layer,
+    GP2M_OT_add_instrument,
+    GP2M_OT_remove_instrument,
     GP2M_OT_add_layer,
+    GP2M_OT_remove_layer,
+    GP2M_OT_move_layer,
 )

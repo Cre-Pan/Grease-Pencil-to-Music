@@ -239,3 +239,103 @@ def test_midi_file_structure():
                             {"name": "Drums", "program": -1, "notes": notes[:1]}], 120)
     ntracks, ppq, note_ons = parse_midi(data)
     assert (ntracks, ppq, note_ons) == (3, midi.PPQ, 3)
+
+
+# --- 0.0.2 ---------------------------------------------------------------------
+
+from grease_pencil_to_music import glyphs, timeline  # noqa: E402
+
+
+def test_italian_note_names():
+    assert music.note_name(60, "IT") == "Do4"
+    assert music.note_name(67, "IT") == "Sol4"
+    assert music.note_name(70, "IT") == "La#4"
+
+
+def test_every_label_character_has_a_glyph():
+    for style in ("EN", "IT"):
+        for midi in range(12, 120):
+            for char in music.note_name(midi, style).replace("-", ""):
+                assert char in glyphs.GLYPHS, (style, char)
+    for char in "0123456789s":
+        assert char in glyphs.GLYPHS
+
+
+def test_text_alignment():
+    right = glyphs.text_polylines("C4", 0.0, 0.0, 1.0, "RIGHT")
+    assert max(x for line in right for x, _y in line) == pytest.approx(0.0, abs=1e-9)
+    centered = glyphs.text_polylines("8s", 2.0, 0.0, 1.0, "CENTER")
+    xs = [x for line in centered for x, _y in line]
+    assert (min(xs) + max(xs)) / 2 == pytest.approx(2.0, abs=0.1)
+
+
+@pytest.mark.parametrize("ident", ["KICK", "SNARE", "HIHAT", "CRASH", "CLAP", "TOM", "COWBELL"])
+def test_percussion_is_a_single_hit(ident):
+    inst = synth.get_instrument(ident)
+    assert inst.percussive and inst.gm_program == -1
+    short = voice(ident, 50, duration=0.1)
+    long = voice(ident, 50, duration=3.0)
+    _o, a = synth.render_voice(short, SR)
+    _o, b = synth.render_voice(long, SR)
+    assert len(a) == len(b) == int(inst.length * SR)  # the stroke length does not matter
+    assert np.max(np.abs(a)) > 0.05 and np.all(np.isfinite(a))
+
+
+def test_drum_notes_follow_general_midi():
+    assert synth.midi_drum_note("KICK", 70) == 36
+    assert synth.midi_drum_note("HIHAT", 40) == 42
+    assert synth.midi_drum_note("TOM", 36) < synth.midi_drum_note("TOM", 80)
+    assert synth.midi_drum_note("DRUM", 55) == 55
+
+
+def test_swing_delays_offbeats():
+    spec = interpret.BoardSpec(time_grid="1_8", bpm=120, swing=0.5)  # 0.25 s grid
+    on = interpret.interpret_stroke(stroke((1.0, 1.0), (5, 5)), spec, interpret.Mapping())
+    off = interpret.interpret_stroke(stroke((1.25, 1.25), (5, 5)), spec, interpret.Mapping())
+    assert on.notes[0].start == pytest.approx(1.0)
+    assert off.notes[0].start == pytest.approx(1.25 + 0.125)
+
+
+def filled(xs, rows_low, rows_high):
+    x0, x1 = xs
+    z0, z1 = (rows_low + 0.1) * H, (rows_high + 0.9) * H
+    x = np.array([x0, x1, x1, x0], dtype=float)
+    z = np.array([z0, z0, z1, z1], dtype=float)
+    return interpret.StrokeData(x, z, np.full(4, 0.02), np.ones(4), filled=True)
+
+
+def test_tonal_cluster_plays_the_covered_scale_notes():
+    res = interpret.interpret_stroke(filled((1, 2), C4_ROW, C4_ROW + 4),
+                                     free_spec(scale="MAJOR"), interpret.Mapping())
+    assert sorted(n.pitch for n in res.notes) == [60, 62, 64]  # C D E
+
+
+def test_noise_cluster_follows_the_shape():
+    res = interpret.interpret_stroke(filled((1, 2), C4_ROW, C4_ROW + 12), free_spec(),
+                                     interpret.Mapping(), fill_mode="NOISE")
+    assert len(res.voices) == 1 and not res.notes
+    v = res.voices[0]
+    assert v.instrument == interpret.NOISE_BAND
+    assert np.median(v.band_low) == pytest.approx(60, abs=0.6)
+    assert np.median(v.band_high) == pytest.approx(72, abs=0.6)
+    _o, buf = synth.render_voice(v, SR)
+    spectrum = np.abs(np.fft.rfft(buf[:, 0]))
+    freqs = np.fft.rfftfreq(len(buf), 1 / SR)
+    inside = spectrum[(freqs > 280) & (freqs < 500)].mean()
+    outside = spectrum[(freqs > 2000) & (freqs < 4000)].mean()
+    assert inside > 10 * outside
+
+
+def test_timeline_geometry():
+    data = {"peaks": np.ones(800, dtype=np.float32), "rate": 100,
+            "notes": [(1.0, 2.0, 60, (1, 0, 0, 1)), (3.0, 3.5, 64, (0, 0, 1, 1))],
+            "low": 48, "high": 84, "length": 8.0}
+    # 24 fps, frame 1 at x=0, 10 pixels per frame, 2000 px wide region.
+    wave, notes = timeline.build_geometry(data, 1, 24.0, -10.0, 10.0, 2000, 0.0, 100.0)
+    assert len(wave) > 0 and wave[:, 0].min() >= -2 and wave[:, 0].max() <= 2002
+    red = notes[(1, 0, 0)]
+    assert red[:, 0].min() == pytest.approx(240.0) and red[:, 0].max() == pytest.approx(480.0)
+    assert set(notes) == {(1, 0, 0), (0, 0, 1)}
+    none, nothing = timeline.build_geometry(data, 1, 24.0, -10.0, 10.0, 2000, 0.0, 100.0,
+                                            show_wave=False, show_notes=False)
+    assert len(none) == 0 and not nothing

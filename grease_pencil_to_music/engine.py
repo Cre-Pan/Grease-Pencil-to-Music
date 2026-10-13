@@ -39,6 +39,7 @@ def board_spec(settings):
         root=music.NOTE_NAMES.index(settings.root),
         time_grid=settings.time_grid,
         min_note=settings.min_note,
+        swing=settings.swing,
     )
 
 
@@ -57,7 +58,7 @@ def _layer_fx(settings):
 
 def render_composition(obj, scene):
     s = obj.gp2m
-    reads = reader.read_composition(obj, scene.frame_start)
+    reads = reader.read_composition(obj, scene.frame_start, use_modifiers=s.use_modifiers)
     layers = []
     for read in reads:
         settings = props.find_layer_settings(obj.data, read.name)
@@ -65,6 +66,7 @@ def render_composition(obj, scene):
             name=read.name,
             strokes=read.strokes,
             mode=settings.mode if settings else "QUANTIZED",
+            fill_mode=settings.fill_mode if settings else "TONAL",
             gain=read.opacity,
             fx=_layer_fx(settings),
         ))
@@ -111,6 +113,9 @@ def midi_tracks(notes):
     tracks = []
     for (layer, ident), group in groups.items():
         inst = synth.get_instrument(ident)
+        if inst.percussive:
+            group = [interpret.MidiNote(n.start, n.end, synth.midi_drum_note(ident, n.pitch),
+                                        n.velocity, n.instrument, n.layer) for n in group]
         tracks.append({"name": f"{layer} - {inst.label}", "program": inst.gm_program,
                        "notes": group})
     return tracks
@@ -138,8 +143,8 @@ def scene_of(obj):
 
 def cleanup_orphans():
     """Remove what deleted compositions left behind: their sound strips and
-    their (now unparented) board, labels and playhead."""
-    from .board import ROLE
+    their (now unparented) board, labels and playhead of version 0.0.1."""
+    from .board import LEGACY_ROLE as ROLE
     for scene in bpy.data.scenes:
         editor = scene.sequence_editor
         if editor is None:
@@ -180,16 +185,29 @@ def _free_channel(editor):
     return (max(used) + 1) if used else 1
 
 
-def _place_strip(scene, obj, path):
+def _place_strip(scene, obj, path, frames):
+    """Point the composition's strip to a new sound file.
+
+    When the length is unchanged only the file of the sound datablock is
+    swapped (no strip is removed, so playback is not disturbed); otherwise the
+    strip is recreated with the new length.
+    """
     editor = scene.sequence_editor or scene.sequence_editor_create()
     old = editor.strips.get(strip_name(obj))
+    if (old is not None and old.sound is not None and old.sound.users == 1
+            and old.duration == frames and old.left_handle == scene.frame_start):
+        old.sound.filepath = path  # reloads the audio
+        return old
     channel = old.channel if old is not None else _free_channel(editor)
     old_sound = old.sound if old is not None else None
     if old is not None:
         editor.strips.remove(old)
     if old_sound is not None and old_sound.users == 0:
         bpy.data.sounds.remove(old_sound)
-    return editor.strips.new_sound(strip_name(obj), path, channel, scene.frame_start)
+    strip = editor.strips.new_sound(strip_name(obj), path, channel, scene.frame_start)
+    strip.sound.name = strip_name(obj)
+    strip.sound.use_memory_cache = True  # play from RAM: smoother playback
+    return strip
 
 
 def _strip_file_ok(strip):
@@ -205,6 +223,24 @@ def _sync_scene_range(scene, settings):
     end = scene.frame_start + max(1, int(round(settings.length * fps))) - 1
     if scene.frame_end != end:
         scene.frame_end = end
+
+
+PEAKS_PER_SECOND = 100
+
+
+def timeline_data(result, settings):
+    """Waveform peaks and note blocks for the timeline overlay."""
+    audio = result.audio
+    hop = max(1, result.sample_rate // PEAKS_PER_SECOND)
+    usable = len(audio) // hop * hop
+    mono = np.abs(audio[:usable]).max(axis=1) if usable else np.zeros(0)
+    peaks = mono.reshape(-1, hop).max(axis=1) if usable else np.zeros(0)
+    top = max(float(peaks.max()) if len(peaks) else 0.0, 1e-6)
+    notes = [(n.start, n.end, n.pitch, synth.get_instrument(n.instrument).color)
+             for n in result.notes]
+    return {"peaks": (peaks / top).astype(np.float32), "rate": PEAKS_PER_SECOND,
+            "notes": notes, "low": settings.low_note,
+            "high": settings.low_note + settings.octaves * 12, "length": settings.length}
 
 
 def regenerate(obj, scene=None, force=False):
@@ -225,7 +261,9 @@ def regenerate(obj, scene=None, force=False):
     if force or st.get("key") != result.key or not _strip_file_ok(strip):
         path = os.path.join(cache_dir(), f"{_safe(obj.name)}_{time.time_ns()}.wav")
         write_audio(path, result.audio, result.sample_rate, "WAV")
-        _place_strip(scene, obj, path)
+        fps = scene.render.fps / scene.render.fps_base
+        frames = max(1, int(round(len(result.audio) / result.sample_rate * fps)))
+        strip = _place_strip(scene, obj, path, frames)
         old_path = st.get("path")
         if old_path and old_path != path:
             try:
@@ -234,6 +272,11 @@ def regenerate(obj, scene=None, force=False):
                 pass  # still in use (Windows) or already gone
         st["key"] = result.key
         st["path"] = path
+        st["timeline"] = timeline_data(result, s)
+        from . import timeline
+        timeline.tag_redraw()
+    if strip is not None and strip.mute != s.mute:
+        strip.mute = s.mute
     _sync_scene_range(scene, s)
     st["stats"] = {
         "notes": len(result.notes),

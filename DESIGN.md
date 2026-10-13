@@ -24,9 +24,10 @@ colore = voce).
 | Spessore / opacità / vertex color / morbidezza | mappatura scelta nelle Preferences, da menu con opzioni limitate |
 | Strumenti | solo sintetizzati (niente campioni realistici per ora) |
 | Effetti | per livello: eco (ping-pong), riverbero (convoluzione), lo-fi |
-| Uscite | strip nel Video Sequencer (Play in Blender), export WAV, MP3, MIDI |
+| Uscite | strip nel Video Sequencer (Play in Blender), export WAV, MP3, MIDI, overlay nella Timeline |
+| Oggetto | un solo oggetto per composizione: la tavola è fatta di livelli bloccati dentro di esso |
 | Edit / Sculpt Mode | qualsiasi modifica ai tratti rigenera il suono |
-| Modificatori ed effetti GP | ignorati, con avviso (popup e pannello) |
+| Modificatori GP | ignorati per default (avviso), letti con "Usa modificatori"; gli effetti visivi non suonano |
 | Dipendenze | nessuna: NumPy e `aud` sono già in Blender (anche l'MP3) |
 
 ## Architettura
@@ -40,7 +41,9 @@ mixer.py       livelli        →  loop stereo (+ cache per tratto e per livello
 midi.py        MidiNote       →  file .mid                     [puro]
 engine.py      render → WAV in cartella temporanea → strip nel VSE; export  [bpy]
 handlers.py    depsgraph / undo / load → rigenerazione con debounce        [bpy]
-board.py       tavola, pianoforte, etichette, testina (driver sul frame)   [bpy]
+board.py       tavola, tastiera, etichette, testina come livelli della composizione  [bpy]
+glyphs.py      font a tratto singolo per le etichette                     [puro]
+timeline.py    forma d'onda e note nella Timeline (draw handler POST_PIXEL)  [bpy]
 props.py prefs.py operators.py ui.py                                       [bpy]
 ```
 
@@ -56,16 +59,18 @@ Note tecniche su Blender 5.2 emerse durante lo sviluppo:
 - i livelli hanno `use_lights = False` per avere colori piatti;
 - le proprietà personalizzate non si possono agganciare ai livelli GP: le
   impostazioni di livello stanno in una collection sui dati GP, per nome
-  (la rinomina di un livello viene riconosciuta).
+  (la rinomina di un livello viene riconosciuta);
+- i livelli nuovi nascono sempre in cima e `layers.move` salta un gruppo intero:
+  dopo ogni aggiunta il gruppo della testina torna in cima;
+- la testina è un livello la cui `translation` è pilotata da un driver sui dati GP;
+- l'icona dell'occhio di `hide` cambia da sola: non va passata un'icona esplicita;
+- cambiare `Sound.filepath` ricarica l'audio senza ricreare la strip (ma la durata
+  della strip non si aggiorna: se cambia la lunghezza del loop la strip viene ricreata).
 
 ## Roadmap
 
-- **0.0.x**: stabilizzazione dopo le prove su Windows; feedback su interfaccia e suoni.
-- **Cluster**: una forma piena diventa una banda sonora (alla ANS): rumore filtrato
-  tra il bordo inferiore e superiore, oppure cluster tonale delle note coperte.
-- **Modificatori**: opzione "Usa modificatori" (lettura dei dati valutati; con
-  l'Array le ripetizioni suonano automaticamente).
+- ~~Cluster~~ (0.0.2), ~~Usa modificatori~~ (0.0.2), ~~Swing~~ (0.0.2).
 - **Keyframe come pattern**: i keyframe GP diventano sezioni del brano.
 - **Riproduzione del gesto** (`delta_time`), più testine, canone.
-- Swing, preset di mappatura, pennelli-asset per strumento.
+- Preset di mappatura, pennelli-asset per strumento.
 - Altre piattaforme (Linux, macOS).

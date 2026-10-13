@@ -7,8 +7,10 @@ Modifiers and shader effects are ignored (the original data is read).
 
 from dataclasses import dataclass, field
 
+import bpy
 import numpy as np
 
+from .board import is_board_layer
 from .interpret import StrokeData
 from . import synth
 
@@ -52,6 +54,10 @@ def material_instrument(material):
     return getattr(material, "gp2m_instrument", synth.DEFAULT_INSTRUMENT)
 
 
+def material_gain(material):
+    return float(getattr(material, "gp2m_volume", 1.0)) if material is not None else 1.0
+
+
 def material_muted(material):
     return bool(material is not None and material.grease_pencil is not None
                 and material.grease_pencil.hide)
@@ -79,6 +85,7 @@ def read_drawing(drawing, materials, layer_name, matrix=None):
     color = _attribute(drawing, "vertex_color", points, 4) if has_color else None
     material_index = _attribute(drawing, "material_index", curves, default=0).astype(np.int64)
     softness = _attribute(drawing, "softness", curves, default=0.0)
+    fill_id = _attribute(drawing, "fill_id", curves, default=0).astype(np.int64)
 
     strokes = []
     for i in range(curves):
@@ -98,21 +105,34 @@ def read_drawing(drawing, materials, layer_name, matrix=None):
             softness=float(softness[i]),
             instrument=material_instrument(material),
             layer=layer_name,
+            gain=material_gain(material),
+            filled=bool(fill_id[i] != 0) and b - a >= 3,
         ))
     return strokes
 
 
-def read_composition(obj, frame_number):
-    """Read every visible layer of a composition object."""
-    gp = obj.data
+def read_composition(obj, frame_number, use_modifiers=False, depsgraph=None):
+    """Read every visible user layer of a composition object.
+
+    With ``use_modifiers`` the evaluated strokes (after modifiers such as
+    Noise or Array) of the current frame are read instead of the originals.
+    """
     materials = [slot.material for slot in obj.material_slots]
+    gp = obj.data
+    if use_modifiers:
+        depsgraph = depsgraph or bpy.context.evaluated_depsgraph_get()
+        gp = obj.evaluated_get(depsgraph).data
     result = []
     for layer in gp.layers:
-        if layer.hide:
+        if layer.hide or is_board_layer(layer):
             continue
         read = LayerRead(name=layer.name, opacity=float(layer.opacity),
                          keyframes=len(layer.frames))
-        drawing = drawing_at(layer, frame_number)
+        if use_modifiers:
+            frame = layer.current_frame()
+            drawing = frame.drawing if frame is not None else None
+        else:
+            drawing = drawing_at(layer, frame_number)
         if drawing is not None:
             read.strokes = read_drawing(drawing, materials, layer.name,
                                         layer.matrix_local)

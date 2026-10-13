@@ -28,6 +28,7 @@ class LayerInput:
     name: str
     strokes: list  # list of interpret.StrokeData
     mode: str = "QUANTIZED"
+    fill_mode: str = "TONAL"
     gain: float = 1.0
     fx: LayerFx = field(default_factory=LayerFx)
 
@@ -78,16 +79,18 @@ def _stroke_key(stroke, context_key):
             h.update(b"-")
         else:
             h.update(np.ascontiguousarray(arr, dtype=np.float32).tobytes())
-    h.update(repr((stroke.softness, stroke.instrument, context_key)).encode())
+    h.update(repr((stroke.softness, stroke.instrument, round(stroke.gain, 4), stroke.filled,
+                   context_key)).encode())
     return h.hexdigest()
 
 
-def _render_stroke(stroke, spec, mapping, mode, radius_ref, sample_rate, context_key):
-    key = _stroke_key(stroke, (context_key, mode))
+def _render_stroke(stroke, spec, mapping, mode, fill_mode, radius_ref, sample_rate,
+                   context_key):
+    key = _stroke_key(stroke, (context_key, mode, fill_mode))
     cached = _stroke_cache.get(key)
     if cached is not None:
         return key, cached
-    interp = interpret.interpret_stroke(stroke, spec, mapping, mode, radius_ref)
+    interp = interpret.interpret_stroke(stroke, spec, mapping, mode, radius_ref, fill_mode)
     rendered = [synth.render_voice(v, sample_rate, mapping.vibrato_rate) for v in interp.voices]
     value = (rendered, interp.notes)
     _stroke_cache.put(key, value)
@@ -110,8 +113,8 @@ def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.
         stroke_keys = []
         stroke_results = []
         for stroke in layer.strokes:
-            key, value = _render_stroke(stroke, spec, mapping, layer.mode, radius_ref,
-                                        sample_rate, context_key)
+            key, value = _render_stroke(stroke, spec, mapping, layer.mode, layer.fill_mode,
+                                        radius_ref, sample_rate, context_key)
             stroke_keys.append(key)
             stroke_results.append(value)
             notes.extend(value[1])

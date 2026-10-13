@@ -1,24 +1,39 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Automatic updates: any change to the strokes (Draw, Edit, Sculpt mode,
-materials, layers, undo) regenerates the sound after a short pause."""
+materials, layers, undo) regenerates the sound after a short pause.
+
+Playback friendly: while playing, only real stroke edits are processed and the
+sound file is swapped without touching the strip; Ctrl+Z during playback
+resumes the playback if Blender stopped it.
+"""
 
 import time
 
 import bpy
 from bpy.app.handlers import persistent
 
-from . import engine, prefs
+from . import board, engine, prefs
 
 _dirty = set()
 _last_change = [0.0]
 _stack_counts = {}  # composition name -> number of modifiers + shader effects
 _popup_queue = []
 _cleanup_needed = [False]
+_object_signature = [None]
+_was_playing = [False]
 
 
 def compositions():
     return [obj for obj in bpy.data.objects
             if obj.type == "GREASEPENCIL" and obj.gp2m.is_composition and obj.users_scene]
+
+
+def is_playing():
+    wm = getattr(bpy.context, "window_manager", None)
+    if wm is None:
+        return False
+    return any(window.screen is not None and window.screen.is_animation_playing
+               for window in wm.windows)
 
 
 def _ensure_timer():
@@ -58,7 +73,15 @@ def flush():
     for name in names:
         obj = bpy.data.objects.get(name)
         if obj is not None and obj.gp2m.is_composition:
+            if not board.has_board(obj):  # file from 0.0.1, or board removed
+                board.rebuild(obj, engine.scene_of(obj))
+            board.ensure_order(obj.data)  # layers added with Blender's own "+"
             engine.regenerate_safe(obj)
+
+
+def _signature():
+    """Changes when objects are added, deleted, renamed or duplicated."""
+    return hash(tuple(sorted(bpy.data.objects.keys())))
 
 
 def _tick():
@@ -71,7 +94,7 @@ def _tick():
             engine.cleanup_orphans()
         except Exception as error:
             print(f"[Grease Pencil to Music] cleanup failed: {error!r}")
-        # A renamed composition needs a strip under its new name.
+        # Duplicated (Shift+D) or renamed compositions need their own strip.
         for obj in compositions():
             if engine.find_strip(engine.scene_of(obj), obj) is None:
                 _dirty.add(obj.name)
@@ -84,15 +107,15 @@ def _check_stack(obj):
     count = len(obj.modifiers) + len(getattr(obj, "shader_effects", ()))
     previous = _stack_counts.get(obj.name, 0)
     _stack_counts[obj.name] = count
-    if count > previous:
+    if count > previous and not obj.gp2m.use_modifiers:
         _popup_queue.append(obj.name)
         _ensure_timer()
 
 
 def _draw_stack_popup(menu, _context):
     layout = menu.layout
-    layout.label(text="Modificatori ed effetti non cambiano ancora il suono:")
-    layout.label(text="il suono viene generato dai tratti originali.")
+    layout.label(text="Modificatori ed effetti non cambiano il suono:")
+    layout.label(text="attiva 'Usa modificatori' nel pannello N → Musica per sentirli.")
 
 
 def _show_popups():
@@ -127,8 +150,10 @@ def on_depsgraph_update(_scene, depsgraph):
         elif isinstance(original, bpy.types.Material):
             mark_material_dirty(original)
         elif isinstance(original, (bpy.types.Scene, bpy.types.Collection)):
-            # Objects added, deleted or renamed: check for leftovers.
-            if not _cleanup_needed[0]:
+            # Cheap check first: only look for leftovers when objects changed.
+            signature = _signature()
+            if signature != _object_signature[0]:
+                _object_signature[0] = signature
                 _cleanup_needed[0] = True
                 _ensure_timer()
 
@@ -137,24 +162,50 @@ def on_depsgraph_update(_scene, depsgraph):
 def on_load_post(*_args):
     _dirty.clear()
     _stack_counts.clear()
+    _object_signature[0] = _signature()
     for obj in compositions():
         _stack_counts[obj.name] = len(obj.modifiers) + len(getattr(obj, "shader_effects", ()))
-    # Sound files live in a temporary folder: recreate them for this session,
-    # even when automatic updates are off.
-    for obj in compositions():
+        # Sound files live in a temporary folder: recreate them for this session,
+        # even when automatic updates are off.
         _dirty.add(obj.name)
     if _dirty:
         _ensure_timer()
 
 
 @persistent
+def on_undo_pre(*_args):
+    _was_playing[0] = is_playing()
+
+
+def _resume_playback():
+    if is_playing():
+        return None
+    wm = bpy.context.window_manager
+    for window in wm.windows:
+        for area in window.screen.areas:
+            if area.type in ("VIEW_3D", "DOPESHEET_EDITOR", "SEQUENCE_EDITOR"):
+                try:
+                    with bpy.context.temp_override(window=window, area=area):
+                        bpy.ops.screen.animation_play()
+                except Exception:
+                    continue
+                return None
+    return None
+
+
+@persistent
 def on_undo_redo(*_args):
     mark_all_dirty()
+    if _was_playing[0] and prefs.get_prefs().resume_after_undo and not bpy.app.background:
+        _was_playing[0] = False
+        bpy.app.timers.register(_resume_playback, first_interval=0.05)
 
 
 _HANDLERS = (
     (bpy.app.handlers.depsgraph_update_post, on_depsgraph_update),
     (bpy.app.handlers.load_post, on_load_post),
+    (bpy.app.handlers.undo_pre, on_undo_pre),
+    (bpy.app.handlers.redo_pre, on_undo_pre),
     (bpy.app.handlers.undo_post, on_undo_redo),
     (bpy.app.handlers.redo_post, on_undo_redo),
 )
@@ -164,11 +215,13 @@ def register():
     for handler_list, func in _HANDLERS:
         if func not in handler_list:
             handler_list.append(func)
+    _object_signature[0] = None
 
 
 def unregister():
     for handler_list, func in _HANDLERS:
         if func in handler_list:
             handler_list.remove(func)
-    if bpy.app.timers.is_registered(_tick):
-        bpy.app.timers.unregister(_tick)
+    for timer in (_tick, _resume_playback):
+        if bpy.app.timers.is_registered(timer):
+            bpy.app.timers.unregister(timer)

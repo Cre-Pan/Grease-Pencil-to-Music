@@ -12,7 +12,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from . import music
-from .interpret import CONTROL_RATE
+from .interpret import CONTROL_RATE, NOISE_BAND
 
 
 @dataclass(frozen=True)
@@ -24,6 +24,9 @@ class Instrument:
     gm_program: int  # General MIDI program (0-based); -1 = drum channel
     release: float  # seconds of fade after the stroke ends
     gain: float
+    percussive: bool = False  # one hit with its own decay, whatever the stroke length
+    length: float = 0.0  # seconds of a percussive hit
+    drum_note: int = 0  # General MIDI drum note; 0 = the row pitch
 
 
 INSTRUMENTS = (
@@ -42,14 +45,43 @@ INSTRUMENTS = (
     Instrument("BELL", "Campana", "Sintesi FM inarmonica",
                (0.72, 0.5, 1.0, 1.0), 14, 1.2, 0.45),
     Instrument("DRUM", "Percussioni", "Rumore filtrato: grave = cassa, acuto = charleston",
-               (0.85, 0.85, 0.85, 1.0), -1, 0.0, 0.7),
+               (0.85, 0.85, 0.85, 1.0), -1, 0.0, 0.7, True, 0.5),
+    Instrument("KICK", "Cassa", "Cassa: colpo grave con discesa di altezza",
+               (0.62, 0.38, 0.32, 1.0), -1, 0.0, 0.9, True, 0.5, 36),
+    Instrument("SNARE", "Rullante", "Rullante: corpo + cordiera di rumore",
+               (0.95, 0.93, 0.78, 1.0), -1, 0.0, 0.6, True, 0.35, 38),
+    Instrument("HIHAT", "Charleston", "Charleston chiuso: rumore acuto e corto",
+               (0.92, 0.86, 0.5, 1.0), -1, 0.0, 0.35, True, 0.15, 42),
+    Instrument("CRASH", "Piatto", "Piatto crash: rumore brillante che si spegne lentamente",
+               (1.0, 0.96, 0.45, 1.0), -1, 0.0, 0.3, True, 1.6, 49),
+    Instrument("CLAP", "Battimani", "Battimani: tre schiocchi ravvicinati",
+               (1.0, 0.6, 0.75, 1.0), -1, 0.0, 0.55, True, 0.35, 39),
+    Instrument("TOM", "Tom", "Tom intonato sulla riga (più in alto = più acuto)",
+               (0.78, 0.52, 0.35, 1.0), -1, 0.0, 0.8, True, 0.6, -1),
+    Instrument("COWBELL", "Campanaccio", "Campanaccio metallico",
+               (0.86, 0.7, 0.22, 1.0), -1, 0.0, 0.35, True, 0.4, 56),
 )
 INSTRUMENT_BY_ID = {inst.ident: inst for inst in INSTRUMENTS}
 DEFAULT_INSTRUMENT = "SINE"
+NOISE_INSTRUMENT = Instrument(NOISE_BAND, "Banda di rumore", "Cluster di rumore",
+                              (0.8, 0.8, 0.8, 1.0), -1, 0.06, 0.5)
+TOM_NOTES = (41, 43, 45, 47, 48, 50)
 
 
 def get_instrument(ident):
+    if ident == NOISE_BAND:
+        return NOISE_INSTRUMENT
     return INSTRUMENT_BY_ID.get(ident, INSTRUMENT_BY_ID[DEFAULT_INSTRUMENT])
+
+
+def midi_drum_note(ident, pitch):
+    """General MIDI note for a percussion hit (row pitch for generic drums)."""
+    inst = get_instrument(ident)
+    if inst.drum_note > 0:
+        return inst.drum_note
+    if inst.drum_note < 0:  # toms: low rows = floor tom, high rows = high tom
+        return TOM_NOTES[int(min(max((pitch - 36) // 8, 0), len(TOM_NOTES) - 1))]
+    return int(pitch)
 
 
 # --- Building blocks ---------------------------------------------------------
@@ -133,12 +165,87 @@ def _drum(n, sample_rate, pitch, rng):
     return body
 
 
+def _shape(signal, sample_rate, gain_fn):
+    """Multiply the spectrum by ``gain_fn(frequencies)``."""
+    spectrum = np.fft.rfft(signal)
+    freqs = np.maximum(np.fft.rfftfreq(len(signal), 1.0 / sample_rate), 1.0)
+    return np.fft.irfft(spectrum * gain_fn(freqs), n=len(signal))
+
+
+def _highpass(signal, sample_rate, cutoff):
+    return _shape(signal, sample_rate, lambda f: (f / cutoff) ** 4 / (1.0 + (f / cutoff) ** 4))
+
+
+def _bandpass(signal, sample_rate, center, octaves=1.0):
+    return _shape(signal, sample_rate,
+                  lambda f: np.exp(-(np.log2(f / center) ** 2) / (2.0 * octaves ** 2)))
+
+
+def _normalize(signal):
+    return signal / max(float(np.max(np.abs(signal))), 1e-9)
+
+
+def _percussion(ident, n, sample_rate, pitch, rng):
+    t = np.arange(n) / sample_rate
+    tune = 2.0 ** ((pitch - 60.0) / 24.0)  # higher rows = slightly higher drums
+    noise = rng.uniform(-1.0, 1.0, n)
+    if ident == "KICK":
+        freq = 55.0 * tune * (1.0 + 2.5 * np.exp(-t / 0.04))
+        body = np.sin(2 * np.pi * np.cumsum(freq) / sample_rate) * np.exp(-t / 0.28)
+        return _normalize(body + 0.3 * noise * np.exp(-t / 0.003))
+    if ident == "SNARE":
+        tone = np.sin(2 * np.pi * 190.0 * tune * t) * np.exp(-t / 0.07)
+        rattle = _normalize(_highpass(noise, sample_rate, 1500.0)) * np.exp(-t / 0.12)
+        return _normalize(0.6 * tone + rattle)
+    if ident == "HIHAT":
+        return _normalize(_highpass(noise, sample_rate, 7000.0 * tune)) * np.exp(-t / 0.035)
+    if ident == "CRASH":
+        bright = _normalize(_highpass(noise, sample_rate, 3500.0 * tune))
+        return bright * np.exp(-t / 0.9)
+    if ident == "CLAP":
+        band = _normalize(_bandpass(noise, sample_rate, 1500.0 * tune))
+        envelope = 0.8 * np.exp(-np.maximum(t - 0.03, 0.0) / 0.14) * (t >= 0.03)
+        for hit in (0.0, 0.011, 0.022):
+            envelope += np.exp(-np.maximum(t - hit, 0.0) / 0.006) * (t >= hit)
+        return _normalize(band * envelope)
+    if ident == "TOM":
+        freq = float(music.midi_to_freq(pitch - 12)) * (1.0 + 0.5 * np.exp(-t / 0.05))
+        body = np.sin(2 * np.pi * np.cumsum(freq) / sample_rate) * np.exp(-t / 0.3)
+        return _normalize(body + 0.1 * noise * np.exp(-t / 0.01))
+    if ident == "COWBELL":
+        phase = 2 * np.pi * t
+        metal = np.sign(np.sin(phase * 540.0 * tune)) + np.sign(np.sin(phase * 800.0 * tune))
+        metal = _bandpass(metal, sample_rate, 800.0 * tune, 0.8)
+        envelope = 0.6 * np.exp(-t / 0.25) + 0.4 * np.exp(-t / 0.02)
+        return _normalize(metal) * envelope
+    return _drum(n, sample_rate, pitch, rng)
+
+
+def _noise_band(n, sample_rate, low_hz, high_hz, rng, frame=2048, hop=512):
+    """Noise whose spectrum is limited, frame by frame, to [low_hz, high_hz]
+    (both arrays of length ``n``). Overlap-add of random-phase frames."""
+    count = n // hop + 2
+    centers = np.minimum(np.arange(count) * hop, n - 1)
+    low = low_hz[centers][:, None]
+    high = high_hz[centers][:, None]
+    freqs = np.fft.rfftfreq(frame, 1.0 / sample_rate)[None, :]
+    band = ((freqs >= low) & (freqs <= high)).astype(np.float64)
+    bins = np.maximum(band.sum(axis=1, keepdims=True), 1.0)
+    spectrum = band / np.sqrt(bins) * np.exp(1j * rng.uniform(0, 2 * np.pi, band.shape))
+    frames = np.fft.irfft(spectrum, n=frame, axis=1) * np.hanning(frame)[None, :]
+    out = np.zeros(count * hop + frame)
+    for k in range(count):
+        out[k * hop:k * hop + frame] += frames[k]
+    out = out[frame // 2:frame // 2 + n]
+    return out / max(float(np.sqrt(np.mean(out ** 2))), 1e-9) * 0.25
+
+
 # --- Voice rendering ---------------------------------------------------------
 
 def voice_length(voice, sample_rate):
     inst = get_instrument(voice.instrument)
-    if inst.ident == "DRUM":
-        return int(0.5 * sample_rate)
+    if inst.percussive:
+        return int(inst.length * sample_rate)
     return max(1, int(round(voice.duration * sample_rate))) + int(inst.release * sample_rate)
 
 
@@ -181,16 +288,20 @@ def render_voice(voice, sample_rate=44100, vibrato_rate=5.5):
     elif inst.ident == "BELL":
         index = 3.0 * np.exp(-ts / 0.6)
         signal = np.sin(phase + index * np.sin(3.5 * phase)) * np.exp(-ts / 1.4)
-    else:  # DRUM
-        signal = _drum(n, sample_rate, float(voice.pitch[0]), rng)
+    elif inst.ident == NOISE_BAND:
+        low = music.midi_to_freq(ctrl(voice.band_low))
+        high = music.midi_to_freq(ctrl(voice.band_high))
+        signal = _noise_band(n, sample_rate, low, high, rng)
+    else:  # percussion
+        signal = _percussion(inst.ident, n, sample_rate, float(voice.pitch[0]), rng)
 
-    if inst.ident not in ("DRUM", "BELL", "SINE"):
+    if not inst.percussive and inst.ident not in ("BELL", "SINE", NOISE_BAND):
         dull = _lowpass(signal, sample_rate, 2.5 * f0)
         signal = brightness * signal + (1.0 - brightness) * dull
 
     attack = max(voice.attack, 0.12 if inst.ident == "STRINGS" else 0.0)
     envelope = ctrl(voice.amp) * np.clip(ts / max(attack, 1e-4), 0.0, 1.0)
-    if inst.ident != "DRUM":
+    if not inst.percussive:
         if inst.release > 0:
             envelope *= np.clip(1.0 - (ts - voice.duration) / inst.release, 0.0, 1.0)
         else:

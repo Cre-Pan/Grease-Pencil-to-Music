@@ -6,6 +6,7 @@ from bpy.props import (BoolProperty, CollectionProperty, EnumProperty, FloatProp
                        IntProperty, PointerProperty, StringProperty)
 
 from . import music, synth
+from .board import KEY_LABEL_ITEMS
 
 
 def _sound_changed(self, _context):
@@ -38,12 +39,22 @@ LAYER_MODES = (
 )
 
 
+FILL_MODES = (
+    ("TONAL", "Cluster tonale",
+     "Una forma piena suona tutte le note della scala che copre"),
+    ("NOISE", "Banda di rumore",
+     "Una forma piena è rumore filtrato tra il suo bordo inferiore e superiore (alla ANS)"),
+)
+
+
 class GP2M_LayerSettings(bpy.types.PropertyGroup):
     """Settings of one Grease Pencil layer, matched by layer name."""
 
     name: StringProperty()
     mode: EnumProperty(name="Lettura", items=LAYER_MODES, default="QUANTIZED",
                        update=_sound_changed)
+    fill_mode: EnumProperty(name="Forme piene", items=FILL_MODES, default="TONAL",
+                            update=_sound_changed)
     delay_mix: FloatProperty(name="Eco", default=0.0, min=0.0, max=1.0, subtype="FACTOR",
                              update=_sound_changed)
     delay_beats: FloatProperty(name="Tempo eco (battiti)", default=0.75, min=0.125, max=4.0,
@@ -63,8 +74,9 @@ SAMPLE_RATES = (("44100", "44.1 kHz", ""), ("48000", "48 kHz", ""))
 
 class GP2M_CompositionSettings(bpy.types.PropertyGroup):
     is_composition: BoolProperty(default=False)
-    board: PointerProperty(type=bpy.types.Object)
-    playhead: PointerProperty(type=bpy.types.Object)
+    mute: BoolProperty(name="Muto", default=False,
+                       description="Silenzia questa composizione (la tavola resta visibile)",
+                       update=_sound_changed)
 
     bpm: FloatProperty(name="BPM", default=120.0, min=20.0, max=300.0,
                        description="Battiti al minuto: griglia ritmica, quantizzazione ed eco",
@@ -82,6 +94,8 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
                                  description="Larghezza di un secondo sulla tavola",
                                  update=_board_changed)
     show_beats: BoolProperty(name="Mostra battiti", default=True, update=_board_changed)
+    key_labels: EnumProperty(name="Etichette tasti", items=KEY_LABEL_ITEMS, default="C",
+                             update=_board_changed)
 
     scale: EnumProperty(name="Scala", items=[(i, l, "") for i, l, _ in music.SCALES],
                         default="CHROMATIC", update=_sound_changed)
@@ -90,6 +104,13 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
     time_grid: EnumProperty(name="Quantizzazione ritmica",
                             items=[(i, l, "") for i, l, _ in music.TIME_GRIDS],
                             default="1_16", update=_sound_changed)
+    swing: FloatProperty(name="Swing", default=0.0, min=0.0, max=0.5, subtype="FACTOR",
+                         description="Ritarda le note sui contrattempi della griglia ritmica",
+                         update=_sound_changed)
+    use_modifiers: BoolProperty(name="Usa modificatori", default=False,
+                                description="Legge i tratti dopo modificatori come Noise o "
+                                "Array (dati valutati) invece dei tratti originali",
+                                update=_sound_changed)
     min_note: FloatProperty(name="Nota minima (s)", default=0.06, min=0.0, max=1.0,
                             description="Pezzi di tratto più corti vengono assorbiti dalla "
                             "nota vicina", update=_sound_changed)
@@ -107,6 +128,25 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
 
 INSTRUMENT_ITEMS = [(i.ident, i.label, i.description) for i in synth.INSTRUMENTS]
 
+
+def _get_active_layer(gp_data):
+    """Index of the active layer, so a UIList can show and set it."""
+    active = gp_data.layers.active
+    if active is None:
+        return -1
+    for index, layer in enumerate(gp_data.layers):
+        if layer.name == active.name:
+            return index
+    return -1
+
+
+def _set_active_layer(gp_data, index):
+    layers = gp_data.layers
+    if 0 <= index < len(layers):
+        from .board import is_board_layer
+        if not is_board_layer(layers[index]):
+            layers.active = layers[index]
+
 classes = (GP2M_LayerSettings, GP2M_CompositionSettings)
 
 
@@ -116,9 +156,16 @@ def register_properties():
     bpy.types.Material.gp2m_instrument = EnumProperty(
         name="Strumento", items=INSTRUMENT_ITEMS, default=synth.DEFAULT_INSTRUMENT,
         update=_instrument_changed)
+    bpy.types.Material.gp2m_volume = FloatProperty(
+        name="Volume", default=1.0, min=0.0, max=2.0, subtype="FACTOR",
+        description="Volume di questo strumento", update=_instrument_changed)
+    bpy.types.GreasePencil.gp2m_active_layer = IntProperty(
+        name="Livello attivo", get=_get_active_layer, set=_set_active_layer)
 
 
 def unregister_properties():
+    del bpy.types.GreasePencil.gp2m_active_layer
+    del bpy.types.Material.gp2m_volume
     del bpy.types.Material.gp2m_instrument
     del bpy.types.GreasePencil.gp2m_layers
     del bpy.types.Object.gp2m
@@ -133,7 +180,8 @@ def find_layer_settings(gp_data, layer_name):
 
 def ensure_layer_settings(gp_data):
     """Add settings for new layers (writes only when something is missing)."""
-    layer_names = [layer.name for layer in gp_data.layers]
+    from .board import is_board_layer
+    layer_names = [layer.name for layer in gp_data.layers if not is_board_layer(layer)]
     existing = {item.name for item in gp_data.gp2m_layers}
     missing = [name for name in layer_names if name not in existing]
     if not missing:

@@ -37,6 +37,8 @@ class StrokeData:
     softness: float = 0.0
     instrument: str = "SINE"
     layer: str = ""
+    gain: float = 1.0  # instrument (material) volume
+    filled: bool = False  # filled shape: read as a cluster
 
 
 @dataclass
@@ -50,13 +52,14 @@ class BoardSpec:
     root: int = 0
     time_grid: str = "OFF"
     min_note: float = 0.06
+    swing: float = 0.0
 
 
 @dataclass
 class Mapping:
     """How stroke attributes become sound (set in the add-on preferences)."""
 
-    thickness: str = "VOLUME_VIBRATO"  # VOLUME_VIBRATO, VOLUME, VIBRATO, BRIGHTNESS, NONE
+    thickness: str = "VOLUME"  # VOLUME, VOLUME_VIBRATO, VIBRATO, BRIGHTNESS, NONE
     opacity: str = "BRIGHTNESS"  # VOLUME, BRIGHTNESS, NONE
     vertex_color: str = "NONE"  # PAN, BRIGHTNESS, NONE
     softness: str = "ATTACK"  # ATTACK, NONE
@@ -77,6 +80,11 @@ class Voice:
     pan: np.ndarray
     attack: float = 0.005
     instrument: str = "SINE"
+    band_low: np.ndarray = None  # noise band edges (MIDI pitch), NOISE clusters only
+    band_high: np.ndarray = None
+
+
+NOISE_BAND = "NOISE_BAND"  # internal instrument of noise clusters
 
 
 @dataclass
@@ -177,8 +185,9 @@ def _point_channels(stroke, x_keep, arrays, mapping, radius_ref):
     # Clean strokes have a tiny jitter from tablet noise: ignore it.
     vibrato_amount = np.clip((vibrato - 0.03) * 2.2, 0.0, 1.0) * mapping.vibrato_depth
 
+    amp = amp * float(stroke.gain)
     return {
-        "amp": np.clip(amp, 0.0, 1.5),
+        "amp": np.clip(amp, 0.0, 3.0),
         "vibrato": vibrato_amount,
         "brightness": np.clip(brightness, 0.0, 1.0),
         "pan": pan,
@@ -249,15 +258,112 @@ def _make_voice(start, duration, pitch, channels, i0, i1, attack, instrument):
     )
 
 
+def _snap(seconds, step, swing):
+    """Snap to the rhythmic grid; odd grid steps are delayed by the swing."""
+    if not step:
+        return float(seconds)
+    k = int(round(seconds / step))
+    return k * step + (swing * step if k % 2 else 0.0)
+
+
 def _velocity(amp):
     return int(np.clip(round(float(np.mean(amp)) * 127), 1, 127))
 
 
-def interpret_stroke(stroke, spec, mapping, mode="QUANTIZED", radius_ref=0.0):
+def _fill_bounds(x, z, tc):
+    """Lower and upper edge (z) of a closed shape at each time in ``tc``."""
+    x0, z0 = x, z
+    x1, z1 = np.roll(x, -1), np.roll(z, -1)
+    t = tc[:, None]
+    inside = ((x0[None, :] <= t) & (t < x1[None, :])) | ((x1[None, :] <= t) & (t < x0[None, :]))
+    dx = np.where(np.abs(x1 - x0) < 1e-12, 1e-12, x1 - x0)
+    zt = z0[None, :] + (t - x0[None, :]) * ((z1 - z0) / dx)[None, :]
+    low = np.where(inside, zt, np.inf).min(axis=1)
+    high = np.where(inside, zt, -np.inf).max(axis=1)
+    return low, high
+
+
+def _interpret_fill(stroke, spec, mapping, fill_mode, radius_ref):
+    """A filled shape is a cluster: every note it covers (TONAL) or a band of
+    noise between its lower and upper edge (NOISE), like the ANS synthesizer."""
+    result = Interpretation()
+    sw = max(spec.seconds_width, 1e-9)
+    h = max(spec.row_height, 1e-9)
+    t = np.asarray(stroke.x, dtype=np.float64) / sw
+    rows = np.asarray(stroke.z, dtype=np.float64) / h
+    t0, t1 = max(float(t.min()), 0.0), min(float(t.max()), spec.length)
+    if t1 - t0 < 1.0 / CONTROL_RATE:
+        return result
+    count = max(2, int(np.ceil((t1 - t0) * CONTROL_RATE)) + 1)
+    tc = np.linspace(t0, t1, count)
+    low, high = _fill_bounds(t, rows, tc)
+    active = np.isfinite(low) & np.isfinite(high) & (high > low)
+    if not np.any(active):
+        return result
+
+    ref = radius_ref if radius_ref > 0 else max(float(np.max(stroke.radius)), 1e-9)
+    level = float(stroke.gain)
+    if mapping.thickness in ("VOLUME", "VOLUME_VIBRATO"):
+        level *= float(np.clip(np.mean(stroke.radius) / ref, 0.0, 1.5))
+    if mapping.opacity == "VOLUME":
+        level *= float(np.mean(stroke.opacity))
+    attack = 0.005 + float(stroke.softness) * 0.4 if mapping.softness == "ATTACK" else 0.005
+    min_len = max(1, int(round(spec.min_note * CONTROL_RATE)))
+
+    if fill_mode == "NOISE":
+        fill_low = np.where(active, low, 0.0)
+        fill_high = np.where(active, high, 0.0)
+        amp = np.where(active, level, 0.0)
+        n = count
+        zeros = np.zeros(n)
+        result.voices.append(Voice(
+            start=t0, duration=t1 - t0,
+            pitch=spec.low_note + (fill_low + fill_high) / 2.0 - 0.5,
+            amp=amp, vibrato=zeros, brightness=np.full(n, DEFAULT_BRIGHTNESS), pan=zeros,
+            attack=attack, instrument=NOISE_BAND,
+            band_low=spec.low_note + fill_low - 0.5,
+            band_high=spec.low_note + fill_high - 0.5))
+        return result
+
+    lookup = music.scale_lookup(spec.scale, spec.root)
+    step = music.grid_step_seconds(spec.bpm, spec.time_grid)
+    first = int(np.floor(np.min(low[active])))
+    last = int(np.ceil(np.max(high[active])))
+    pitches = [spec.low_note + r for r in range(first, last + 1)
+               if 0 <= spec.low_note + r <= 127
+               and lookup[spec.low_note + r] == spec.low_note + r][:48]
+    masks = {p: active & (low <= p - spec.low_note + 0.5) & (p - spec.low_note + 0.5 <= high)
+             for p in pitches}
+    voices_at_once = max(1, int(np.max(np.sum([m for m in masks.values()], axis=0)))
+                         if masks else 1)
+    note_level = level / np.sqrt(voices_at_once)
+    zeros = np.zeros(count)
+    channels = {"amp": np.full(count, note_level), "vibrato": zeros,
+                "brightness": np.full(count, DEFAULT_BRIGHTNESS), "pan": zeros}
+    for pitch, mask in masks.items():
+        for i0, i1, on in _segments(mask.astype(np.int64), min_len):
+            if not on:
+                continue
+            start = _snap(float(tc[i0]), step, spec.swing)
+            end = _snap(float(tc[i1]) if i1 < count else t1, step, spec.swing)
+            if end <= start or start >= spec.length:
+                continue
+            voice = _make_voice(start, end - start, pitch, channels, i0, max(i1, i0 + 1),
+                                attack, stroke.instrument)
+            result.voices.append(voice)
+            result.notes.append(MidiNote(start, end, pitch, _velocity(voice.amp),
+                                         stroke.instrument, stroke.layer))
+    return result
+
+
+def interpret_stroke(stroke, spec, mapping, mode="QUANTIZED", radius_ref=0.0,
+                     fill_mode="TONAL"):
     """Return an :class:`Interpretation` (voices to synthesize + MIDI notes)."""
     result = Interpretation()
     if len(stroke.x) == 0:
         return result
+    if stroke.filled:
+        return _interpret_fill(stroke, spec, mapping, fill_mode, radius_ref)
 
     x, arrays = _monotonic(
         np.asarray(stroke.x, dtype=np.float64),
@@ -286,7 +392,7 @@ def interpret_stroke(stroke, spec, mapping, mode="QUANTIZED", radius_ref=0.0):
 
     # A dot or a vertical tap: one short note at the median height.
     if t1 - t0 < max(spec.min_note, 1.0 / CONTROL_RATE):
-        start = float(music.quantize_time(max(t0, 0.0), step)) if step else max(t0, 0.0)
+        start = _snap(max(t0, 0.0), step, spec.swing)
         if start >= spec.length:
             return result
         duration = step if step else SHORT_NOTE
@@ -326,8 +432,8 @@ def interpret_stroke(stroke, spec, mapping, mode="QUANTIZED", radius_ref=0.0):
     for i0, i1, pitch in _segments(pitches, min_len):
         start, end = float(tc[i0]), note_end(i1)
         if step:
-            start = float(music.quantize_time(start, step))
-            end = float(music.quantize_time(end, step))
+            start = _snap(start, step, spec.swing)
+            end = _snap(end, step, spec.swing)
             if end <= start:
                 continue
         if start >= spec.length:
@@ -340,7 +446,7 @@ def interpret_stroke(stroke, spec, mapping, mode="QUANTIZED", radius_ref=0.0):
     # Grid snapping may have swallowed every note of a very short stroke.
     if step and not result.voices:
         pitch = int(pitches[0])
-        start = float(music.quantize_time(t0c, step))
+        start = _snap(t0c, step, spec.swing)
         if start < spec.length:
             voice = _make_voice(start, step, pitch, channels, 0, count, attack,
                                 stroke.instrument)

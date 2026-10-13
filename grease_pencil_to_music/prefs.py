@@ -2,14 +2,14 @@
 """Add-on preferences: how each Grease Pencil attribute becomes sound."""
 
 import bpy
-from bpy.props import EnumProperty, FloatProperty, IntProperty
+from bpy.props import BoolProperty, EnumProperty, FloatProperty, IntProperty
 
 from .interpret import Mapping
 
 THICKNESS_ITEMS = (
+    ("VOLUME", "Volume", "Lo spessore è il volume (il jitter diventa tremolo)"),
     ("VOLUME_VIBRATO", "Volume + Vibrato",
      "L'andamento lento dello spessore è il volume, la sua irregolarità (jitter) è il vibrato"),
-    ("VOLUME", "Volume", "Lo spessore è il volume (il jitter diventa tremolo)"),
     ("VIBRATO", "Vibrato", "L'irregolarità dello spessore è il vibrato"),
     ("BRIGHTNESS", "Brillantezza", "Tratto spesso = suono brillante, tratto fine = suono scuro"),
     ("NONE", "Nessuno", "Lo spessore non influisce sul suono"),
@@ -30,16 +30,46 @@ SOFTNESS_ITEMS = (
 )
 
 
+NAMING_ITEMS = (
+    ("EN", "C D E F G A B", "Nomi inglesi (C4 = Do centrale)"),
+    ("IT", "Do Re Mi Fa Sol La Si", "Nomi italiani (Do4 = Do centrale)"),
+)
+TIMELINE_ITEMS = (
+    ("BOTH", "Onda + note", "Forma d'onda e blocchetti delle note nella Timeline"),
+    ("WAVE", "Forma d'onda", "Solo la forma d'onda"),
+    ("NOTES", "Note", "Solo i blocchetti delle note (come un piano roll)"),
+    ("NONE", "Nessuno", "Niente nella Timeline"),
+)
+
+
 def _changed(_self, _context):
     from . import handlers
     handlers.mark_all_dirty()
 
 
+def _naming_changed(_self, _context):
+    from . import board, handlers
+    for obj in handlers.compositions():
+        board.request_rebuild(obj)
+
+
+def _timeline_changed(_self, _context):
+    from . import timeline
+    timeline.tag_redraw()
+
+
 class GP2M_Preferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
+    note_naming: EnumProperty(name="Nomi delle note", items=NAMING_ITEMS, default="EN",
+                              update=_naming_changed)
+    timeline_display: EnumProperty(name="Nella Timeline", items=TIMELINE_ITEMS,
+                                   default="BOTH", update=_timeline_changed)
+    resume_after_undo: BoolProperty(name="Riprendi il play dopo Ctrl+Z", default=True,
+                                    description="Se Ctrl+Z ferma la riproduzione, la fa "
+                                    "ripartire subito")
     map_thickness: EnumProperty(name="Spessore", items=THICKNESS_ITEMS,
-                                default="VOLUME_VIBRATO", update=_changed)
+                                default="VOLUME", update=_changed)
     map_opacity: EnumProperty(name="Opacità", items=OPACITY_ITEMS, default="BRIGHTNESS",
                               update=_changed)
     map_vertex_color: EnumProperty(name="Vertex color", items=VERTEX_COLOR_ITEMS,
@@ -60,6 +90,14 @@ class GP2M_Preferences(bpy.types.AddonPreferences):
     def draw(self, _context):
         layout = self.layout
         box = layout.box()
+        box.label(text="Tavola e Timeline", icon="SEQ_PREVIEW")
+        grid = box.grid_flow(row_major=True, columns=2, even_columns=True, align=True)
+        for attr, label in (("note_naming", "Nomi delle note"),
+                            ("timeline_display", "Nella Timeline")):
+            grid.label(text=label)
+            grid.prop(self, attr, text="")
+        box.prop(self, "resume_after_undo")
+        box = layout.box()
         box.label(text="Cosa suona nel tratto", icon="SOUND")
         grid = box.grid_flow(row_major=True, columns=2, even_columns=True, align=True)
         for attr, label in (("map_thickness", "Spessore"), ("map_opacity", "Opacità"),
@@ -77,7 +115,10 @@ class GP2M_Preferences(bpy.types.AddonPreferences):
 
 
 class _Defaults:
-    map_thickness = "VOLUME_VIBRATO"
+    note_naming = "EN"
+    timeline_display = "BOTH"
+    resume_after_undo = True
+    map_thickness = "VOLUME"
     map_opacity = "BRIGHTNESS"
     map_vertex_color = "NONE"
     map_softness = "ATTACK"

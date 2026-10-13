@@ -7,6 +7,8 @@ Pure Python + NumPy: no ``bpy`` import, so it can be unit tested outside Blender
 import numpy as np
 
 NOTE_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+NOTE_NAMES_IT = ("Do", "Do#", "Re", "Re#", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "La#", "Si")
+NAMING_STYLES = {"EN": NOTE_NAMES, "IT": NOTE_NAMES_IT}
 BLACK_PITCH_CLASSES = frozenset((1, 3, 6, 8, 10))
 
 # (identifier, label, intervals from the root)
@@ -34,10 +36,11 @@ TIME_GRIDS = (
 TIME_GRID_DIVISIONS = {ident: div for ident, _label, div in TIME_GRIDS}
 
 
-def note_name(midi):
-    """Scientific pitch notation: 60 -> 'C4'."""
+def note_name(midi, style="EN"):
+    """Scientific pitch notation: 60 -> 'C4' (or 'Do4' with style 'IT')."""
     midi = int(midi)
-    return f"{NOTE_NAMES[midi % 12]}{midi // 12 - 1}"
+    names = NAMING_STYLES.get(style, NOTE_NAMES)
+    return f"{names[midi % 12]}{midi // 12 - 1}"
 
 
 def is_black(midi):
