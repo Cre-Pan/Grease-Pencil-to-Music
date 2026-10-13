@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Build the installable extension zip.
+
+    python tools/build_zip.py                    # dist/grease_pencil_to_music-<version>-windows_x64.zip
+    python tools/build_zip.py --platform linux-x64 --out <dir>   # e.g. for local tests
+
+Install in Blender: Edit > Preferences > Get Extensions > ▾ > Install from Disk.
+"""
+
+import argparse
+import pathlib
+import re
+import sys
+import zipfile
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+PACKAGE = ROOT / "grease_pencil_to_music"
+MANIFEST = "blender_manifest.toml"
+
+
+def read_manifest():
+    text = (PACKAGE / MANIFEST).read_text(encoding="utf-8")
+    version = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M).group(1)
+    ident = re.search(r'^id\s*=\s*"([^"]+)"', text, re.M).group(1)
+    platforms = re.search(r'^platforms\s*=\s*\[([^\]]*)\]', text, re.M).group(1)
+    return text, ident, version, [p.strip().strip('"') for p in platforms.split(",") if p.strip()]
+
+
+def build(out_dir, platform=None):
+    text, ident, version, platforms = read_manifest()
+    if platform:
+        text = re.sub(r'^platforms\s*=\s*\[[^\]]*\]', f'platforms = ["{platform}"]', text,
+                      flags=re.M)
+        platforms = [platform]
+    suffix = "-".join(p.replace("-", "_") for p in platforms)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    target = out_dir / f"{ident}-{version}-{suffix}.zip"
+    with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(PACKAGE.rglob("*")):
+            if path.is_dir() or "__pycache__" in path.parts or path.suffix == ".pyc":
+                continue
+            name = path.relative_to(PACKAGE).as_posix()
+            if name == MANIFEST:
+                archive.writestr(name, text)
+            else:
+                archive.write(path, name)
+        archive.write(ROOT / "LICENSE", "LICENSE")
+    return target
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--platform", help="override manifest platforms (e.g. linux-x64)")
+    parser.add_argument("--out", type=pathlib.Path, default=ROOT / "dist")
+    args = parser.parse_args(argv)
+    print(build(args.out, args.platform))
+
+
+if __name__ == "__main__":
+    sys.exit(main())

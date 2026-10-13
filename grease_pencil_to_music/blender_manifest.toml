@@ -1,0 +1,22 @@
+schema_version = "1.0.0"
+
+id = "grease_pencil_to_music"
+version = "0.0.1"
+name = "Grease Pencil to Music"
+tagline = "Draw music with Grease Pencil, like McLaren's drawn sound"
+maintainer = "Alessandro Pannoli"
+type = "add-on"
+
+website = "https://github.com/cre-pan/grease-pencil-to-music"
+
+tags = ["Grease Pencil", "Sequencer"]
+
+blender_version_min = "5.2.0"
+
+license = ["SPDX:GPL-3.0-or-later"]
+
+# 0.0.x builds are tested on Windows only; other platforms will follow.
+platforms = ["windows-x64"]
+
+[permissions]
+files = "Write generated sound (WAV, MP3) and MIDI files"
