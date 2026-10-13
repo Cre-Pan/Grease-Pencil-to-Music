@@ -55,6 +55,9 @@ def material_instrument(material):
     if ident == "SAMPLE":
         from . import samples
         return samples.instrument_key(material)
+    if ident == "LIBRARY":
+        from . import samples
+        return samples.library_key(material)
     return ident
 
 

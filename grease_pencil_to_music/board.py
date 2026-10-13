@@ -144,6 +144,23 @@ def is_board_material(material):
     return material is not None and bool(material.get(BOARD_FLAG))
 
 
+def layer_instruments(comp, layer_name):
+    """``[(slot index, material)]`` of the instruments that belong to a layer."""
+    return [(index, slot.material) for index, slot in enumerate(comp.material_slots)
+            if slot.material is not None and not is_board_material(slot.material)
+            and slot.material.grease_pencil is not None
+            and slot.material.gp2m_layer == layer_name]
+
+
+def loose_instruments(comp):
+    """Instruments not attached to any existing layer."""
+    names = {layer.name for layer in user_layers(comp.data)}
+    return [(index, slot.material) for index, slot in enumerate(comp.material_slots)
+            if slot.material is not None and not is_board_material(slot.material)
+            and slot.material.grease_pencil is not None
+            and slot.material.gp2m_layer not in names]
+
+
 def is_board_layer(layer):
     group = layer.parent_group
     while group is not None:

@@ -20,5 +20,6 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 _USER_DIR = tempfile.mkdtemp(prefix="gp2m_blender_user_")
 os.environ["BLENDER_USER_RESOURCES"] = _USER_DIR
 
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+for folder in (ROOT, ROOT / "tests"):
+    if str(folder) not in sys.path:
+        sys.path.insert(0, str(folder))

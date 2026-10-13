@@ -14,57 +14,105 @@ from . import board, engine, music, prefs, props, reader
 from .operators import active_composition
 
 
-# --- Lists ---------------------------------------------------------------------------
+# --- Layers with their instruments ---------------------------------------------------
 
-class GP2M_UL_layers(bpy.types.UIList):
-    """User layers of the composition (the board layers are hidden)."""
+INSTRUMENT_GROUPS = (
+    ("Melodici", ("SINE", "TRIANGLE", "SQUARE", "SAW", "STRINGS", "PLUCK", "BELL")),
+    ("Percussioni", ("DRUM", "KICK", "SNARE", "HIHAT", "CRASH", "CLAP", "TOM", "COWBELL")),
+    ("Suoni", ("SAMPLE", "LIBRARY")),
+)
+INSTRUMENT_ICONS = {"SAMPLE": "FILE_SOUND", "LIBRARY": "ASSET_MANAGER"}
 
-    def draw_item(self, _context, layout, data, layer, _icon, _active_data, _active_prop,
-                  _index=0, _flt_flag=0):
-        row = layout.row(align=True)
-        row.prop(layer, "name", text="", emboss=False, icon="OUTLINER_DATA_GP_LAYER")
-        settings = props.find_layer_settings(data, layer.name)
+
+class GP2M_MT_add_instrument(bpy.types.Menu):
+    """Instruments that can be added to a layer (the layer comes from the context)."""
+
+    bl_idname = "GP2M_MT_add_instrument"
+    bl_label = "Aggiungi strumento"
+
+    def draw(self, context):
+        from . import synth
+        layer = getattr(context, "gp2m_layer", None)
+        row = self.layout.row()
+        for title, idents in INSTRUMENT_GROUPS:
+            col = row.column()
+            col.label(text=title)
+            for ident in idents:
+                if ident not in synth.INSTRUMENT_BY_ID:
+                    continue
+                inst = synth.INSTRUMENT_BY_ID[ident]
+                op = col.operator("gp2m.add_instrument", text=inst.label,
+                                  icon=INSTRUMENT_ICONS.get(ident, "DOT"))
+                op.instrument = ident
+                op.layer = layer.name if layer is not None else ""
+
+
+def _instrument_row(layout, comp, layer_name, index, material, active):
+    row = layout.row(align=False)  # the color box stands apart from the name
+    swatch = row.row()
+    swatch.ui_units_x = 1.0
+    swatch.prop(material.grease_pencil, "color", text="")
+    op = row.operator("gp2m.use_instrument", text=board.material_label(material),
+                      depress=active, emboss=active)
+    op.layer = layer_name
+    op.index = index
+    volume = row.row(align=True)
+    volume.ui_units_x = 4
+    volume.prop(material, "gp2m_volume", text="", slider=True)
+    row.prop(material.grease_pencil, "hide", text="", emboss=False)
+    row.operator("gp2m.remove_instrument", text="", icon="X", emboss=False).index = index
+
+
+def draw_layers_and_instruments(layout, comp, details=True):
+    """One box per layer (top first) with its instruments inside."""
+    gp = comp.data
+    row = layout.row(align=True)
+    row.operator("gp2m.add_layer", text="Nuovo livello", icon="ADD")
+    row.operator("gp2m.move_layer", text="", icon="TRIA_UP").direction = "UP"
+    row.operator("gp2m.move_layer", text="", icon="TRIA_DOWN").direction = "DOWN"
+    active_layer = gp.layers.active
+    active_slot = comp.active_material_index
+    for layer in reversed(board.user_layers(gp)):
+        settings = props.find_layer_settings(gp, layer.name)
+        is_active = active_layer is not None and active_layer.name == layer.name
+        box = layout.box()
+        header = box.row(align=True)
         if settings is not None:
-            sub = row.row(align=True)
+            header.prop(settings, "expanded", text="", emboss=False,
+                        icon="TRIA_DOWN" if settings.expanded else "TRIA_RIGHT")
+        op = header.operator("gp2m.use_instrument", text=layer.name, depress=is_active,
+                             icon="OUTLINER_DATA_GP_LAYER")
+        op.layer = layer.name
+        op.index = -1
+        if settings is not None:
+            sub = header.row(align=True)
             sub.ui_units_x = 5
             sub.prop(settings, "mode", text="")
-        # No explicit icon: Blender switches the eye open/closed by itself.
-        row.prop(layer, "hide", text="", emboss=False)
-
-    def filter_items(self, _context, data, _propname):
-        layers = list(data.layers)
-        flags = [0 if board.is_board_layer(layer) else self.bitflag_filter_item
-                 for layer in layers]
-        order = list(reversed(range(len(layers))))  # top layer first, like Blender
-        neworder = [0] * len(layers)
-        for position, index in enumerate(order):
-            neworder[index] = position
-        return flags, neworder
-
-
-class GP2M_UL_instruments(bpy.types.UIList):
-    """Instrument materials (the board materials are hidden)."""
-
-    def draw_item(self, _context, layout, _data, slot, _icon, _active_data, _active_prop,
-                  _index=0, _flt_flag=0):
-        material = slot.material
-        row = layout.row(align=False)  # the color box stands apart from the name
-        if material is None or material.grease_pencil is None:
-            row.label(text="(vuoto)")
-            return
-        swatch = row.row()
-        swatch.ui_units_x = 1.0
-        swatch.prop(material.grease_pencil, "color", text="")
-        row.label(text=board.material_label(material))
-        volume = row.row(align=True)
-        volume.ui_units_x = 4
-        volume.prop(material, "gp2m_volume", text="", slider=True)
-        row.prop(material.grease_pencil, "hide", text="", emboss=False)
-
-    def filter_items(self, _context, data, _propname):
-        flags = [0 if board.is_board_material(slot.material) else self.bitflag_filter_item
-                 for slot in data.material_slots]
-        return flags, []
+        header.prop(layer, "hide", text="", emboss=False)
+        header.operator("gp2m.remove_layer", text="", icon="TRASH", emboss=False).name = layer.name
+        if settings is None or not settings.expanded:
+            continue
+        col = box.column(align=True)
+        own = board.layer_instruments(comp, layer.name)
+        for index, material in own:
+            _instrument_row(col, comp, layer.name, index, material,
+                            is_active and index == active_slot)
+        if not own:
+            col.label(text="Nessuno strumento: aggiungine uno", icon="INFO")
+        add = box.row()
+        add.context_pointer_set("gp2m_layer", settings)
+        add.menu("GP2M_MT_add_instrument", text="Strumento", icon="ADD")
+        if details:
+            add.prop(settings, "show_fx", text="", icon="MODIFIER", toggle=True)
+            if settings.show_fx:
+                draw_layer_details(box, gp, layer)
+    loose = board.loose_instruments(comp)
+    if loose:
+        box = layout.box()
+        box.label(text="Strumenti senza livello", icon="MATERIAL")
+        col = box.column(align=True)
+        for index, material in loose:
+            _instrument_row(col, comp, "", index, material, index == active_slot)
 
 
 # --- Shared drawing ------------------------------------------------------------------------
@@ -139,27 +187,6 @@ def draw_reading(layout, s):
     layout.prop(s, "use_modifiers")
 
 
-def draw_instruments_list(layout, comp, rows=6):
-    row = layout.row()
-    row.template_list("GP2M_UL_instruments", "", comp, "material_slots", comp,
-                      "active_material_index", rows=rows)
-    col = row.column(align=True)
-    col.operator_menu_enum("gp2m.add_instrument", "instrument", text="", icon="ADD")
-    col.operator("gp2m.remove_instrument", text="", icon="REMOVE")
-
-
-def draw_layers_list(layout, comp, rows=4):
-    gp = comp.data
-    row = layout.row()
-    row.template_list("GP2M_UL_layers", "", gp, "layers", gp, "gp2m_active_layer", rows=rows)
-    col = row.column(align=True)
-    col.operator("gp2m.add_layer", text="", icon="ADD")
-    col.operator("gp2m.remove_layer", text="", icon="REMOVE")
-    col.separator()
-    col.operator("gp2m.move_layer", text="", icon="TRIA_UP").direction = "UP"
-    col.operator("gp2m.move_layer", text="", icon="TRIA_DOWN").direction = "DOWN"
-
-
 def draw_effects(layout, fx):
     col = layout.column(align=True)
     col.prop(fx, "delay_mix")
@@ -175,16 +202,12 @@ def draw_effects(layout, fx):
     layout.prop(fx, "lofi")
 
 
-def draw_layer_details(layout, gp):
-    active = gp.layers.active
-    if active is None or board.is_board_layer(active):
-        return
-    settings = props.find_layer_settings(gp, active.name)
-    box = layout.box()
-    box.label(text=f"{active.name}: volume ed effetti", icon="MODIFIER")
+def draw_layer_details(layout, gp, layer):
+    settings = props.find_layer_settings(gp, layer.name)
+    box = layout.column()
     box.use_property_split = True
     box.use_property_decorate = False
-    box.prop(active, "opacity", text="Volume (opacità livello)", slider=True)
+    box.prop(layer, "opacity", text="Volume (opacità livello)", slider=True)
     if settings is None:
         box.label(text="Impostazioni in preparazione…")
         return
@@ -207,6 +230,15 @@ def draw_instrument_details(layout, material):
         box.operator("gp2m.load_sample", icon="FILEBROWSER")
         box.prop(material, "gp2m_sample_root")
         box.prop(material, "gp2m_sample_loop")
+    if material.gp2m_instrument == "LIBRARY":
+        box = layout.box()
+        box.label(text="Libreria (SoundFont .sf2 o .sfz)", icon="ASSET_MANAGER")
+        box.prop(material, "gp2m_library_path", text="File")
+        box.prop(material, "gp2m_library_preset")
+        col = box.column(align=True)
+        col.scale_y = 0.8
+        col.label(text="Librerie libere: GeneralUser GS, FluidR3 (SF2),")
+        col.label(text="Versilian VCSL (SFZ, CC0)")
     box = layout.box()
     box.label(text="Effetti dello strumento", icon="MODIFIER")
     draw_effects(box, material.gp2m_fx)
@@ -273,23 +305,13 @@ class GP2M_PT_data_reading(_DataPanel, bpy.types.Panel):
 
 
 class GP2M_PT_data_layers(_DataPanel, bpy.types.Panel):
-    bl_label = "Livelli musicali"
+    bl_label = "Livelli e strumenti"
     bl_parent_id = "GP2M_PT_data"
 
     def draw(self, context):
-        comp = active_composition(context)
-        draw_layers_list(self.layout, comp)
-        draw_layer_details(self.layout, comp.data)
-
-
-class GP2M_PT_data_instruments(_DataPanel, bpy.types.Panel):
-    bl_label = "Strumenti"
-    bl_parent_id = "GP2M_PT_data"
-
-    def draw(self, context):
-        comp = active_composition(context)
-        draw_instruments_list(self.layout, comp)
-        self.layout.label(text="Dettagli e effetti: scheda Materiale", icon="MATERIAL")
+        draw_layers_and_instruments(self.layout, active_composition(context))
+        self.layout.label(text="Tipo, campione ed effetti di uno strumento: scheda Materiale",
+                          icon="MATERIAL")
 
 
 class GP2M_PT_data_play(_DataPanel, bpy.types.Panel):
@@ -407,18 +429,11 @@ class GP2M_PT_main(_Panel, bpy.types.Panel):
                      icon="PROPERTIES")
 
 
-class GP2M_PT_instruments(_CompositionPanel, bpy.types.Panel):
-    bl_label = "Strumenti"
-
-    def draw(self, context):
-        draw_instruments_list(self.layout, active_composition(context), rows=5)
-
-
 class GP2M_PT_layers(_CompositionPanel, bpy.types.Panel):
-    bl_label = "Livelli"
+    bl_label = "Livelli e strumenti"
 
     def draw(self, context):
-        draw_layers_list(self.layout, active_composition(context), rows=3)
+        draw_layers_and_instruments(self.layout, active_composition(context), details=False)
 
 
 # --- Menus ---------------------------------------------------------------------------------
@@ -446,19 +461,16 @@ def draw_export_menu(self, _context):
 
 
 classes = (
-    GP2M_UL_layers,
-    GP2M_UL_instruments,
+    GP2M_MT_add_instrument,
     GP2M_PT_data,
     GP2M_PT_data_board,
     GP2M_PT_data_reading,
     GP2M_PT_data_layers,
-    GP2M_PT_data_instruments,
     GP2M_PT_data_play,
     GP2M_PT_material,
     GP2M_PT_output,
     GP2M_PT_scene,
     GP2M_PT_main,
-    GP2M_PT_instruments,
     GP2M_PT_layers,
     VIEW3D_MT_gp2m_add,
 )

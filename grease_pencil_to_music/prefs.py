@@ -49,12 +49,16 @@ def _naming_changed(_self, _context):
 
 
 INSTRUMENT_SET_ITEMS = (
-    ("ALL", "Tutti", "Tutti gli strumenti sintetizzati (il Campione si aggiunge con +)"),
+    ("ONE", "Uno (Flauto)", "Si parte con un solo strumento; gli altri si aggiungono nel livello"),
+    ("NONE", "Nessuno", "Livello vuoto: gli strumenti si aggiungono con '+ Strumento'"),
+    ("ALL", "Tutti", "Tutti gli strumenti sintetizzati (Campione e Libreria si aggiungono con +)"),
     ("ESSENTIAL", "Essenziali", "Flauto, 8-bit, Synth, Archi, Chitarra, Cassa, Rullante, "
      "Charleston"),
     ("MELODIC", "Solo melodici", "Gli strumenti intonati, senza percussioni"),
 )
 INSTRUMENT_SETS = {
+    "ONE": ("SINE",),
+    "NONE": (),
     "ESSENTIAL": ("SINE", "SQUARE", "SAW", "STRINGS", "PLUCK", "KICK", "SNARE", "HIHAT"),
     "MELODIC": ("SINE", "TRIANGLE", "SQUARE", "SAW", "STRINGS", "PLUCK", "BELL"),
 }
@@ -117,11 +121,11 @@ class GP2M_Preferences(bpy.types.AddonPreferences):
                                 items=[(i, l, "") for i, l, _ in music.TIME_GRIDS],
                                 default="1_16")
     new_key_labels: EnumProperty(name="Etichette tasti", items=KEY_LABEL_ITEMS, default="C")
-    new_layers: IntProperty(name="Livelli", default=3, min=1, max=16)
+    new_layers: IntProperty(name="Livelli", default=1, min=1, max=16)
     enter_draw_mode: BoolProperty(name="Entra in Draw Mode", default=False,
                                   description="Dopo aver creato una composizione passa subito "
                                   "al Draw Mode (altrimenti resta in Object Mode)")
-    new_instruments: EnumProperty(name="Strumenti", items=INSTRUMENT_SET_ITEMS, default="ALL")
+    new_instruments: EnumProperty(name="Strumenti", items=INSTRUMENT_SET_ITEMS, default="ONE")
     new_sample_rate: EnumProperty(name="Frequenza audio",
                                   items=(("44100", "44.1 kHz", ""), ("48000", "48 kHz", "")),
                                   default="44100")
@@ -187,9 +191,9 @@ class _Defaults:
     new_scale = "CHROMATIC"
     new_time_grid = "1_16"
     new_key_labels = "C"
-    new_layers = 3
+    new_layers = 1
     enter_draw_mode = False
-    new_instruments = "ALL"
+    new_instruments = "ONE"
     new_sample_rate = "44100"
     record_thickness = 0.25
 
@@ -199,7 +203,7 @@ def new_instrument_idents():
     if p.new_instruments in INSTRUMENT_SETS:
         return INSTRUMENT_SETS[p.new_instruments]
     from . import synth
-    return tuple(i.ident for i in synth.INSTRUMENTS if i.ident != "SAMPLE")
+    return tuple(i.ident for i in synth.INSTRUMENTS if i.ident not in ("SAMPLE", "LIBRARY"))
 
 
 def feedback_mode():

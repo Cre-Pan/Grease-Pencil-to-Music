@@ -81,14 +81,16 @@ class GP2M_OT_add_composition(bpy.types.Operator):
         for attr in ("bpm", "length", "low_note", "octaves", "row_height", "seconds_width",
                      "scale", "time_grid", "key_labels", "sample_rate"):
             setattr(s, attr, getattr(p, "new_" + attr))
-        for material in board.instrument_materials(prefs.new_instrument_idents()):
-            gp.materials.append(material)
         first_frame = min(1, scene.frame_start)
         for i in range(1, p.new_layers + 1):
             layer = gp.layers.new(f"Livello {i}")
             layer.use_lights = False  # instrument colors stay readable
             layer.frames.new(first_frame)
         gp.layers.active = gp.layers[0]
+        # The starting instruments live in the first layer.
+        for material in board.instrument_materials(prefs.new_instrument_idents()):
+            material.gp2m_layer = gp.layers[0].name
+            gp.materials.append(material)
         props.ensure_layer_settings(gp)
 
         board.rebuild(obj, scene)
@@ -207,37 +209,6 @@ def _composition_poll(context):
     return active_composition(context) is not None
 
 
-class GP2M_OT_add_instrument(bpy.types.Operator):
-    """Aggiungi uno strumento (un materiale Grease Pencil) alla composizione"""
-
-    bl_idname = "gp2m.add_instrument"
-    bl_label = "Aggiungi strumento"
-    bl_options = {"REGISTER", "UNDO"}
-
-    instrument: EnumProperty(name="Strumento", items=props.INSTRUMENT_ITEMS)
-
-    @classmethod
-    def poll(cls, context):
-        return _composition_poll(context)
-
-    def execute(self, context):
-        comp = active_composition(context)
-        material = board.instrument_material(synth.get_instrument(self.instrument))
-        gp = comp.data
-        names = [m.name if m else "" for m in gp.materials]
-        if material.name not in names:
-            # Keep instruments before the board materials.
-            gp.materials.append(material)
-            names.append(material.name)
-            first_board = next((i for i, m in enumerate(gp.materials)
-                                if board.is_board_material(m)), None)
-            if first_board is not None:
-                _move_material_slot(comp, len(names) - 1, first_board)
-                names = [m.name if m else "" for m in gp.materials]
-        comp.active_material_index = names.index(material.name)
-        return {"FINISHED"}
-
-
 def _move_material_slot(comp, src, dst):
     """Move a material slot keeping every stroke on its material."""
     gp = comp.data
@@ -253,6 +224,95 @@ def _move_material_slot(comp, src, dst):
                 stroke.material_index = remap.get(stroke.material_index, stroke.material_index)
     for index, old in enumerate(order):
         gp.materials[index] = materials[old]
+
+
+def append_instrument(comp, material):
+    """Add a material slot before the board materials; returns its index."""
+    gp = comp.data
+    gp.materials.append(material)
+    index = len(gp.materials) - 1
+    first_board = next((i for i, m in enumerate(gp.materials) if board.is_board_material(m)),
+                       None)
+    if first_board is not None and first_board < index:
+        _move_material_slot(comp, index, first_board)
+        index = first_board
+    return index
+
+
+def remove_material_slot(comp, index):
+    """Remove a slot; its strokes go to the first instrument of the composition."""
+    gp = comp.data
+    for layer in gp.layers:
+        for frame in layer.frames:
+            for stroke in frame.drawing.strokes:
+                if stroke.material_index == index:
+                    stroke.material_index = 0
+                elif stroke.material_index > index:
+                    stroke.material_index -= 1
+    gp.materials.pop(index=index)
+
+
+def use_instrument(comp, layer_name, index=None):
+    """Draw on ``layer_name`` with the instrument at slot ``index`` (or its first one)."""
+    gp = comp.data
+    layer = gp.layers.get(layer_name)
+    if layer is not None and not board.is_board_layer(layer):
+        gp.layers.active = layer
+    if index is None:
+        own = board.layer_instruments(comp, layer_name)
+        index = own[0][0] if own else None
+    if index is not None and 0 <= index < len(comp.material_slots):
+        comp.active_material_index = index
+
+
+class GP2M_OT_add_instrument(bpy.types.Operator):
+    """Aggiungi uno strumento al livello"""
+
+    bl_idname = "gp2m.add_instrument"
+    bl_label = "Aggiungi strumento"
+    bl_options = {"REGISTER", "UNDO"}
+
+    instrument: EnumProperty(name="Strumento", items=props.INSTRUMENT_ITEMS)
+    layer: StringProperty(name="Livello", description="Vuoto = livello attivo")
+
+    @classmethod
+    def poll(cls, context):
+        return _composition_poll(context)
+
+    def execute(self, context):
+        comp = active_composition(context)
+        gp = comp.data
+        layer_name = self.layer
+        if not layer_name or gp.layers.get(layer_name) is None:
+            active = gp.layers.active
+            layers = board.user_layers(gp)
+            layer_name = (active.name if active is not None and not board.is_board_layer(active)
+                          else (layers[-1].name if layers else ""))
+        material = board.instrument_material(synth.get_instrument(self.instrument))
+        material.gp2m_layer = layer_name
+        index = append_instrument(comp, material)
+        use_instrument(comp, layer_name, index)
+        return {"FINISHED"}
+
+
+class GP2M_OT_use_instrument(bpy.types.Operator):
+    """Disegna su questo livello con questo strumento"""
+
+    bl_idname = "gp2m.use_instrument"
+    bl_label = "Usa strumento"
+    bl_options = {"INTERNAL", "UNDO"}
+
+    layer: StringProperty()
+    index: IntProperty(default=-1)
+
+    @classmethod
+    def poll(cls, context):
+        return _composition_poll(context)
+
+    def execute(self, context):
+        use_instrument(active_composition(context), self.layer,
+                       None if self.index < 0 else self.index)
+        return {"FINISHED"}
 
 
 class GP2M_OT_load_sample(bpy.types.Operator):
@@ -295,11 +355,13 @@ def _active_material(context):
 
 
 class GP2M_OT_remove_instrument(bpy.types.Operator):
-    """Togli lo strumento attivo dalla composizione (i suoi tratti passano al primo strumento)"""
+    """Togli lo strumento (i suoi tratti passano al primo strumento della composizione)"""
 
     bl_idname = "gp2m.remove_instrument"
     bl_label = "Togli strumento"
     bl_options = {"REGISTER", "UNDO"}
+
+    index: IntProperty(default=-1, description="Slot da togliere (-1 = strumento attivo)")
 
     @classmethod
     def poll(cls, context):
@@ -311,31 +373,20 @@ class GP2M_OT_remove_instrument(bpy.types.Operator):
 
     def execute(self, context):
         comp = active_composition(context)
-        gp = comp.data
-        index = comp.active_material_index
-        for layer in board.user_layers(gp):
-            for frame in layer.frames:
-                for stroke in frame.drawing.strokes:
-                    if stroke.material_index == index:
-                        stroke.material_index = 0
-                    elif stroke.material_index > index:
-                        stroke.material_index -= 1
-        for layer in gp.layers:
-            if board.is_board_layer(layer):
-                for frame in layer.frames:
-                    for stroke in frame.drawing.strokes:
-                        if stroke.material_index > index:
-                            stroke.material_index -= 1
-        gp.materials.pop(index=index)
-        comp.active_material_index = max(0, index - 1)
+        index = comp.active_material_index if self.index < 0 else self.index
+        if not 0 <= index < len(comp.material_slots) or board.is_board_material(
+                comp.material_slots[index].material):
+            return {"CANCELLED"}
+        remove_material_slot(comp, index)
+        comp.active_material_index = max(0, min(index, len(comp.material_slots) - 1) - 1)
         return {"FINISHED"}
 
 
 class GP2M_OT_add_layer(bpy.types.Operator):
-    """Aggiungi un nuovo livello alla composizione"""
+    """Aggiungi un nuovo livello (poi aggiungi i suoi strumenti con "+ Strumento")"""
 
     bl_idname = "gp2m.add_layer"
-    bl_label = "Aggiungi livello"
+    bl_label = "Nuovo livello"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
@@ -357,24 +408,25 @@ class GP2M_OT_add_layer(bpy.types.Operator):
 
 
 class GP2M_OT_remove_layer(bpy.types.Operator):
-    """Elimina il livello attivo con i suoi tratti"""
+    """Elimina il livello attivo con i suoi tratti e i suoi strumenti"""
 
     bl_idname = "gp2m.remove_layer"
     bl_label = "Elimina livello"
     bl_options = {"REGISTER", "UNDO"}
 
+    name: StringProperty(description="Vuoto = livello attivo")
+
     @classmethod
     def poll(cls, context):
         comp = active_composition(context)
-        if comp is None:
-            return False
-        active = comp.data.layers.active
-        return (active is not None and not board.is_board_layer(active)
-                and len(board.user_layers(comp.data)) > 1)
+        return comp is not None and len(board.user_layers(comp.data)) > 1
 
     def execute(self, context):
-        gp = active_composition(context).data
-        layer = gp.layers.active
+        comp = active_composition(context)
+        gp = comp.data
+        layer = gp.layers.get(self.name) if self.name else gp.layers.active
+        if layer is None or board.is_board_layer(layer):
+            return {"CANCELLED"}
         name = layer.name
         layers = board.user_layers(gp)
         position = [l.name for l in layers].index(name)
@@ -383,8 +435,16 @@ class GP2M_OT_remove_layer(bpy.types.Operator):
             if item.name == name:
                 gp.gp2m_layers.remove(index)
                 break
+        # Its instruments go too, unless strokes of other layers still use them.
+        used = {stroke.material_index for other in board.user_layers(gp)
+                for frame in other.frames for stroke in frame.drawing.strokes}
+        for index, material in sorted(board.layer_instruments(comp, name), reverse=True):
+            if index in used:
+                material.gp2m_layer = ""
+            else:
+                remove_material_slot(comp, index)
         layers = board.user_layers(gp)
-        gp.layers.active = layers[max(0, position - 1)]
+        use_instrument(comp, layers[max(0, position - 1)].name)
         return {"FINISHED"}
 
 
@@ -422,6 +482,7 @@ classes = (
     GP2M_OT_rebuild_board,
     GP2M_OT_export,
     GP2M_OT_add_instrument,
+    GP2M_OT_use_instrument,
     GP2M_OT_load_sample,
     GP2M_OT_remove_instrument,
     GP2M_OT_add_layer,

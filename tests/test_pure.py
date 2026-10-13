@@ -203,7 +203,8 @@ def voice(instrument, midi_pitch=69, duration=1.0):
                            np.zeros(n), np.full(n, 0.7), np.zeros(n), instrument=instrument)
 
 
-@pytest.mark.parametrize("ident", [i.ident for i in synth.INSTRUMENTS if i.ident != "SAMPLE"])
+@pytest.mark.parametrize("ident", [i.ident for i in synth.INSTRUMENTS
+                                   if i.ident not in ("SAMPLE", "LIBRARY")])
 def test_every_instrument_renders(ident):
     offset, buf = synth.render_voice(voice(ident), SR)
     assert offset == 0 and buf.shape[1] == 2
@@ -467,3 +468,53 @@ def test_legato_is_one_voice_that_slides_between_scale_notes():
                                        mode="LEGATO", glide=0.01)
     held = lambda v: np.mean(np.abs(v.pitch - np.round(v.pitch)) < 0.05)
     assert held(quick.voices[0]) > held(res.voices[0])  # shorter glide = longer held notes
+
+
+# --- 0.0.5: instrument libraries -------------------------------------------------------
+
+import sf2_fixture  # noqa: E402
+from grease_pencil_to_music import libraries  # noqa: E402
+
+
+def test_sf2_presets_and_zones(tmp_path):
+    path = tmp_path / "test.sf2"
+    sf2_fixture.write_sf2(path)
+    font = libraries.read_sf2(path)
+    assert font.preset_list() == [(0, 0, 5, "Sine Test")]
+    zones = font.zones(0)
+    assert len(zones) == 1
+    zone = zones[0]
+    assert (zone.lo, zone.hi, zone.root, zone.loop) == (0, 127, 69.0, True)
+    assert 0 < zone.loop_start < zone.loop_end <= len(zone.data)
+
+
+def test_sf2_instrument_plays_in_tune_and_loops(tmp_path):
+    path = tmp_path / "test.sf2"
+    sf2_fixture.write_sf2(path)
+    synth.register_zones("test-sf2", libraries.read_sf2(path).zones(0))
+    long_note = voice(synth.LIBRARY_PREFIX + "test-sf2", 81, duration=3.0)
+    _o, buf = synth.render_voice(long_note, SR)
+    assert dominant_frequency(buf[: SR // 2, 0]) == pytest.approx(880.0, rel=0.02)
+    # The sample lasts < 1 s at this pitch: the loop keeps the note sounding.
+    assert np.abs(buf[int(2.5 * SR):int(2.8 * SR)]).max() > 0.1
+
+
+def test_sf2_rejects_other_files(tmp_path):
+    path = tmp_path / "bad.sf2"
+    path.write_bytes(b"RIFF\0\0\0\0WAVE")
+    with pytest.raises(libraries.LibraryError):
+        libraries.read_sf2(path)
+
+
+def test_sfz_regions_inheritance_and_note_names(tmp_path):
+    assert libraries.sfz_key("c4") == 60 and libraries.sfz_key("a#3") == 58
+    assert libraries.sfz_key("db4") == 61 and libraries.sfz_key("72") == 72
+    regions = libraries.parse_sfz("<group> loop_mode=no_loop <region> sample=x y.wav key=60")
+    assert regions == [{"loop_mode": "no_loop", "sample": "x y.wav", "key": "60"}]
+    zones = libraries.sfz_zones(str(sf2_fixture.write_sfz(tmp_path)), sf2_fixture.read_wav)
+    assert [(z.lo, z.hi, z.root) for z in zones] == [(36, 59, 57.0), (60, 127, 69.0)]
+    synth.register_zones("test-sfz", zones)
+    _o, low = synth.render_voice(voice(synth.LIBRARY_PREFIX + "test-sfz", 57), SR)
+    _o, high = synth.render_voice(voice(synth.LIBRARY_PREFIX + "test-sfz", 76), SR)
+    assert dominant_frequency(low[: SR // 2, 0]) == pytest.approx(220.0, rel=0.02)
+    assert dominant_frequency(high[: SR // 2, 0]) == pytest.approx(659.3, rel=0.02)

@@ -32,6 +32,10 @@ def addon(tmp_path_factory):
         filepath=str(zip_path), repo="user_default", enable_on_install=True)
     assert result == {"FINISHED"}
     assert MODULE in bpy.context.preferences.addons
+    preferences = bpy.context.preferences.addons[MODULE].preferences
+    # Most tests want a richer starting point than the default (1 layer, 1 instrument).
+    preferences.new_layers = 3
+    preferences.new_instruments = "ALL"
     package = sys.modules[MODULE]
     yield package
     bpy.ops.preferences.addon_disable(module=MODULE)
@@ -275,6 +279,9 @@ class MockLayout:
         pass
 
     def menu(self, menu_id, **_kwargs):
+        if menu_id == "GP2M_MT_add_instrument":
+            self.log.append(("menu", menu_id))
+            return
         assert hasattr(bpy.types, menu_id), menu_id
         self.log.append(("menu", menu_id))
 
@@ -301,6 +308,9 @@ class MockLayout:
     def template_ID(self, data, prop, **_kwargs):
         assert prop in data.bl_rna.properties, prop
         self.log.append(("prop", prop))
+
+    def context_pointer_set(self, name, data):
+        self.log.append(("context", name))
 
     def popover(self, panel, **_kwargs):
         assert hasattr(bpy.types, panel), panel
@@ -339,9 +349,16 @@ def test_panels_menus_and_preferences_draw(comp):
             panel.draw(_Drawer(log), bpy.context)
     # The Material panel needs context.material (Properties editor only).
     material = comp.material_slots[0].material
-    material.gp2m_instrument = "SAMPLE"
-    ui.draw_instrument_details(MockLayout(log), material)
+    for ident in ("SAMPLE", "LIBRARY"):
+        material.gp2m_instrument = ident
+        ui.draw_instrument_details(MockLayout(log), material)
     material.gp2m_instrument = "SINE"
+    settings = sub("props").find_layer_settings(comp.data, "Livello 1")
+    settings.show_fx = True
+    ui.draw_layers_and_instruments(MockLayout(log), comp)
+    settings.show_fx = False
+    menu = _Drawer(log)
+    ui.GP2M_MT_add_instrument.draw(menu, bpy.context)
     ui.VIEW3D_MT_gp2m_add.draw(_Drawer(log), bpy.context)
     ui.draw_export_menu(_Drawer(log), bpy.context)
     ui.draw_add_menu(_Drawer(log), bpy.context)
@@ -350,7 +367,8 @@ def test_panels_menus_and_preferences_draw(comp):
     drawn = {entry[1] for entry in log}
     assert {"gp2m_instrument", "gp2m_volume", "mode", "fill_mode", "reverb_mix",
             "map_thickness", "note_naming", "gp2m.export", "gp2m.add_instrument",
-            "VIEW3D_MT_gp2m_add", "GP2M_UL_layers", "GP2M_UL_instruments", "hide",
+            "VIEW3D_MT_gp2m_add", "GP2M_MT_add_instrument", "gp2m.use_instrument",
+            "gp2m.add_layer", "gp2m.remove_layer", "hide", "gp2m_library_path",
             "gp2m_sample", "gp2m_sample_root", "gp2m.load_sample", "gp2m.play_keyboard",
             "channel", "new_bpm", "volume_feedback", "gp2m.import_midi"} <= drawn
 
@@ -698,3 +716,62 @@ def test_legato_layer_mode(comp):
     props.find_layer_settings(comp.data, "Livello 1").mode = "LEGATO"
     result = engine.regenerate(comp)
     assert result.voice_count == 1 and len(result.notes) > 1
+
+
+
+def test_new_composition_starts_empty(addon):
+    preferences = bpy.context.preferences.addons[MODULE].preferences
+    preferences.new_layers, preferences.new_instruments = 1, "ONE"
+    try:
+        obj = _fresh(None)
+        board = sub("board")
+        assert [l.name for l in board.user_layers(obj.data)] == ["Livello 1"]
+        own = board.layer_instruments(obj, "Livello 1")
+        assert [m.gp2m_instrument for _i, m in own] == ["SINE"]
+        assert not any(len(l.frames[0].drawing.strokes) for l in board.user_layers(obj.data))
+    finally:
+        preferences.new_layers, preferences.new_instruments = 3, "ALL"
+
+
+def test_instruments_live_inside_layers(comp):
+    board = sub("board")
+    assert bpy.ops.gp2m.add_layer() == {"FINISHED"}
+    new = comp.data.layers.active.name
+    assert board.layer_instruments(comp, new) == []
+    assert bpy.ops.gp2m.add_instrument(instrument="PLUCK", layer=new) == {"FINISHED"}
+    own = board.layer_instruments(comp, new)
+    assert [m.gp2m_instrument for _i, m in own] == ["PLUCK"]
+    assert comp.active_material_index == own[0][0]  # ready to draw with it
+    # Choosing a layer picks its first instrument.
+    assert bpy.ops.gp2m.use_instrument(layer="Livello 1", index=-1) == {"FINISHED"}
+    assert comp.data.layers.active.name == "Livello 1"
+    assert comp.material_slots[comp.active_material_index].material.gp2m_layer == "Livello 1"
+    # Deleting a layer removes its unused instruments.
+    slots = len(comp.material_slots)
+    assert bpy.ops.gp2m.remove_layer(name=new) == {"FINISHED"}
+    assert len(comp.material_slots) == slots - 1
+
+
+def test_renamed_layer_keeps_its_instruments(comp):
+    board, props = sub("board"), sub("props")
+    count = len(board.layer_instruments(comp, "Livello 1"))
+    comp.data.layers["Livello 1"].name = "Melodia"
+    props.ensure_layer_settings(comp.data)
+    assert len(board.layer_instruments(comp, "Melodia")) == count
+
+
+def test_library_instrument_from_soundfont(comp, tmp_path):
+    import sf2_fixture
+    engine = sub("engine")
+    path = tmp_path / "test.sf2"
+    sf2_fixture.write_sf2(path)
+    assert bpy.ops.gp2m.add_instrument(instrument="LIBRARY", layer="Livello 1") == {"FINISHED"}
+    material = comp.material_slots[comp.active_material_index].material
+    material.gp2m_library_path = str(path)
+    items = sub("samples").preset_items(material, bpy.context)
+    assert items[0][1].endswith("Sine Test")
+    material.gp2m_library_preset = items[0][0]
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 69), material_index=comp.active_material_index)
+    result = engine.regenerate(comp)
+    assert [n.pitch for n in result.notes] == [69]
+    assert np.abs(result.audio[int(1.4 * 44100):int(1.6 * 44100)]).max() > 0.05

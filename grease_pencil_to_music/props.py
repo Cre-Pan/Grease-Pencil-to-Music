@@ -73,6 +73,8 @@ class GP2M_LayerSettings(bpy.types.PropertyGroup):
     """Settings of one Grease Pencil layer, matched by layer name."""
 
     name: StringProperty()
+    expanded: BoolProperty(name="Mostra strumenti", default=True)
+    show_fx: BoolProperty(name="Mostra volume ed effetti", default=False)
     mode: EnumProperty(name="Lettura", items=LAYER_MODES, default="QUANTIZED",
                        update=_sound_changed)
     fill_mode: EnumProperty(name="Forme piene", items=FILL_MODES, default="TONAL",
@@ -271,6 +273,8 @@ def register_properties():
         name="Strumento", items=INSTRUMENT_ITEMS, default=synth.DEFAULT_INSTRUMENT,
         update=_instrument_changed)
     bpy.types.Material.gp2m_fx = PointerProperty(type=GP2M_Effects)
+    bpy.types.Material.gp2m_layer = StringProperty(
+        name="Livello", description="Livello della composizione a cui appartiene lo strumento")
     bpy.types.Material.gp2m_sample = PointerProperty(
         name="Suono", type=bpy.types.Sound, update=_instrument_changed,
         description="Suono del campione (importato o già usato nel Sequencer)")
@@ -280,6 +284,13 @@ def register_properties():
     bpy.types.Material.gp2m_sample_loop = BoolProperty(
         name="Loop", default=False, update=_instrument_changed,
         description="Ripete il suono finché dura il tratto")
+    from . import samples
+    bpy.types.Material.gp2m_library_path = StringProperty(
+        name="File libreria", subtype="FILE_PATH", update=_instrument_changed,
+        description="SoundFont (.sf2) o strumento SFZ (.sfz)")
+    bpy.types.Material.gp2m_library_preset = EnumProperty(
+        name="Preset", items=samples.preset_items, update=_instrument_changed,
+        description="Strumento del SoundFont (banco:programma)")
     bpy.types.Material.gp2m_volume = FloatProperty(
         name="Volume", default=1.0, min=0.0, max=2.0, subtype="FACTOR",
         description="Volume di questo strumento", update=_instrument_changed)
@@ -290,10 +301,13 @@ def register_properties():
 def unregister_properties():
     del bpy.types.GreasePencil.gp2m_active_layer
     del bpy.types.Material.gp2m_volume
+    del bpy.types.Material.gp2m_library_preset
+    del bpy.types.Material.gp2m_library_path
     del bpy.types.Material.gp2m_sample_loop
     del bpy.types.Material.gp2m_sample_root
     del bpy.types.Material.gp2m_sample
     del bpy.types.Material.gp2m_fx
+    del bpy.types.Material.gp2m_layer
     del bpy.types.Material.gp2m_instrument
     del bpy.types.GreasePencil.gp2m_layers
     del bpy.types.Scene.gp2m_timeline
@@ -318,8 +332,12 @@ def ensure_layer_settings(gp_data):
         return
     orphans = [item for item in gp_data.gp2m_layers if item.name not in layer_names]
     if len(missing) == 1 and len(orphans) == 1:
-        # Most likely a renamed layer: keep its settings.
+        # Most likely a renamed layer: keep its settings and its instruments.
+        old = orphans[0].name
         orphans[0].name = missing[0]
+        for material in gp_data.materials:
+            if material is not None and getattr(material, "gp2m_layer", "") == old:
+                material.gp2m_layer = missing[0]
         return
     for name in missing:
         gp_data.gp2m_layers.add().name = name

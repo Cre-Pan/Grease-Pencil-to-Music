@@ -62,6 +62,8 @@ INSTRUMENTS = (
                (0.86, 0.7, 0.22, 1.0), -1, 0.0, 0.35, True, 0.4, 56),
     Instrument("SAMPLE", "Campione", "Un suono di Blender (importato o del Sequencer), "
                "intonato sulle righe", (0.55, 0.9, 0.95, 1.0), 0, 0.08, 0.8),
+    Instrument("LIBRARY", "Libreria", "Strumento campionato da un SoundFont (.sf2) o .sfz: "
+               "pianoforti, archi, chitarre…", (0.95, 0.75, 0.55, 1.0), 0, 0.15, 0.9),
 )
 INSTRUMENT_BY_ID = {inst.ident: inst for inst in INSTRUMENTS}
 DEFAULT_INSTRUMENT = "SINE"
@@ -71,11 +73,40 @@ TOM_NOTES = (41, 43, 45, 47, 48, 50)
 
 
 SAMPLE_PREFIX = "SAMPLE:"
-SAMPLES = {}  # key -> (mono float32 data, sample rate, root MIDI note, loop)
+LIBRARY_PREFIX = "LIBRARY:"
+SAMPLES = {}  # key -> list of Zone
+
+
+@dataclass
+class Zone:
+    """One sample of a (multi)sampled instrument."""
+
+    data: np.ndarray  # mono float32
+    rate: float
+    root: float  # MIDI pitch at which the sample plays unchanged
+    lo: int = 0  # key range
+    hi: int = 127
+    loop: bool = False
+    loop_start: int = 0  # samples, inside data
+    loop_end: int = 0
+    gain: float = 1.0
 
 
 def register_sample(key, data, rate, root, loop):
-    SAMPLES[key] = (np.asarray(data, dtype=np.float32), float(rate), int(root), bool(loop))
+    """A single sound over the whole keyboard (the "Campione" instrument)."""
+    data = np.asarray(data, dtype=np.float32)
+    SAMPLES[key] = [Zone(data, float(rate), float(root), 0, 127, bool(loop), 0, len(data))]
+
+
+def register_zones(key, zones):
+    """A multisampled instrument (the "Libreria" instrument: SF2 / SFZ)."""
+    SAMPLES[key] = list(zones)
+
+
+def pick_zone(zones, pitch):
+    inside = [z for z in zones if z.lo <= pitch <= z.hi]
+    pool = inside or zones
+    return min(pool, key=lambda z: abs(z.root - pitch))
 
 
 def get_instrument(ident):
@@ -83,6 +114,8 @@ def get_instrument(ident):
         return NOISE_INSTRUMENT
     if ident.startswith(SAMPLE_PREFIX):
         return INSTRUMENT_BY_ID["SAMPLE"]
+    if ident.startswith(LIBRARY_PREFIX):
+        return INSTRUMENT_BY_ID["LIBRARY"]
     return INSTRUMENT_BY_ID.get(ident, INSTRUMENT_BY_ID[DEFAULT_INSTRUMENT])
 
 
@@ -253,17 +286,24 @@ def _noise_band(n, sample_rate, low_hz, high_hz, rng, frame=2048, hop=512):
 
 
 def _sample(ident, freq, sample_rate):
-    """Play a registered sample at the pitch curve ``freq`` (resampling)."""
-    found = SAMPLES.get(ident[len(SAMPLE_PREFIX):])
-    if found is None or not len(found[0]):
+    """Play the registered zone closest to the pitch, following ``freq`` (resampling)."""
+    key = ident.split(":", 1)[1] if ":" in ident else ident
+    zones = SAMPLES.get(key)
+    if not zones:
         return np.zeros(len(freq))
-    data, rate, root, loop = found
-    ratio = freq / float(music.midi_to_freq(root)) * (rate / sample_rate)
+    pitch = 69.0 + 12.0 * np.log2(max(float(np.median(freq)), 1e-6) / 440.0)
+    zone = pick_zone(zones, pitch)
+    data = zone.data
+    if len(data) < 2:
+        return np.zeros(len(freq))
+    ratio = freq / float(music.midi_to_freq(zone.root)) * (zone.rate / sample_rate)
     position = np.concatenate(([0.0], np.cumsum(ratio[:-1])))
-    if loop:
-        position = position % (len(data) - 1)
+    if zone.loop and zone.loop_end - zone.loop_start > 2:
+        span = zone.loop_end - zone.loop_start
+        past = position >= zone.loop_end
+        position = np.where(past, zone.loop_start + (position - zone.loop_start) % span, position)
     inside = position < len(data) - 1
-    return np.interp(position, np.arange(len(data)), data) * inside
+    return np.interp(position, np.arange(len(data)), data) * inside * zone.gain
 
 
 # --- Voice rendering ---------------------------------------------------------
@@ -314,7 +354,7 @@ def render_voice(voice, sample_rate=44100, vibrato_rate=5.5):
     elif inst.ident == "BELL":
         index = 3.0 * np.exp(-ts / 0.6)
         signal = np.sin(phase + index * np.sin(3.5 * phase)) * np.exp(-ts / 1.4)
-    elif inst.ident == "SAMPLE":
+    elif inst.ident in ("SAMPLE", "LIBRARY"):
         signal = _sample(voice.instrument, freq, sample_rate)
     elif inst.ident == NOISE_BAND:
         low = music.midi_to_freq(ctrl(voice.band_low))
@@ -323,7 +363,8 @@ def render_voice(voice, sample_rate=44100, vibrato_rate=5.5):
     else:  # percussion
         signal = _percussion(inst.ident, n, sample_rate, float(voice.pitch[0]), rng)
 
-    if not inst.percussive and inst.ident not in ("BELL", "SINE", "SAMPLE", NOISE_BAND):
+    if not inst.percussive and inst.ident not in ("BELL", "SINE", "SAMPLE", "LIBRARY",
+                                                  NOISE_BAND):
         dull = _lowpass(signal, sample_rate, 2.5 * f0)
         signal = brightness * signal + (1.0 - brightness) * dull
 

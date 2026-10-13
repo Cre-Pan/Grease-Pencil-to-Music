@@ -18,23 +18,15 @@ from . import board, engine, midi, props, synth
 from .operators import active_composition
 
 
-def _material_slot(comp, ident):
-    """Slot index of the composition's material for ``ident`` (added if missing)."""
-    gp = comp.data
-    for index, material in enumerate(gp.materials):
-        if material is not None and not board.is_board_material(material) \
-                and material.gp2m_instrument == ident:
+def _material_slot(comp, ident, layer_name):
+    """Slot of the layer's instrument ``ident`` (added to the layer if missing)."""
+    for index, material in board.layer_instruments(comp, layer_name):
+        if material.gp2m_instrument == ident:
             return index
+    from .operators import append_instrument
     material = board.instrument_material(synth.get_instrument(ident))
-    gp.materials.append(material)
-    index = len(gp.materials) - 1
-    first_board = next((i for i, m in enumerate(gp.materials) if board.is_board_material(m)),
-                       None)
-    if first_board is not None and first_board < index:
-        from .operators import _move_material_slot
-        _move_material_slot(comp, index, first_board)
-        index = first_board
-    return index
+    material.gp2m_layer = layer_name
+    return append_instrument(comp, material)
 
 
 def _unique_layer(gp, name):
@@ -93,7 +85,7 @@ def import_midi(context, path, comp=None, fit=True):
             x = np.linspace(start * sw, max(end, start + 0.02) * sw, count)
             z = np.full(count, (row_pitch - s.low_note + 0.5) * h)
             radius = np.full(count, base_radius * (0.35 + 0.65 * velocity / 127.0))
-            strokes.append((x, z, radius, _material_slot(comp, ident)))
+            strokes.append((x, z, radius, _material_slot(comp, ident, layer.name)))
         board.add_strokes_bulk(drawing, strokes)
     if tracks:  # the empty "Livello 1..3" of a new composition are not needed
         for name in empty_defaults:
