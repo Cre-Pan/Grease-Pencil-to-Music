@@ -68,6 +68,10 @@ Note tecniche su Blender 5.2 emerse durante lo sviluppo:
   dopo ogni aggiunta il gruppo della testina torna in cima;
 - la testina è un livello la cui `translation` è pilotata da un driver sui dati GP;
 - l'icona dell'occhio di `hide` cambia da sola: non va passata un'icona esplicita;
+- lo scrittore WAV di FFmpeg in Blender fallisce a 48 kHz su certe lunghezze
+  ("filling the audio frame failed"): i WAV si scrivono con il modulo `wave`;
+- i modificatori GP hanno un filtro per pass index del livello: la tavola usa il pass 77
+  e ogni modificatore lo esclude;
 - `Window.modal_operators` dice se uno Scala è ancora in corso: la scala dell'oggetto
   viene convertita in durata/ottave solo a trasformazione finita;
 - `SoundStrip.content_start` sposta una strip senza tagliarla (`frame_start` è deprecato);
@@ -77,6 +81,8 @@ Note tecniche su Blender 5.2 emerse durante lo sviluppo:
 ## Roadmap
 
 - ~~Cluster~~ (0.0.2), ~~Usa modificatori~~ (0.0.2), ~~Swing~~ (0.0.2).
+- ~~Import MIDI, Campione, effetti per strumento, tastiera del PC, UI nelle Proprietà~~ (0.0.4).
+- Ingresso da tastiere MIDI esterne (richiede una libreria esterna, es. python-rtmidi).
 - **Keyframe come pattern**: i keyframe GP diventano sezioni del brano.
 - **Riproduzione del gesto** (`delta_time`), più testine, canone.
 - Preset di mappatura, pennelli-asset per strumento.

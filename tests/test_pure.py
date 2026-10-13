@@ -81,13 +81,50 @@ def test_direction_does_not_matter():
     assert [n.pitch for n in forward.notes] == [n.pitch for n in backward.notes]
 
 
-def test_scribbles_back_in_time_are_ignored():
+def test_zigzag_in_time_sounds_every_part():
+    # 0 -> 1 -> 0.5 -> 2: like an optical reader, each part under the playhead sounds.
     x = np.concatenate((np.linspace(0, 1, 50), np.linspace(1, 0.5, 20), np.linspace(0.5, 2, 50)))
     z = np.full(len(x), (C4_ROW + 0.5) * H)
     s = interpret.StrokeData(x, z, np.full(len(x), 0.02), np.ones(len(x)))
     res = interpret.interpret_stroke(s, free_spec(), interpret.Mapping())
-    assert len(res.notes) == 1
-    assert res.notes[0].end == pytest.approx(2.0, abs=0.01)
+    spans = sorted((round(n.start, 2), round(n.end, 2)) for n in res.notes)
+    assert spans == [(0.0, 1.0), (0.5, 1.0), (0.5, 2.0)]
+
+
+def semicircle(n=200):
+    """Like the drawing: from top-left, round on the right, back to bottom-left."""
+    angle = np.linspace(np.pi / 2, -np.pi / 2, n)
+    x = 0.5 + 2.0 * np.cos(angle)
+    z = (C4_ROW + 0.5) * H + 0.9 * np.sin(angle)
+    return interpret.StrokeData(x, z, np.full(n, 0.02), np.ones(n))
+
+
+def test_semicircle_plays_two_voices():
+    optical = interpret.interpret_stroke(semicircle(), free_spec(), interpret.Mapping(),
+                                         mode="OPTICAL")
+    assert len(optical.voices) == 2
+    upper, lower = sorted(optical.voices, key=lambda v: -float(np.mean(v.pitch)))
+    assert np.mean(upper.pitch) > 60 > np.mean(lower.pitch)
+    assert upper.start == pytest.approx(lower.start, abs=0.05)  # they sound together
+    quantized = interpret.interpret_stroke(semicircle(), free_spec(), interpret.Mapping())
+    assert min(n.pitch for n in quantized.notes) < 60 < max(n.pitch for n in quantized.notes)
+
+
+def test_closed_circle_is_read_all_around():
+    angle = np.linspace(0, 2 * np.pi, 240, endpoint=False)
+    x = 2.0 + 1.0 * np.cos(angle)
+    z = (C4_ROW + 0.5) * H + 0.6 * np.sin(angle)
+    circle = interpret.StrokeData(x, z, np.full(240, 0.02), np.ones(240), cyclic=True)
+    res = interpret.interpret_stroke(circle, free_spec(), interpret.Mapping(), mode="OPTICAL")
+    covered = sorted((v.start, v.start + v.duration) for v in res.voices)
+    assert covered[0][0] == pytest.approx(1.0, abs=0.02)
+    assert max(end for _s, end in covered) == pytest.approx(3.0, abs=0.02)
+    assert len(res.voices) >= 2
+
+
+def test_split_runs_ignores_hand_jitter():
+    x = np.linspace(0, 2, 100) + np.random.default_rng(3).normal(0, 0.002, 100)
+    assert interpret.split_runs(x, 0.02) == [(0, 100)]
 
 
 def test_dot_is_a_short_note():
@@ -166,7 +203,7 @@ def voice(instrument, midi_pitch=69, duration=1.0):
                            np.zeros(n), np.full(n, 0.7), np.zeros(n), instrument=instrument)
 
 
-@pytest.mark.parametrize("ident", [i.ident for i in synth.INSTRUMENTS])
+@pytest.mark.parametrize("ident", [i.ident for i in synth.INSTRUMENTS if i.ident != "SAMPLE"])
 def test_every_instrument_renders(ident):
     offset, buf = synth.render_voice(voice(ident), SR)
     assert offset == 0 and buf.shape[1] == 2
@@ -361,3 +398,72 @@ def test_timeline_notes_and_optical_curves():
     none_t, none_l = timeline.note_geometry(data, 0.0, 24.0, to_x, 2000, 0.0, 74.0,
                                             show_notes=False, show_curves=False)
     assert not none_t and not none_l
+
+
+
+# --- 0.0.4 ---------------------------------------------------------------------
+
+def test_midi_roundtrip():
+    notes = [interpret.MidiNote(0.0, 0.5, 60, 100), interpret.MidiNote(0.5, 1.5, 64, 80)]
+    drums = [interpret.MidiNote(1.0, 1.1, 36, 120)]
+    data = midi.build_midi([{"name": "Melodia", "program": 48, "notes": notes},
+                            {"name": "Batteria", "program": -1, "notes": drums}], 90)
+    tracks, bpm = midi.parse_midi(data)
+    assert bpm == pytest.approx(90.0, abs=0.01)
+    melody = next(t for t in tracks if t["name"] == "Melodia")
+    assert melody["program"] == 48
+    assert [(round(a, 3), round(b, 3), p, v) for a, b, p, v in melody["notes"]] == [
+        (0.0, 0.5, 60, 100), (0.5, 1.5, 64, 80)]
+    assert next(t for t in tracks if t["name"] == "Batteria")["program"] == -1
+
+
+def test_midi_parser_rejects_garbage():
+    with pytest.raises(midi.MidiError):
+        midi.parse_midi(b"not a midi file")
+
+
+def test_general_midi_mapping():
+    assert synth.instrument_for_program(40) == "STRINGS"
+    assert synth.instrument_for_program(80) == "SQUARE"
+    assert synth.instrument_for_program(-1, 36) == "KICK"
+    assert synth.instrument_for_program(-1, 42) == "HIHAT"
+    assert synth.instrument_for_program(-1, 81) == "DRUM"
+
+
+def test_sample_instrument_follows_the_pitch():
+    rate = 22050
+    tone = np.sin(2 * np.pi * 440 * np.arange(rate) / rate).astype(np.float32)  # A4
+    synth.register_sample("test-a4", tone, rate, 69, True)
+    up = voice(synth.SAMPLE_PREFIX + "test-a4", 81)  # one octave up
+    _o, buf = synth.render_voice(up, SR)
+    assert dominant_frequency(buf[: SR // 2, 0]) == pytest.approx(880.0, rel=0.02)
+    missing = voice(synth.SAMPLE_PREFIX + "nothing", 69)
+    assert not np.any(synth.render_voice(missing, SR)[1])
+
+
+def test_instrument_effects_change_only_their_strokes():
+    spec = interpret.BoardSpec(length=4.0)
+    dry = stroke((1.0, 1.2), (5, 5))
+    wet = stroke((1.0, 1.2), (5, 5))
+    wet.fx = (0.0, 0.75, 0.35, 0.8, 0.9, 0.0)  # big reverb
+    a = mixer.render([mixer.LayerInput("L", [dry])], spec, interpret.Mapping(), SR)
+    b = mixer.render([mixer.LayerInput("L", [wet])], spec, interpret.Mapping(), SR)
+    assert a.key != b.key
+    tail = slice(int(2.0 * SR), int(3.0 * SR))
+    assert np.abs(b.audio[tail]).max() > 10 * max(np.abs(a.audio[tail]).max(), 1e-6)
+
+
+def test_legato_is_one_voice_that_slides_between_scale_notes():
+    rising = stroke((0.0, 2.0), (C4_ROW, C4_ROW + 4))
+    res = interpret.interpret_stroke(rising, free_spec(scale="MAJOR"), interpret.Mapping(),
+                                     mode="LEGATO", glide=0.2)
+    assert len(res.voices) == 1  # no new attack between notes
+    pitch = res.voices[0].pitch
+    assert pitch[0] == pytest.approx(60, abs=0.01) and pitch[-1] == pytest.approx(64, abs=0.01)
+    assert np.all(np.diff(pitch) >= -1e-9)  # it only slides upwards
+    assert np.any(np.abs(pitch - np.round(pitch)) > 0.2)  # glides between the notes
+    assert [n.pitch for n in res.notes] == [60, 62, 64]  # but the notes are the scale's
+    quick = interpret.interpret_stroke(rising, free_spec(scale="MAJOR"), interpret.Mapping(),
+                                       mode="LEGATO", glide=0.01)
+    held = lambda v: np.mean(np.abs(v.pitch - np.round(v.pitch)) < 0.05)
+    assert held(quick.voices[0]) > held(res.voices[0])  # shorter glide = longer held notes

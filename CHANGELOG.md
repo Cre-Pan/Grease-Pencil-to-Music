@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.0.4
+
+Correzioni
+- **Errore "filling the audio frame failed with ffmpeg"**: i WAV (suono nel Sequencer ed
+  export) ora sono scritti senza FFmpeg; l'MP3 riprova con altri formati e spiega l'errore.
+- **Scala della composizione**: non si moltiplica più durante il trascinamento (causa del
+  blocco di Blender); viene applicata solo a gesto finito e fermo. Riverbero a blocchi:
+  memoria limitata anche con loop lunghi.
+- **Semicerchi, cerchi, zig-zag**: il tratto viene diviso nei pezzi che vanno avanti o
+  indietro nel tempo e ognuno suona (due voci per un semicerchio, anche in lettura ottica).
+- **Array e altri modificatori** non duplicano più la tavola.
+- Tastiera: i tasti bianchi si allargano sopra metà dei tasti neri vicini, come su un
+  pianoforte vero.
+
+Novità
+- **Lettura "Legato (morphing)"** per livello: note della scala unite da glissandi, una
+  sola voce che scivola da una nota all'altra senza riattacco (tempo di legato regolabile).
+- Creando una composizione si **resta in Object Mode** (Preferences: "Entra in Draw Mode"
+  per il comportamento di prima).
+- **Canale del Sequencer** per composizione: automatico (1, 2, 3…) o scelto a mano.
+- **Import MIDI** (*File → Import → MIDI → Grease Pencil*, o Shift+A): una traccia per
+  livello, programma General MIDI → strumento, batteria → percussioni, velocity → spessore,
+  tavola adattata a BPM, durata e note.
+- **Strumento "Campione"**: suona un suono di Blender (caricato o già nel Sequencer),
+  intonato sulle righe, con nota base e loop.
+- **Effetti per strumento** (eco, riverbero, lo-fi) nella scheda Materiale.
+- **Volume visibile**: abbassando il volume di uno strumento i suoi tratti diventano più
+  fini (o più trasparenti), secondo le Preferences; solo visivo.
+- **Suona con la tastiera del PC** (A W S E D F T G Y H U J K…, Z/X ottava, R registra
+  mentre la scena è in play).
+- **Interfaccia fuori dal pannello N**: Proprietà → Dati oggetto (tavola, lettura, livelli,
+  strumenti, Sequencer), Materiale (strumento, campione, effetti), Output (export), Scena
+  (ascolto di tutte le composizioni); *File → Export*. Il pannello N resta compatto.
+- **Preferences**: valori di partenza per le nuove composizioni (BPM, durata, note, ottave,
+  griglia, scala, etichette, livelli, set di strumenti, frequenza), volume visibile,
+  spessore dei tratti registrati.
+
 ## 0.0.3
 
 - **Tastiera**: tasti neri sul lato della griglia (come un pianoforte vero), nomi

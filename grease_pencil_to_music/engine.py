@@ -11,6 +11,7 @@ import re
 import tempfile
 import time
 import traceback
+import wave
 
 import aud
 import bpy
@@ -67,6 +68,7 @@ def render_composition(obj, scene):
             strokes=read.strokes,
             mode=settings.mode if settings else "QUANTIZED",
             fill_mode=settings.fill_mode if settings else "TONAL",
+            glide=settings.glide if settings else 0.12,
             gain=read.opacity,
             fx=_layer_fx(settings),
         ))
@@ -83,15 +85,44 @@ AUDIO_FORMATS = {
 }
 
 
+def _write_wav(path, audio, sample_rate):
+    """16-bit PCM WAV with Python's wave module: no FFmpeg involved.
+
+    Blender's FFmpeg writer fails on some lengths/rates ("filling the audio
+    frame failed with ffmpeg"), so WAV files never go through it.
+    """
+    pcm = (np.clip(audio, -1.0, 1.0) * 32767.0).astype("<i2")
+    with wave.open(path, "wb") as handle:
+        handle.setnchannels(2)
+        handle.setsampwidth(2)
+        handle.setframerate(int(sample_rate))
+        handle.writeframes(pcm.tobytes())
+
+
 def write_audio(path, audio, sample_rate, fmt="WAV", bitrate_kbps=192):
-    container, codec, _ext = AUDIO_FORMATS[fmt]
     data = np.ascontiguousarray(audio, dtype=np.float32)
     if data.ndim != 2 or len(data) == 0:
         data = np.zeros((max(1, len(data)), 2), dtype=np.float32)
-    sound = aud.Sound.buffer(data, float(sample_rate))
-    sound.write(path, rate=int(sample_rate), channels=aud.CHANNELS_STEREO,
-                format=aud.FORMAT_S16, container=container, codec=codec,
+    if fmt == "WAV":
+        _write_wav(path, data, sample_rate)
+        return
+    container, codec, _ext = AUDIO_FORMATS[fmt]
+    errors = []
+    # FFmpeg encoders work in fixed frames: retry with the length padded to a
+    # whole number of MP3 frames (1152 samples) and with other sample formats.
+    padded = np.concatenate((data, np.zeros(((-len(data)) % 1152 or 1152, 2), np.float32)))
+    for candidate, sample_format in ((data, aud.FORMAT_S16), (padded, aud.FORMAT_S16),
+                                     (padded, aud.FORMAT_FLOAT32)):
+        try:
+            aud.Sound.buffer(candidate, float(sample_rate)).write(
+                path, rate=int(sample_rate), channels=aud.CHANNELS_STEREO,
+                format=sample_format, container=container, codec=codec,
                 bitrate=int(bitrate_kbps) * 1000)
+            return
+        except Exception as error:  # aud raises plain Exception subclasses
+            errors.append(str(error))
+    raise RuntimeError(f"FFmpeg di Blender non riesce a scrivere {fmt}: {errors[-1]} "
+                       "(prova WAV, oppure 44.1 kHz)")
 
 
 def cache_dir():
@@ -180,9 +211,13 @@ def find_strip(scene, obj):
     return editor.strips.get(strip_name(obj))
 
 
-def _free_channel(editor):
-    used = [strip.channel for strip in editor.strips_all]
-    return (max(used) + 1) if used else 1
+def _free_channel(editor, exclude=None):
+    """Lowest channel without strips (the composition's own strip excluded)."""
+    used = {strip.channel for strip in editor.strips_all if strip.name != exclude}
+    channel = 1
+    while channel in used:
+        channel += 1
+    return channel
 
 
 def _place_strip(scene, obj, path, frames):
@@ -198,7 +233,12 @@ def _place_strip(scene, obj, path, frames):
             and old.duration == frames):
         old.sound.filepath = path  # reloads the audio
         return old
-    channel = old.channel if old is not None else _free_channel(editor)
+    if obj.gp2m.channel > 0:
+        channel = obj.gp2m.channel
+    elif old is not None:
+        channel = old.channel
+    else:
+        channel = _free_channel(editor, strip_name(obj))
     old_sound = old.sound if old is not None else None
     if old is not None:
         editor.strips.remove(old)
@@ -234,7 +274,30 @@ def _active_composition(scene):
     return None
 
 
+def resolve_channels(scene):
+    """Duplicated compositions copy the channel: give the copies a free one."""
+    seen = set()
+    for obj in sorted(scene_compositions(scene), key=lambda o: o.name):
+        if obj.gp2m.channel and obj.gp2m.channel in seen:
+            editor = scene.sequence_editor
+            obj.gp2m.channel = _free_channel(editor, strip_name(obj)) if editor else 0
+            while obj.gp2m.channel in seen:
+                obj.gp2m.channel += 1
+        seen.add(obj.gp2m.channel)
+
+
 def arrange(scene):
+    """Guarded: properties written while arranging call back into arrange_safe()."""
+    if _arranging[0]:
+        return
+    _arranging[0] = True
+    try:
+        _arrange(scene)
+    finally:
+        _arranging[0] = False
+
+
+def _arrange(scene):
     """Place, mute and time every composition of the scene for the play mode.
 
     TOGETHER: all start at the scene start. SOLO: only the active composition
@@ -268,6 +331,10 @@ def arrange(scene):
         target = scene.frame_start + start_offset
         if strip.content_start != target:
             strip.content_start = target
+        if obj.gp2m.channel == 0:
+            obj.gp2m.channel = strip.channel  # show the automatic choice
+        elif strip.channel != obj.gp2m.channel:
+            strip.channel = obj.gp2m.channel
         mute = obj.gp2m.mute or (solo is not None and obj != solo)
         if strip.mute != mute:
             strip.mute = mute
@@ -285,6 +352,7 @@ def arrange(scene):
 
 
 _last_solo = {}
+_arranging = [False]
 
 
 def arrange_safe(scene):

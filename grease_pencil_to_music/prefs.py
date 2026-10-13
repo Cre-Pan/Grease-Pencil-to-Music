@@ -4,6 +4,8 @@
 import bpy
 from bpy.props import BoolProperty, EnumProperty, FloatProperty, IntProperty
 
+from . import music
+from .board import KEY_LABEL_ITEMS
 from .interpret import Mapping
 
 THICKNESS_ITEMS = (
@@ -46,6 +48,31 @@ def _naming_changed(_self, _context):
         board.request_rebuild(obj)
 
 
+INSTRUMENT_SET_ITEMS = (
+    ("ALL", "Tutti", "Tutti gli strumenti sintetizzati (il Campione si aggiunge con +)"),
+    ("ESSENTIAL", "Essenziali", "Flauto, 8-bit, Synth, Archi, Chitarra, Cassa, Rullante, "
+     "Charleston"),
+    ("MELODIC", "Solo melodici", "Gli strumenti intonati, senza percussioni"),
+)
+INSTRUMENT_SETS = {
+    "ESSENTIAL": ("SINE", "SQUARE", "SAW", "STRINGS", "PLUCK", "KICK", "SNARE", "HIHAT"),
+    "MELODIC": ("SINE", "TRIANGLE", "SQUARE", "SAW", "STRINGS", "PLUCK", "BELL"),
+}
+FEEDBACK_ITEMS = (
+    ("AUTO", "Automatico", "Spessore se lo spessore è il volume, altrimenti trasparenza"),
+    ("THICKNESS", "Spessore", "Il volume dello strumento rende i tratti più fini o più spessi "
+     "(modificatore Thickness, solo visivo)"),
+    ("OPACITY", "Trasparenza", "Il volume dello strumento rende i tratti più trasparenti"),
+    ("NONE", "Niente", "Il volume non cambia l'aspetto dei tratti"),
+)
+
+
+def _feedback_changed(_self, _context):
+    from . import feedback, handlers
+    for obj in handlers.compositions():
+        feedback.sync(obj)
+
+
 class GP2M_Preferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
@@ -62,6 +89,10 @@ class GP2M_Preferences(bpy.types.AddonPreferences):
                                    default="NONE", update=_changed)
     map_softness: EnumProperty(name="Morbidezza", items=SOFTNESS_ITEMS, default="ATTACK",
                                update=_changed)
+    volume_feedback: EnumProperty(name="Volume visibile", items=FEEDBACK_ITEMS,
+                                  default="AUTO", update=_feedback_changed,
+                                  description="Come il volume di uno strumento si vede sui "
+                                  "suoi tratti")
     vibrato_depth: FloatProperty(name="Profondità vibrato", default=0.6, min=0.0, max=2.0,
                                  subtype="FACTOR", description="Semitoni di vibrato con il "
                                  "massimo jitter dello spessore", update=_changed)
@@ -73,12 +104,39 @@ class GP2M_Preferences(bpy.types.AddonPreferences):
                             "rigenerare il suono")
     mp3_bitrate: IntProperty(name="Bitrate MP3 (kbps)", default=192, min=64, max=320)
 
+    # Defaults for new compositions (each composition keeps its own copy).
+    new_bpm: FloatProperty(name="BPM", default=120.0, min=20.0, max=300.0)
+    new_length: FloatProperty(name="Durata (s)", default=8.0, min=1.0, max=300.0)
+    new_low_note: IntProperty(name="Nota più bassa", default=48, min=12, max=96)
+    new_octaves: IntProperty(name="Ottave", default=3, min=1, max=7)
+    new_row_height: FloatProperty(name="Altezza riga", default=0.12, min=0.02, max=1.0)
+    new_seconds_width: FloatProperty(name="Larghezza secondo", default=1.0, min=0.1, max=10.0)
+    new_scale: EnumProperty(name="Scala", items=[(i, l, "") for i, l, _ in music.SCALES],
+                            default="CHROMATIC")
+    new_time_grid: EnumProperty(name="Quantizzazione",
+                                items=[(i, l, "") for i, l, _ in music.TIME_GRIDS],
+                                default="1_16")
+    new_key_labels: EnumProperty(name="Etichette tasti", items=KEY_LABEL_ITEMS, default="C")
+    new_layers: IntProperty(name="Livelli", default=3, min=1, max=16)
+    enter_draw_mode: BoolProperty(name="Entra in Draw Mode", default=False,
+                                  description="Dopo aver creato una composizione passa subito "
+                                  "al Draw Mode (altrimenti resta in Object Mode)")
+    new_instruments: EnumProperty(name="Strumenti", items=INSTRUMENT_SET_ITEMS, default="ALL")
+    new_sample_rate: EnumProperty(name="Frequenza audio",
+                                  items=(("44100", "44.1 kHz", ""), ("48000", "48 kHz", "")),
+                                  default="44100")
+    record_thickness: FloatProperty(name="Spessore registrazione", default=0.25, min=0.05,
+                                    max=1.0, subtype="FACTOR",
+                                    description="Spessore dei tratti registrati con la "
+                                    "tastiera, rispetto all'altezza della riga")
+
     def draw(self, _context):
         layout = self.layout
         box = layout.box()
         box.label(text="Tavola e riproduzione", icon="SEQ_PREVIEW")
         grid = box.grid_flow(row_major=True, columns=2, even_columns=True, align=True)
-        for attr, label in (("note_naming", "Nomi delle note"),):
+        for attr, label in (("note_naming", "Nomi delle note"),
+                            ("volume_feedback", "Volume visibile sui tratti")):
             grid.label(text=label)
             grid.prop(self, attr, text="")
         box.prop(self, "resume_after_undo")
@@ -90,13 +148,22 @@ class GP2M_Preferences(bpy.types.AddonPreferences):
                             ("map_softness", "Morbidezza (softness)")):
             grid.label(text=label)
             grid.prop(self, attr, text="")
-        box.label(text="Materiale → Strumento (si sceglie nel pannello N)", icon="MATERIAL")
-        col = layout.column(align=True)
+        col = box.column(align=True)
         col.prop(self, "vibrato_depth")
         col.prop(self, "vibrato_rate")
-        col = layout.column(align=True)
+        box = layout.box()
+        box.label(text="Nuove composizioni", icon="OUTLINER_OB_GREASEPENCIL")
+        grid = box.grid_flow(row_major=True, columns=2, even_columns=True, align=False)
+        for attr in ("new_bpm", "new_length", "new_low_note", "new_octaves", "new_row_height",
+                     "new_seconds_width", "new_scale", "new_time_grid", "new_key_labels",
+                     "new_layers", "new_instruments", "new_sample_rate", "enter_draw_mode"):
+            grid.prop(self, attr)
+        box = layout.box()
+        box.label(text="Avanzate", icon="PREFERENCES")
+        col = box.column(align=True)
         col.prop(self, "debounce")
         col.prop(self, "mp3_bitrate")
+        col.prop(self, "record_thickness")
 
 
 class _Defaults:
@@ -106,10 +173,43 @@ class _Defaults:
     map_opacity = "BRIGHTNESS"
     map_vertex_color = "NONE"
     map_softness = "ATTACK"
+    volume_feedback = "AUTO"
     vibrato_depth = 0.6
     vibrato_rate = 5.5
     debounce = 0.35
     mp3_bitrate = 192
+    new_bpm = 120.0
+    new_length = 8.0
+    new_low_note = 48
+    new_octaves = 3
+    new_row_height = 0.12
+    new_seconds_width = 1.0
+    new_scale = "CHROMATIC"
+    new_time_grid = "1_16"
+    new_key_labels = "C"
+    new_layers = 3
+    enter_draw_mode = False
+    new_instruments = "ALL"
+    new_sample_rate = "44100"
+    record_thickness = 0.25
+
+
+def new_instrument_idents():
+    p = get_prefs()
+    if p.new_instruments in INSTRUMENT_SETS:
+        return INSTRUMENT_SETS[p.new_instruments]
+    from . import synth
+    return tuple(i.ident for i in synth.INSTRUMENTS if i.ident != "SAMPLE")
+
+
+def feedback_mode():
+    """The effective 'volume visible' mode."""
+    p = get_prefs()
+    if p.volume_feedback != "AUTO":
+        return p.volume_feedback
+    if p.map_thickness in ("VOLUME", "VOLUME_VIBRATO"):
+        return "THICKNESS"
+    return "OPACITY"
 
 
 def get_prefs():

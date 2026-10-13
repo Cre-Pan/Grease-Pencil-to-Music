@@ -8,10 +8,10 @@ sound. Inspired by the drawn sound of Norman McLaren and Daphne Oram.
 
 import bpy
 
-from . import handlers, operators, prefs, props, timeline, ui
+from . import handlers, keyboard, midi_import, operators, prefs, props, timeline, ui
 
-_classes = (props.classes + prefs.classes + operators.classes + ui.classes
-            + timeline.classes)
+_classes = (props.classes + prefs.classes + operators.classes + midi_import.classes
+            + keyboard.classes + timeline.classes + ui.classes)
 
 
 def register():
@@ -19,6 +19,7 @@ def register():
         bpy.utils.register_class(cls)
     props.register_properties()
     ui.register()
+    midi_import.register()
     handlers.register()
     timeline.register()
 
@@ -26,6 +27,7 @@ def register():
 def unregister():
     timeline.unregister()
     handlers.unregister()
+    midi_import.unregister()
     ui.unregister()
     props.unregister_properties()
     for cls in reversed(_classes):

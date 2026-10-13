@@ -51,11 +51,26 @@ def drawing_at(layer, frame_number):
 def material_instrument(material):
     if material is None:
         return synth.DEFAULT_INSTRUMENT
-    return getattr(material, "gp2m_instrument", synth.DEFAULT_INSTRUMENT)
+    ident = getattr(material, "gp2m_instrument", synth.DEFAULT_INSTRUMENT)
+    if ident == "SAMPLE":
+        from . import samples
+        return samples.instrument_key(material)
+    return ident
 
 
 def material_gain(material):
     return float(getattr(material, "gp2m_volume", 1.0)) if material is not None else 1.0
+
+
+FX_FIELDS = ("delay_mix", "delay_beats", "delay_feedback", "reverb_mix", "reverb_size", "lofi")
+
+
+def material_fx(material):
+    """Instrument effects as a tuple, or None when they are all off."""
+    fx = getattr(material, "gp2m_fx", None) if material is not None else None
+    if fx is None or (fx.delay_mix <= 0 and fx.reverb_mix <= 0 and fx.lofi <= 0):
+        return None
+    return tuple(round(float(getattr(fx, name)), 4) for name in FX_FIELDS)
 
 
 def material_muted(material):
@@ -63,7 +78,7 @@ def material_muted(material):
                 and material.grease_pencil.hide)
 
 
-def read_drawing(drawing, materials, layer_name, matrix=None):
+def read_drawing(drawing, materials, layer_name, matrix=None, radius_divisors=None):
     """Return the audible strokes of one drawing as :class:`StrokeData`."""
     curves = len(drawing.strokes)
     if curves == 0:
@@ -80,12 +95,19 @@ def read_drawing(drawing, materials, layer_name, matrix=None):
         if not np.allclose(m, np.eye(4)):
             position = position @ m[:3, :3].T + m[:3, 3]
     radius = _attribute(drawing, "radius", points, default=0.01)
+    if radius_divisors:  # undo the "volume visible" Thickness modifiers
+        index_of_point = np.repeat(
+            _attribute(drawing, "material_index", curves, default=0).astype(np.int64),
+            np.diff(offsets))
+        for slot, factor in radius_divisors.items():
+            radius = np.where(index_of_point == slot, radius / factor, radius)
     opacity = _attribute(drawing, "opacity", points, default=1.0)
     has_color = drawing.attributes.get("vertex_color") is not None
     color = _attribute(drawing, "vertex_color", points, 4) if has_color else None
     material_index = _attribute(drawing, "material_index", curves, default=0).astype(np.int64)
     softness = _attribute(drawing, "softness", curves, default=0.0)
     fill_id = _attribute(drawing, "fill_id", curves, default=0).astype(np.int64)
+    cyclic = _attribute(drawing, "cyclic", curves, default=0).astype(bool)
 
     strokes = []
     for i in range(curves):
@@ -106,7 +128,9 @@ def read_drawing(drawing, materials, layer_name, matrix=None):
             instrument=material_instrument(material),
             layer=layer_name,
             gain=material_gain(material),
+            fx=material_fx(material),
             filled=bool(fill_id[i] != 0) and b - a >= 3,
+            cyclic=bool(cyclic[i]),
         ))
     return strokes
 
@@ -119,9 +143,12 @@ def read_composition(obj, frame_number, use_modifiers=False, depsgraph=None):
     """
     materials = [slot.material for slot in obj.material_slots]
     gp = obj.data
+    divisors = None
     if use_modifiers:
         depsgraph = depsgraph or bpy.context.evaluated_depsgraph_get()
         gp = obj.evaluated_get(depsgraph).data
+        from .feedback import radius_divisors
+        divisors = radius_divisors(obj)
     result = []
     for layer in gp.layers:
         if layer.hide or is_board_layer(layer):
@@ -135,11 +162,12 @@ def read_composition(obj, frame_number, use_modifiers=False, depsgraph=None):
             drawing = drawing_at(layer, frame_number)
         if drawing is not None:
             read.strokes = read_drawing(drawing, materials, layer.name,
-                                        layer.matrix_local)
+                                        layer.matrix_local, divisors)
         result.append(read)
     return result
 
 
 def has_unsupported_stack(obj):
-    """True when modifiers or shader effects are present (they are not heard)."""
-    return bool(len(obj.modifiers) or len(getattr(obj, "shader_effects", ())))
+    """True when user modifiers or shader effects are present (not heard by default)."""
+    from .feedback import user_modifiers
+    return bool(user_modifiers(obj) or len(getattr(obj, "shader_effects", ())))

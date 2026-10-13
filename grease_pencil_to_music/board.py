@@ -29,6 +29,7 @@ BOARD_GROUPS = (BOARD_GROUP, HEAD_GROUP)
 HEAD_LAYER = "GP2M Linea testina"
 BOARD_FLAG = "gp2m_board"  # custom property on board materials
 LEGACY_ROLE = "gp2m_role"  # 0.0.1 used separate child objects
+BOARD_PASS = 77  # layer pass index of board layers, excluded from modifiers
 
 # name: (stroke RGBA or None, fill RGBA or None)
 BOARD_MATERIALS = {
@@ -183,6 +184,48 @@ def _add_strokes(drawing, specs):
     drawing.tag_positions_changed()
 
 
+def add_strokes_bulk(drawing, strokes):
+    """Add many strokes at once (MIDI import, keyboard recording).
+
+    ``strokes``: list of (x array, z array, radius array, material_index).
+    """
+    if not strokes:
+        return
+    import numpy as np
+    existing = drawing.attributes.get("position")
+    first_point = len(existing.data) if existing is not None and len(drawing.strokes) else 0
+    first_curve = len(drawing.strokes)
+    drawing.add_strokes([len(x) for x, _z, _r, _m in strokes])
+    attrs = drawing.attributes
+    positions = np.zeros((sum(len(x) for x, _z, _r, _m in strokes), 3), dtype=np.float32)
+    radii = np.empty(len(positions), dtype=np.float32)
+    cursor = 0
+    for x, z, r, _m in strokes:
+        positions[cursor:cursor + len(x), 0] = x
+        positions[cursor:cursor + len(x), 2] = z
+        radii[cursor:cursor + len(x)] = r
+        cursor += len(x)
+    all_pos = np.empty(len(attrs["position"].data) * 3, dtype=np.float32)
+    attrs["position"].data.foreach_get("vector", all_pos)
+    all_pos = all_pos.reshape(-1, 3)
+    all_pos[first_point:] = positions
+    attrs["position"].data.foreach_set("vector", all_pos.ravel())
+    for name, values, domain, default in (("radius", radii, "POINT", 0.01),
+                                          ("opacity", np.ones(len(radii), np.float32),
+                                           "POINT", 1.0)):
+        attr = attrs.get(name) or attrs.new(name, "FLOAT", domain)
+        current = np.full(len(attr.data), default, dtype=np.float32)
+        attr.data.foreach_get("value", current)
+        current[first_point:] = values
+        attr.data.foreach_set("value", current)
+    attr = attrs.get("material_index") or attrs.new("material_index", "INT", "CURVE")
+    current = np.zeros(len(attr.data), dtype=np.int32)
+    attr.data.foreach_get("value", current)
+    current[first_curve:] = [m for _x, _z, _r, m in strokes]
+    attr.data.foreach_set("value", current)
+    drawing.tag_positions_changed()
+
+
 def dimensions(settings):
     rows = settings.octaves * 12 + 1
     return rows, settings.length * settings.seconds_width, rows * settings.row_height
@@ -247,20 +290,40 @@ def _rows(s, index, rows, width):
     return specs
 
 
+KEY_SPLIT = 0.58  # fraction of the keyboard width taken by black keys (grid side)
+
+
 def _keys(s, index, rows):
-    """One key per row: white and black keys are as tall as the note rows."""
+    """A vertical piano.
+
+    Grid side: one key per row, white and black, aligned with the note rows.
+    Free side: the white keys widen over half of the neighbouring black rows,
+    like on a real piano.
+    """
     h = s.row_height
     kw = key_width(s)
-    inset = 0.08 * h
+    split = -kw * KEY_SPLIT
+    top = rows * h
+    inset = 0.06 * h
     specs = []
+
+    def black(r):
+        return 0 <= r < rows and music.is_black(s.low_note + r)
+
     for r in range(rows):
-        specs.append((_rect(-kw, r * h, 0.0, (r + 1) * h), 0.0015,
-                       index["GP2M Tasto bianco"], "both"))
+        if black(r):
+            continue
+        z0 = r * h - (h / 2.0 if black(r - 1) else 0.0)
+        z1 = (r + 1) * h + (h / 2.0 if black(r + 1) else 0.0)
+        specs.append((_rect(-kw, max(z0, 0.0), split, min(z1, top)), 0.0015,
+                      index["GP2M Tasto bianco"], "both"))
     for r in range(rows):
-        if music.is_black(s.low_note + r):
-            # Black keys sit on the grid side, like a piano roll.
-            specs.append((_rect(-kw * 0.58, r * h + inset, 0.0, (r + 1) * h - inset), 0.001,
+        if black(r):
+            specs.append((_rect(split, r * h + inset, 0.0, (r + 1) * h - inset), 0.001,
                           index["GP2M Tasto nero"], "fill"))
+        else:
+            specs.append((_rect(split, r * h, 0.0, (r + 1) * h), 0.0015,
+                          index["GP2M Tasto bianco"], "both"))
     return specs
 
 
@@ -279,8 +342,9 @@ def _labels(s, index, rows, top):
             continue
         text = music.note_name(midi, style)
         baseline = r * h + (h - height) / 2.0
-        # Labels on the free (left) side of the keys.
-        for line in glyphs.text_polylines(text, -key_width(s) + 0.03, baseline, height, "LEFT"):
+        # White notes on the free side, black notes on their black key.
+        x = -key_width(s) * KEY_SPLIT + 0.02 if black else -key_width(s) + 0.03
+        for line in glyphs.text_polylines(text, x, baseline, height, "LEFT"):
             specs.append((line, height * 0.06, index["GP2M Etichetta tasti"], "line"))
     height = 0.12
     for sec in range(int(math.floor(s.length + 1e-6)) + 1):
@@ -380,6 +444,24 @@ def ensure_order(gp):
         gp.layer_groups.move_bottom(tavola)
 
 
+def protect_board(obj):
+    """Keep modifiers (Array, Noise...) off the board: every modifier without a
+    layer pass filter skips the board layers. Returns True if something changed."""
+    changed = False
+    for layer in obj.data.layers:
+        if is_board_layer(layer) and layer.pass_index != BOARD_PASS:
+            layer.pass_index = BOARD_PASS
+            changed = True
+    for modifier in obj.modifiers:
+        if not hasattr(modifier, "use_layer_pass_filter") or modifier.use_layer_pass_filter:
+            continue
+        modifier.use_layer_pass_filter = True
+        modifier.layer_pass_filter = BOARD_PASS
+        modifier.invert_layer_pass_filter = True
+        changed = True
+    return changed
+
+
 def has_board(comp):
     return comp.data.layer_groups.get(BOARD_GROUP) is not None
 
@@ -408,11 +490,13 @@ def rebuild(comp, scene=None):
             ("GP2M Etichette", _labels(s, index, rows, top))):
         layer = gp.layers.new(name, set_active=False, layer_group=board_group)
         layer.use_lights = False
+        layer.pass_index = BOARD_PASS
         _add_strokes(layer.frames.new(frame).drawing, specs)
         layer.lock = True
 
     head = gp.layers.new(HEAD_LAYER, set_active=False, layer_group=head_group)
     head.use_lights = False
+    head.pass_index = BOARD_PASS
     _add_strokes(head.frames.new(frame).drawing,
                  [([(0.0, -0.12), (0.0, top + 0.04)], 0.012, index["GP2M Testina"], "line")])
     head.lock = True

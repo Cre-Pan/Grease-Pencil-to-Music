@@ -10,9 +10,16 @@ import numpy as np
 
 
 def _fft_convolve(signal, kernel):
+    """Overlap-add FFT convolution: memory stays bounded for long loops."""
     n = len(signal) + len(kernel) - 1
-    size = 1 << int(np.ceil(np.log2(max(n, 1))))
-    out = np.fft.irfft(np.fft.rfft(signal, size) * np.fft.rfft(kernel, size), size)
+    size = 1 << int(np.ceil(np.log2(max(2 * len(kernel), 1024))))
+    block = size - len(kernel) + 1
+    kernel_spectrum = np.fft.rfft(kernel, size)
+    out = np.zeros(n + size)
+    for start in range(0, len(signal), block):
+        chunk = signal[start:start + block]
+        out[start:start + size] += np.fft.irfft(np.fft.rfft(chunk, size) * kernel_spectrum,
+                                                size)
     return out[:n]
 
 

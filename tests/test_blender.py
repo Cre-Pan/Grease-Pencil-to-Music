@@ -298,6 +298,10 @@ class MockLayout:
                                   active_data, active_prop)
         self.log.append(("list", list_id))
 
+    def template_ID(self, data, prop, **_kwargs):
+        assert prop in data.bl_rna.properties, prop
+        self.log.append(("prop", prop))
+
     def popover(self, panel, **_kwargs):
         assert hasattr(bpy.types, panel), panel
         self.log.append(("popover", panel))
@@ -330,17 +334,25 @@ def test_panels_menus_and_preferences_draw(comp):
     sub("engine").regenerate(comp)
     log = []
     for panel in ui.classes:
-        if issubclass(panel, bpy.types.Panel):
+        if issubclass(panel, bpy.types.Panel) and panel is not ui.GP2M_PT_material:
             assert panel.poll(bpy.context) if hasattr(panel, "poll") else True
             panel.draw(_Drawer(log), bpy.context)
+    # The Material panel needs context.material (Properties editor only).
+    material = comp.material_slots[0].material
+    material.gp2m_instrument = "SAMPLE"
+    ui.draw_instrument_details(MockLayout(log), material)
+    material.gp2m_instrument = "SINE"
     ui.VIEW3D_MT_gp2m_add.draw(_Drawer(log), bpy.context)
+    ui.draw_export_menu(_Drawer(log), bpy.context)
     ui.draw_add_menu(_Drawer(log), bpy.context)
     preferences = bpy.context.preferences.addons[MODULE].preferences
     type(preferences).draw(_Drawer(log, preferences), bpy.context)
     drawn = {entry[1] for entry in log}
     assert {"gp2m_instrument", "gp2m_volume", "mode", "fill_mode", "reverb_mix",
             "map_thickness", "note_naming", "gp2m.export", "gp2m.add_instrument",
-            "VIEW3D_MT_gp2m_add", "GP2M_UL_layers", "GP2M_UL_instruments", "hide"} <= drawn
+            "VIEW3D_MT_gp2m_add", "GP2M_UL_layers", "GP2M_UL_instruments", "hide",
+            "gp2m_sample", "gp2m_sample_root", "gp2m.load_sample", "gp2m.play_keyboard",
+            "channel", "new_bpm", "volume_feedback", "gp2m.import_midi"} <= drawn
 
 
 def test_deleting_a_composition_removes_its_sound(addon):
@@ -535,3 +547,154 @@ def test_timeline_header_and_popover_draw(comp):
     timeline.draw_header_button(_Drawer(log), bpy.context)
     drawn = {entry[1] for entry in log}
     assert {"source", "wave_style", "show_notes", "show_optical", "enabled"} <= drawn
+
+
+
+def test_array_modifier_leaves_the_board_alone(comp):
+    board, handlers = sub("board"), sub("handlers")
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
+    keys = len(comp.data.layers.get("GP2M Tasti").frames[0].drawing.strokes)
+    array = comp.modifiers.new("Array", "GREASE_PENCIL_ARRAY")
+    array.count = 3
+    handlers._dirty.add(comp.name)
+    handlers.flush()  # what the timer does after a modifier is added
+    assert array.use_layer_pass_filter and array.invert_layer_pass_filter
+    evaluated = comp.evaluated_get(bpy.context.evaluated_depsgraph_get()).data
+    assert len(evaluated.layers["GP2M Tasti"].current_frame().drawing.strokes) == keys
+    user = board.user_layers(evaluated)[0]
+    assert len(user.current_frame().drawing.strokes) == 3
+
+
+def test_sequencer_channels_auto_and_manual(comp):
+    engine = sub("engine")
+    scene = bpy.context.scene
+    other = _fresh(None)
+    assert comp.gp2m.channel > 0 and other.gp2m.channel > 0
+    assert comp.gp2m.channel != other.gp2m.channel
+    other.gp2m.channel = 40
+    engine.arrange(scene)
+    assert engine.find_strip(scene, other).channel == 40
+    copy = other.copy()  # Shift+D copies the channel too
+    copy.data = other.data.copy()
+    bpy.context.collection.objects.link(copy)
+    engine.resolve_channels(scene)
+    assert copy.gp2m.channel != other.gp2m.channel
+
+
+def test_new_compositions_use_the_preferences(addon):
+    preferences = bpy.context.preferences.addons[MODULE].preferences
+    preferences.new_bpm = 90.0
+    preferences.new_octaves = 2
+    preferences.new_layers = 2
+    preferences.new_instruments = "ESSENTIAL"
+    try:
+        obj = _fresh(None)
+        board = sub("board")
+        assert obj.gp2m.bpm == 90.0 and obj.gp2m.octaves == 2
+        assert len(board.user_layers(obj.data)) == 2
+        idents = [s.material.gp2m_instrument for s in obj.material_slots
+                  if not board.is_board_material(s.material)]
+        assert idents == ["SINE", "SQUARE", "SAW", "STRINGS", "PLUCK", "KICK", "SNARE", "HIHAT"]
+    finally:
+        preferences.new_bpm = 120.0
+        preferences.new_octaves = 3
+        preferences.new_layers = 3
+        preferences.new_instruments = "ALL"
+
+
+def test_scale_is_never_compounded(comp):
+    handlers = sub("handlers")
+    handlers._scale_base[comp.name] = (8.0, 3)
+    comp.scale = (2.0, 1.0, 1.0)
+    assert handlers.apply_scale(comp)
+    assert comp.gp2m.length == pytest.approx(16.0)
+    # A second, late update of the same gesture must not double it again.
+    handlers._scale_base[comp.name] = (8.0, 3)
+    comp.scale = (2.0, 1.0, 1.0)
+    handlers.apply_scale(comp)
+    assert comp.gp2m.length == pytest.approx(16.0)
+
+
+def test_scale_waits_until_the_gesture_settles(comp):
+    handlers = sub("handlers")
+    comp.scale = (1.5, 1.0, 1.0)
+    handlers._scaled.add(comp.name)
+    assert handlers._scale_pending() is not None  # first sight: wait
+    assert handlers._scale_pending() is not None  # still within the settle time
+    handlers._scale_seen[comp.name] = (handlers._scale_of(comp), 0.0)  # long ago
+    assert handlers._scale_pending() is None
+    assert tuple(comp.scale) == (1.0, 1.0, 1.0) and comp.gp2m.length == pytest.approx(12.0)
+
+
+def test_volume_feedback_thickness(comp):
+    feedback, engine = sub("feedback"), sub("engine")
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
+    comp.gp2m.use_modifiers = True
+    full = engine.regenerate(comp).notes[0].velocity
+    material = comp.material_slots[0].material
+    material.gp2m_volume = 0.5  # update callback adds the Thickness modifier
+    modifier = comp.modifiers.get(feedback.MODIFIER_PREFIX + material.name)
+    assert modifier is not None and modifier.thickness_factor == pytest.approx(0.5)
+    bpy.context.view_layer.update()
+    half = engine.regenerate(comp).notes[0].velocity
+    # The modifier is only visual: volume is counted once, not twice.
+    assert half == pytest.approx(full * 0.5, abs=2)
+    material.gp2m_volume = 1.0
+    assert comp.modifiers.get(feedback.MODIFIER_PREFIX + material.name) is None
+    assert not sub("reader").has_unsupported_stack(comp)
+
+
+def test_midi_import_creates_layers_and_instruments(addon, tmp_path):
+    midi = sub("midi")
+    notes = [sub("interpret").MidiNote(0.5 * i, 0.5 * i + 0.4, 60 + i, 100) for i in range(8)]
+    kicks = [sub("interpret").MidiNote(float(i), float(i) + 0.1, 36, 110) for i in range(4)]
+    path = tmp_path / "song.mid"
+    midi.write_midi(str(path), [{"name": "Archi", "program": 48, "notes": notes},
+                                {"name": "Batteria", "program": -1, "notes": kicks}], 100)
+    comp, count = sub("midi_import").import_midi(bpy.context, str(path))
+    board = sub("board")
+    assert count == 12
+    assert [l.name for l in board.user_layers(comp.data)] == ["Archi", "Batteria"]
+    assert comp.gp2m.bpm == pytest.approx(100.0, abs=0.01) and comp.gp2m.length == 4.0
+    result = sub("engine").regenerate(comp)
+    assert sorted(n.pitch for n in result.notes if n.instrument == "STRINGS") == list(range(60, 68))
+    assert sum(1 for n in result.notes if n.instrument == "KICK") == 4
+
+
+def test_keyboard_recording_and_notes(comp):
+    keyboard, engine = sub("keyboard"), sub("engine")
+    scene = bpy.context.scene
+    assert keyboard.record_stroke(comp, scene, 64, 1.0, 1.5, 0) == 1
+    result = engine.regenerate(comp)
+    assert [(n.pitch, round(n.start, 2)) for n in result.notes] == [(64, 1.0)]
+    assert keyboard.KEYMAP["A"] == 0 and keyboard.KEYMAP["K"] == 12
+    buffer = keyboard.note_buffer("SINE", 69)
+    assert buffer.shape[1] == 2 and np.abs(buffer).max() > 0.1
+    assert keyboard.composition_seconds(comp, scene, scene.frame_start) == 0.0
+
+
+@pytest.mark.parametrize("rate", ["44100", "48000"])
+def test_sound_is_written_at_any_rate_and_length(comp, tmp_path, rate):
+    """Blender's FFmpeg WAV writer fails at 48 kHz on some lengths: WAV must not use it."""
+    engine = sub("engine")
+    comp.gp2m.sample_rate = rate
+    comp.gp2m.length = 8.0
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
+    assert engine.regenerate(comp, force=True) is not None
+    for fmt, ext in (("WAV", ".wav"), ("MP3", ".mp3")):
+        path = tmp_path / f"out{rate}{ext}"
+        engine.export(comp, bpy.context.scene, str(path), fmt)
+        assert path.stat().st_size > 1000
+
+
+def test_new_composition_stays_in_object_mode(addon):
+    _fresh(None)
+    assert bpy.context.mode == "OBJECT"
+
+
+def test_legato_layer_mode(comp):
+    engine, props = sub("engine"), sub("props")
+    add_stroke(comp, 0, [(x, row_z(comp, 60) + (x - 1.0) * 0.4) for x in np.linspace(1, 2, 60)])
+    props.find_layer_settings(comp.data, "Livello 1").mode = "LEGATO"
+    result = engine.regenerate(comp)
+    assert result.voice_count == 1 and len(result.notes) > 1

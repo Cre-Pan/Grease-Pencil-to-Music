@@ -29,6 +29,7 @@ class LayerInput:
     strokes: list  # list of interpret.StrokeData
     mode: str = "QUANTIZED"
     fill_mode: str = "TONAL"
+    glide: float = 0.12
     gain: float = 1.0
     fx: LayerFx = field(default_factory=LayerFx)
 
@@ -81,23 +82,42 @@ def _stroke_key(stroke, context_key):
         else:
             h.update(np.ascontiguousarray(arr, dtype=np.float32).tobytes())
     h.update(repr((stroke.softness, stroke.instrument, round(stroke.gain, 4), stroke.filled,
-                   context_key)).encode())
+                   stroke.fx, stroke.cyclic, context_key)).encode())
     return h.hexdigest()
 
 
 def _render_stroke(stroke, spec, mapping, mode, fill_mode, radius_ref, sample_rate,
-                   context_key):
-    key = _stroke_key(stroke, (context_key, mode, fill_mode))
+                   context_key, glide=0.12):
+    key = _stroke_key(stroke, (context_key, mode, fill_mode, round(glide, 4)))
     cached = _stroke_cache.get(key)
     if cached is not None:
         return key, cached
-    interp = interpret.interpret_stroke(stroke, spec, mapping, mode, radius_ref, fill_mode)
+    interp = interpret.interpret_stroke(stroke, spec, mapping, mode, radius_ref, fill_mode,
+                                        glide)
     rendered = [synth.render_voice(v, sample_rate, mapping.vibrato_rate) for v in interp.voices]
     curves = [(v.start, v.pitch[::4].astype(np.float32), v.instrument) for v in interp.voices
               if len(v.pitch) > 1 and float(np.ptp(v.pitch)) > 0.05]
     value = (rendered, interp.notes, curves)
     _stroke_cache.put(key, value)
     return key, value
+
+
+def _sum(rendered, length):
+    end = max([offset + len(buf) for offset, buf in rendered], default=0)
+    out = np.zeros((max(end, length), 2), dtype=np.float32)
+    for offset, buf in rendered:
+        start = max(offset, 0)
+        clip = buf[start - offset:]
+        out[start:start + len(clip)] += clip
+    return out
+
+
+def _add(a, b):
+    if len(b) > len(a):
+        a, b = b, a
+    a = a.copy()
+    a[:len(b)] += b
+    return a
 
 
 def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.8):
@@ -118,7 +138,7 @@ def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.
         stroke_results = []
         for stroke in layer.strokes:
             key, value = _render_stroke(stroke, spec, mapping, layer.mode, layer.fill_mode,
-                                        radius_ref, sample_rate, context_key)
+                                        radius_ref, sample_rate, context_key, layer.glide)
             stroke_keys.append(key)
             stroke_results.append(value)
             notes.extend(value[1])
@@ -130,14 +150,17 @@ def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.
             digest_size=16).hexdigest()
         buffer = _layer_cache.get(layer_key)
         if buffer is None:
-            end = max([off + len(buf) for rendered, _n, _c in stroke_results
-                       for off, buf in rendered], default=0)
-            buffer = np.zeros((max(end, loop_n), 2), dtype=np.float32)
-            for rendered, _n, _c in stroke_results:
-                for offset, buf in rendered:
-                    start = max(offset, 0)
-                    clip = buf[start - offset:]
-                    buffer[start:start + len(clip)] += clip
+            # Strokes are summed per instrument effect chain first...
+            groups = {}
+            for stroke, (rendered, _n, _c) in zip(layer.strokes, stroke_results):
+                groups.setdefault(stroke.fx, []).extend(rendered)
+            buffer = np.zeros((loop_n, 2), dtype=np.float32)
+            for fx, rendered in groups.items():
+                part = _sum(rendered, loop_n)
+                if fx is not None:
+                    part = effects.apply_chain(part, sample_rate, LayerFx(*fx), spec.bpm)
+                buffer = _add(buffer, part)
+            # ...then the layer effects.
             buffer = effects.apply_chain(buffer, sample_rate, layer.fx, spec.bpm)
             _layer_cache.put(layer_key, buffer)
         layer_keys.append((layer_key, round(layer.gain, 4)))

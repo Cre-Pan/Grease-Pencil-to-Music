@@ -39,6 +39,8 @@ class StrokeData:
     layer: str = ""
     gain: float = 1.0  # instrument (material) volume
     filled: bool = False  # filled shape: read as a cluster
+    fx: tuple = None  # instrument effects (mixer.LayerFx fields) or None
+    cyclic: bool = False  # closed outline (not filled)
 
 
 @dataclass
@@ -357,7 +359,7 @@ def _interpret_fill(stroke, spec, mapping, fill_mode, radius_ref):
 
 
 def interpret_stroke(stroke, spec, mapping, mode="QUANTIZED", radius_ref=0.0,
-                     fill_mode="TONAL"):
+                     fill_mode="TONAL", glide=0.12):
     """Return an :class:`Interpretation` (voices to synthesize + MIDI notes)."""
     result = Interpretation()
     if len(stroke.x) == 0:
@@ -365,13 +367,96 @@ def interpret_stroke(stroke, spec, mapping, mode="QUANTIZED", radius_ref=0.0,
     if stroke.filled:
         return _interpret_fill(stroke, spec, mapping, fill_mode, radius_ref)
 
-    x, arrays = _monotonic(
-        np.asarray(stroke.x, dtype=np.float64),
-        [np.asarray(stroke.z, dtype=np.float64),
-         np.asarray(stroke.radius, dtype=np.float64),
-         np.asarray(stroke.opacity, dtype=np.float64),
-         None if stroke.color is None else np.asarray(stroke.color, dtype=np.float64)],
-    )
+    x = np.asarray(stroke.x, dtype=np.float64)
+    arrays = [np.asarray(stroke.z, dtype=np.float64),
+              np.asarray(stroke.radius, dtype=np.float64),
+              np.asarray(stroke.opacity, dtype=np.float64),
+              None if stroke.color is None else np.asarray(stroke.color, dtype=np.float64)]
+    if stroke.cyclic and len(x) > 2:  # a closed outline: back to the first point
+        x = np.append(x, x[0])
+        arrays = [None if a is None else np.concatenate((a, a[:1])) for a in arrays]
+    # Like an optical reader: every part of the line under the playhead sounds.
+    # A stroke that turns back in time (semicircle, circle, zigzag) is split
+    # into runs, each read left to right as its own voice.
+    tolerance = 0.02 * max(spec.seconds_width, 1e-9)
+    for start, end in split_runs(x, tolerance):
+        part = _interpret_run(stroke, x[start:end],
+                              [None if a is None else a[start:end] for a in arrays],
+                              spec, mapping, mode, radius_ref, glide)
+        result.voices.extend(part.voices)
+        result.notes.extend(part.notes)
+    return result
+
+
+def _legato(stroke, result, pitches, tc, count, t1c, channels, spec, step, attack, min_len,
+            glide):
+    """Scale notes joined by glides: one voice that slides from note to note
+    without a new attack (a musical "morphing" between the notes)."""
+    notes = []
+    for i0, i1, pitch in _segments(pitches, min_len):
+        start = float(tc[i0])
+        end = float(tc[i1]) if i1 < count else t1c
+        if step:
+            start, end = _snap(start, step, spec.swing), _snap(end, step, spec.swing)
+        if end <= start or start >= spec.length:
+            continue
+        notes.append((start, min(end, spec.length), pitch))
+    if not notes:
+        return result
+    v_start, v_end = notes[0][0], notes[-1][1]
+    n = max(2, int(round((v_end - v_start) * CONTROL_RATE)) + 1)
+    times = v_start + np.arange(n) / CONTROL_RATE
+    stepped = np.full(n, float(notes[0][2]))
+    for start, _end, pitch in notes:
+        stepped[times >= start] = pitch
+    window = max(1, int(round(glide * CONTROL_RATE)))
+    pitch_curve = _moving_average(stepped, window | 1)  # linear slides of `glide` seconds
+    curves = {key: np.interp(times, tc, values) for key, values in channels.items()}
+    voice = Voice(start=v_start, duration=v_end - v_start, pitch=pitch_curve, amp=curves["amp"],
+                  vibrato=curves["vibrato"], brightness=curves["brightness"], pan=curves["pan"],
+                  attack=attack, instrument=stroke.instrument)
+    result.voices.append(voice)
+    for start, end, pitch in notes:
+        mask = (times >= start) & (times <= end)
+        amp = curves["amp"][mask] if np.any(mask) else curves["amp"]
+        result.notes.append(MidiNote(start, end, pitch, _velocity(amp), stroke.instrument,
+                                     stroke.layer))
+    return result
+
+
+def split_runs(x, tolerance):
+    """Index ranges ``(start, end)`` of the parts of a stroke that move in one
+    direction along X. A turn counts only when the stroke goes back by more
+    than ``tolerance`` (hand jitter is ignored). Neighbouring runs share their
+    turning point."""
+    n = len(x)
+    if n < 3:
+        return [(0, n)]
+    bounds = [0]
+    direction = 0
+    extreme = 0
+    for i in range(1, n):
+        if direction == 0:
+            if abs(x[i] - x[0]) > tolerance:
+                direction = 1 if x[i] > x[0] else -1
+                extreme = i
+            elif (x[i] - x[extreme]) * (x[i] - x[0]) >= 0:
+                extreme = i
+            continue
+        if (x[i] - x[extreme]) * direction >= 0:
+            extreme = i
+        elif abs(x[i] - x[extreme]) > tolerance:
+            bounds.append(extreme)
+            direction = -direction
+            extreme = i
+    return [(bounds[k], (bounds[k + 1] + 1) if k + 1 < len(bounds) else n)
+            for k in range(len(bounds))]
+
+
+def _interpret_run(stroke, x, arrays, spec, mapping, mode, radius_ref, glide=0.12):
+    """Interpret one run of a stroke (it moves one way along X)."""
+    result = Interpretation()
+    x, arrays = _monotonic(x, arrays)
     z = arrays[0]
     channels_pts = _point_channels(stroke, x, arrays, mapping, radius_ref)
     attack = 0.005 + float(stroke.softness) * 0.4 if mapping.softness == "ATTACK" else 0.005
@@ -429,6 +514,9 @@ def interpret_stroke(stroke, spec, mapping, mode="QUANTIZED", radius_ref=0.0,
         return result
 
     pitches = snapped(rows)
+    if mode == "LEGATO":
+        return _legato(stroke, result, pitches, tc, count, t1c, channels, spec, step, attack,
+                       min_len, glide)
     for i0, i1, pitch in _segments(pitches, min_len):
         start, end = float(tc[i0]), note_end(i1)
         if step:

@@ -60,6 +60,8 @@ INSTRUMENTS = (
                (0.78, 0.52, 0.35, 1.0), -1, 0.0, 0.8, True, 0.6, -1),
     Instrument("COWBELL", "Campanaccio", "Campanaccio metallico",
                (0.86, 0.7, 0.22, 1.0), -1, 0.0, 0.35, True, 0.4, 56),
+    Instrument("SAMPLE", "Campione", "Un suono di Blender (importato o del Sequencer), "
+               "intonato sulle righe", (0.55, 0.9, 0.95, 1.0), 0, 0.08, 0.8),
 )
 INSTRUMENT_BY_ID = {inst.ident: inst for inst in INSTRUMENTS}
 DEFAULT_INSTRUMENT = "SINE"
@@ -68,9 +70,19 @@ NOISE_INSTRUMENT = Instrument(NOISE_BAND, "Banda di rumore", "Cluster di rumore"
 TOM_NOTES = (41, 43, 45, 47, 48, 50)
 
 
+SAMPLE_PREFIX = "SAMPLE:"
+SAMPLES = {}  # key -> (mono float32 data, sample rate, root MIDI note, loop)
+
+
+def register_sample(key, data, rate, root, loop):
+    SAMPLES[key] = (np.asarray(data, dtype=np.float32), float(rate), int(root), bool(loop))
+
+
 def get_instrument(ident):
     if ident == NOISE_BAND:
         return NOISE_INSTRUMENT
+    if ident.startswith(SAMPLE_PREFIX):
+        return INSTRUMENT_BY_ID["SAMPLE"]
     return INSTRUMENT_BY_ID.get(ident, INSTRUMENT_BY_ID[DEFAULT_INSTRUMENT])
 
 
@@ -240,6 +252,20 @@ def _noise_band(n, sample_rate, low_hz, high_hz, rng, frame=2048, hop=512):
     return out / max(float(np.sqrt(np.mean(out ** 2))), 1e-9) * 0.25
 
 
+def _sample(ident, freq, sample_rate):
+    """Play a registered sample at the pitch curve ``freq`` (resampling)."""
+    found = SAMPLES.get(ident[len(SAMPLE_PREFIX):])
+    if found is None or not len(found[0]):
+        return np.zeros(len(freq))
+    data, rate, root, loop = found
+    ratio = freq / float(music.midi_to_freq(root)) * (rate / sample_rate)
+    position = np.concatenate(([0.0], np.cumsum(ratio[:-1])))
+    if loop:
+        position = position % (len(data) - 1)
+    inside = position < len(data) - 1
+    return np.interp(position, np.arange(len(data)), data) * inside
+
+
 # --- Voice rendering ---------------------------------------------------------
 
 def voice_length(voice, sample_rate):
@@ -288,6 +314,8 @@ def render_voice(voice, sample_rate=44100, vibrato_rate=5.5):
     elif inst.ident == "BELL":
         index = 3.0 * np.exp(-ts / 0.6)
         signal = np.sin(phase + index * np.sin(3.5 * phase)) * np.exp(-ts / 1.4)
+    elif inst.ident == "SAMPLE":
+        signal = _sample(voice.instrument, freq, sample_rate)
     elif inst.ident == NOISE_BAND:
         low = music.midi_to_freq(ctrl(voice.band_low))
         high = music.midi_to_freq(ctrl(voice.band_high))
@@ -295,7 +323,7 @@ def render_voice(voice, sample_rate=44100, vibrato_rate=5.5):
     else:  # percussion
         signal = _percussion(inst.ident, n, sample_rate, float(voice.pitch[0]), rng)
 
-    if not inst.percussive and inst.ident not in ("BELL", "SINE", NOISE_BAND):
+    if not inst.percussive and inst.ident not in ("BELL", "SINE", "SAMPLE", NOISE_BAND):
         dull = _lowpass(signal, sample_rate, 2.5 * f0)
         signal = brightness * signal + (1.0 - brightness) * dull
 
@@ -312,3 +340,36 @@ def render_voice(voice, sample_rate=44100, vibrato_rate=5.5):
     stereo = np.stack((mono * np.cos(angle), mono * np.sin(angle)), axis=1)
     offset = int(round(voice.start * sample_rate))
     return offset, stereo.astype(np.float32)
+
+
+# --- General MIDI -> instruments (MIDI import) ------------------------------------
+
+_GM_DRUMS = {35: "KICK", 36: "KICK", 37: "SNARE", 38: "SNARE", 40: "SNARE", 39: "CLAP",
+             42: "HIHAT", 44: "HIHAT", 46: "HIHAT", 49: "CRASH", 51: "CRASH", 52: "CRASH",
+             55: "CRASH", 57: "CRASH", 59: "CRASH", 41: "TOM", 43: "TOM", 45: "TOM",
+             47: "TOM", 48: "TOM", 50: "TOM", 56: "COWBELL"}
+
+
+def instrument_for_program(program, pitch=60):
+    """Closest synthesized instrument for a General MIDI program (-1 = drums)."""
+    if program < 0:
+        return _GM_DRUMS.get(int(pitch), "DRUM")
+    family = program // 8
+    return {
+        0: "PLUCK",      # pianos
+        1: "BELL",       # chromatic percussion
+        2: "SINE",       # organs
+        3: "PLUCK",      # guitars
+        4: "PLUCK",      # basses
+        5: "STRINGS",    # strings
+        6: "STRINGS",    # ensembles
+        7: "SAW",        # brass
+        8: "SAW",        # reeds
+        9: "SINE",       # pipes
+        10: "SQUARE" if program == 80 else "SAW",  # synth leads
+        11: "STRINGS",   # synth pads
+        12: "TRIANGLE",  # synth effects
+        13: "PLUCK",     # ethnic
+        14: "DRUM",      # percussive
+        15: "TRIANGLE",  # sound effects
+    }.get(family, "SINE")

@@ -26,7 +26,7 @@ disegna su una tavola, e la tavola suona.
    Viene creato **un unico oggetto** *Composizione Musicale 1*: la tavola (tastiera,
    griglia, etichette e testina) sta in gruppi di livelli bloccati dentro l'oggetto stesso,
    insieme a tre livelli di disegno e ai materiali-strumento. La vista passa a
-   frontale, *Solid → Texture*, e si entra in **Draw Mode**.
+   frontale, *Solid → Texture*; si resta in Object Mode (passa a **Draw Mode** per disegnare).
 2. Disegna. Appena stacchi la penna il suono viene rigenerato.
 3. Premi **Spazio**: la testina rossa scorre e senti il disegno, in loop.
    Nella **Timeline** vedi la forma d'onda e i blocchetti delle note (vedi sotto).
@@ -37,6 +37,24 @@ disegna su una tavola, e la tavola suona.
    *Una dopo l'altra*.
 7. In **Object Mode**, **S X** allunga o accorcia la composizione e **S Z** mostra più o
    meno ottave, senza deformare i tratti.
+
+### Dove sono le impostazioni
+
+| Dove | Cosa |
+|---|---|
+| Proprietà → **Dati oggetto** → Musica | stato, tavola e tempo, lettura, livelli, strumenti, canale del Sequencer |
+| Proprietà → **Materiale** → Strumento musicale | tipo di strumento, volume, campione, effetti dello strumento |
+| Proprietà → **Output** | export WAV / MP3 / MIDI, mix di tutta la scena |
+| Proprietà → **Scena** | ascolto delle composizioni (canali, ordine, muto) |
+| *File → Import / Export* | MIDI → Grease Pencil; composizione in WAV / MP3 / MIDI |
+| Barra laterale **N → Musica** | versione compatta per quando disegni |
+| Preferences dell'add-on | mappatura degli attributi, valori delle nuove composizioni |
+
+### Suonare con la tastiera
+
+*Suona con la tastiera* (pannello N o Dati oggetto): **A W S E D F T G Y H U J K** sono le
+note (come i tasti di un pianoforte), **Z / X** cambiano ottava, **R** registra (e fa partire
+il play): ogni tasto tenuto diventa un tratto sul livello attivo. **Esc** esce.
 
 ### Suono nella Timeline
 
@@ -58,7 +76,7 @@ Tutto si controlla dalla barra laterale **N → Musica**:
 | Tavola e tempo | BPM, durata del loop, nota più bassa, ottave, **etichette dei tasti** (solo Do, tasti bianchi, tutte, nessuna), griglia |
 | Lettura | scala e tonica, quantizzazione ritmica, **swing**, nota minima, volume, **Usa modificatori** |
 | Strumenti | lista con **+ / −**: colore, nome, **volume**, occhio = nascosto e muto; sotto, il tipo di strumento |
-| Livelli | lista con **+ / − / ↑ / ↓**: lettura *Quantizzata* o *Ottica*, occhio = nascosto e muto; per il livello attivo volume, forme piene, eco, riverbero, lo-fi |
+| Livelli | lista con **+ / − / ↑ / ↓**: lettura *Quantizzata*, *Ottica* o *Legato*, occhio = nascosto e muto; per il livello attivo volume, forme piene, eco, riverbero, lo-fi |
 | Esporta | **WAV**, **MP3**, **MIDI** |
 
 ### Come viene letto un tratto
@@ -66,16 +84,22 @@ Tutto si controlla dalla barra laterale **N → Musica**:
 - **Quantizzata**: il tratto cambia nota ogni volta che attraversa una riga.
   Le note vengono agganciate alla scala scelta e alla griglia ritmica (con swing).
 - **Ottica (libera)**: alla McLaren, l'altezza segue la linea in modo continuo, con glissandi.
+- **Legato (morphing)**: le note sono quelle della scala, ma il tratto è un'unica voce che
+  scivola da una nota all'altra senza riattaccare (tempo di legato regolabile).
 - **Forma piena** (tratto riempito): *Cluster tonale* suona tutte le note della scala che
   copre; *Banda di rumore* è rumore filtrato tra il bordo inferiore e superiore della forma
   (come il sintetizzatore ANS).
 - Un punto (un tocco) è una nota breve; le percussioni suonano sempre un colpo solo.
+- Un tratto che torna indietro nel tempo (semicerchio, cerchio, zig-zag) suona in ogni sua
+  parte, come sotto un lettore ottico: un semicerchio sono due voci.
 
 ### Strumenti (sintetizzati)
 
 Melodici: Flauto, Ocarina, 8-bit, Synth, Archi, Chitarra (Karplus-Strong), Campana (FM).
 Percussioni: Percussioni (generiche, dipendono dalla riga), Cassa, Rullante, Charleston,
-Piatto, Battimani, Tom (intonato sulla riga), Campanaccio. Nel MIDI le percussioni usano
+Piatto, Battimani, Tom (intonato sulla riga), Campanaccio.
+**Campione**: qualsiasi suono di Blender (*Carica suono…* o un suono del Sequencer),
+intonato sulla nota base. Ogni strumento ha anche i suoi effetti (scheda Materiale). Nel MIDI le percussioni usano
 le note General MIDI della batteria.
 
 ### Preferences dell'add-on

@@ -14,6 +14,8 @@ def _sound_changed(self, _context):
     owner = self.id_data
     if isinstance(owner, bpy.types.Object):
         handlers.mark_dirty(owner)
+    elif isinstance(owner, bpy.types.Material):
+        handlers.mark_material_dirty(owner)
     else:
         handlers.mark_data_dirty(owner)
 
@@ -27,8 +29,9 @@ def _board_changed(self, _context):
 
 
 def _instrument_changed(self, _context):
-    from . import handlers
+    from . import feedback, handlers
     handlers.mark_material_dirty(self)
+    feedback.sync_material(self)
 
 
 def _arrangement_changed(self, context):
@@ -52,6 +55,9 @@ LAYER_MODES = (
      "Il tratto diventa note: cambia nota ogni volta che attraversa una riga"),
     ("OPTICAL", "Ottica (libera)",
      "Stile McLaren: l'altezza segue la linea in modo continuo, con glissandi"),
+    ("LEGATO", "Legato (morphing)",
+     "Note della scala unite da glissandi: un'unica voce che scivola da una nota all'altra "
+     "senza riattacco"),
 )
 
 
@@ -71,6 +77,27 @@ class GP2M_LayerSettings(bpy.types.PropertyGroup):
                        update=_sound_changed)
     fill_mode: EnumProperty(name="Forme piene", items=FILL_MODES, default="TONAL",
                             update=_sound_changed)
+    glide: FloatProperty(name="Tempo di legato", default=0.12, min=0.01, max=1.0,
+                         subtype="TIME_ABSOLUTE", unit="TIME_ABSOLUTE",
+                         description="Durata dello scivolamento da una nota all'altra",
+                         update=_sound_changed)
+    delay_mix: FloatProperty(name="Eco", default=0.0, min=0.0, max=1.0, subtype="FACTOR",
+                             update=_sound_changed)
+    delay_beats: FloatProperty(name="Tempo eco (battiti)", default=0.75, min=0.125, max=4.0,
+                               step=12.5, update=_sound_changed)
+    delay_feedback: FloatProperty(name="Ripetizioni", default=0.35, min=0.0, max=0.9,
+                                  subtype="FACTOR", update=_sound_changed)
+    reverb_mix: FloatProperty(name="Riverbero", default=0.0, min=0.0, max=1.0,
+                              subtype="FACTOR", update=_sound_changed)
+    reverb_size: FloatProperty(name="Ampiezza stanza", default=0.5, min=0.0, max=1.0,
+                               subtype="FACTOR", update=_sound_changed)
+    lofi: FloatProperty(name="Lo-fi", default=0.0, min=0.0, max=1.0, subtype="FACTOR",
+                        update=_sound_changed)
+
+
+class GP2M_Effects(bpy.types.PropertyGroup):
+    """Effects of one instrument (material), applied before the layer effects."""
+
     delay_mix: FloatProperty(name="Eco", default=0.0, min=0.0, max=1.0, subtype="FACTOR",
                              update=_sound_changed)
     delay_beats: FloatProperty(name="Tempo eco (battiti)", default=0.75, min=0.125, max=4.0,
@@ -90,6 +117,10 @@ SAMPLE_RATES = (("44100", "44.1 kHz", ""), ("48000", "48 kHz", ""))
 
 class GP2M_CompositionSettings(bpy.types.PropertyGroup):
     is_composition: BoolProperty(default=False)
+    channel: IntProperty(name="Canale Sequencer", default=0, min=0, max=128,
+                         description="Canale del Video Sequencer della sua strip audio "
+                         "(0 = scegli automaticamente il primo libero)",
+                         update=_arrangement_changed)
     order: IntProperty(name="Ordine", default=0, min=0, max=999,
                        description="Posizione nella riproduzione 'Una dopo l'altra'",
                        update=_arrangement_changed)
@@ -227,7 +258,7 @@ class GP2M_TimelineSettings(bpy.types.PropertyGroup):
                                     update=_timeline_changed)
 
 
-classes = (GP2M_LayerSettings, GP2M_CompositionSettings, GP2M_PlaySettings,
+classes = (GP2M_LayerSettings, GP2M_Effects, GP2M_CompositionSettings, GP2M_PlaySettings,
            GP2M_TimelineSettings)
 
 
@@ -239,6 +270,16 @@ def register_properties():
     bpy.types.Material.gp2m_instrument = EnumProperty(
         name="Strumento", items=INSTRUMENT_ITEMS, default=synth.DEFAULT_INSTRUMENT,
         update=_instrument_changed)
+    bpy.types.Material.gp2m_fx = PointerProperty(type=GP2M_Effects)
+    bpy.types.Material.gp2m_sample = PointerProperty(
+        name="Suono", type=bpy.types.Sound, update=_instrument_changed,
+        description="Suono del campione (importato o già usato nel Sequencer)")
+    bpy.types.Material.gp2m_sample_root = IntProperty(
+        name="Nota del campione", default=60, min=0, max=127, update=_instrument_changed,
+        description="Nota MIDI a cui il suono suona alla sua altezza originale (60 = C4)")
+    bpy.types.Material.gp2m_sample_loop = BoolProperty(
+        name="Loop", default=False, update=_instrument_changed,
+        description="Ripete il suono finché dura il tratto")
     bpy.types.Material.gp2m_volume = FloatProperty(
         name="Volume", default=1.0, min=0.0, max=2.0, subtype="FACTOR",
         description="Volume di questo strumento", update=_instrument_changed)
@@ -249,6 +290,10 @@ def register_properties():
 def unregister_properties():
     del bpy.types.GreasePencil.gp2m_active_layer
     del bpy.types.Material.gp2m_volume
+    del bpy.types.Material.gp2m_sample_loop
+    del bpy.types.Material.gp2m_sample_root
+    del bpy.types.Material.gp2m_sample
+    del bpy.types.Material.gp2m_fx
     del bpy.types.Material.gp2m_instrument
     del bpy.types.GreasePencil.gp2m_layers
     del bpy.types.Scene.gp2m_timeline

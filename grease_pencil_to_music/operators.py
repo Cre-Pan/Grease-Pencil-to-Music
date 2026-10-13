@@ -75,10 +75,16 @@ class GP2M_OT_add_composition(bpy.types.Operator):
         obj.show_in_front = True
         obj.gp2m.is_composition = True
 
-        for material in board.instrument_materials():
+        from . import prefs
+        p = prefs.get_prefs()
+        s = obj.gp2m
+        for attr in ("bpm", "length", "low_note", "octaves", "row_height", "seconds_width",
+                     "scale", "time_grid", "key_labels", "sample_rate"):
+            setattr(s, attr, getattr(p, "new_" + attr))
+        for material in board.instrument_materials(prefs.new_instrument_idents()):
             gp.materials.append(material)
         first_frame = min(1, scene.frame_start)
-        for i in range(1, 4):
+        for i in range(1, p.new_layers + 1):
             layer = gp.layers.new(f"Livello {i}")
             layer.use_lights = False  # instrument colors stay readable
             layer.frames.new(first_frame)
@@ -98,10 +104,11 @@ class GP2M_OT_add_composition(bpy.types.Operator):
         tool_settings.gpencil_sculpt.lock_axis = "AXIS_Y"  # draw on the X-Z wall
         engine.regenerate_safe(obj, scene, force=True)
         frame_view(context, obj)
-        try:
-            bpy.ops.object.mode_set(mode="PAINT_GREASE_PENCIL")
-        except RuntimeError:
-            pass  # e.g. no 3D viewport (background mode)
+        if p.enter_draw_mode:  # by default you stay in Object Mode
+            try:
+                bpy.ops.object.mode_set(mode="PAINT_GREASE_PENCIL")
+            except RuntimeError:
+                pass  # e.g. no 3D viewport (background mode)
         return {"FINISHED"}
 
 
@@ -248,6 +255,45 @@ def _move_material_slot(comp, src, dst):
         gp.materials[index] = materials[old]
 
 
+class GP2M_OT_load_sample(bpy.types.Operator):
+    """Carica un file audio come campione dello strumento attivo"""
+
+    bl_idname = "gp2m.load_sample"
+    bl_label = "Carica suono…"
+    bl_options = {"REGISTER", "UNDO"}
+
+    filepath: StringProperty(subtype="FILE_PATH")
+    filter_glob: StringProperty(default="*.wav;*.mp3;*.ogg;*.flac;*.aif;*.aiff",
+                                options={"HIDDEN"})
+
+    @classmethod
+    def poll(cls, context):
+        material = getattr(context, "material", None) or _active_material(context)
+        return material is not None and not board.is_board_material(material)
+
+    def invoke(self, context, _event):
+        context.window_manager.fileselect_add(self)
+        return {"RUNNING_MODAL"}
+
+    def execute(self, context):
+        material = getattr(context, "material", None) or _active_material(context)
+        try:
+            sound = bpy.data.sounds.load(self.filepath, check_existing=True)
+        except RuntimeError as error:
+            self.report({"ERROR"}, f"Suono non caricato: {error}")
+            return {"CANCELLED"}
+        material.gp2m_instrument = "SAMPLE"
+        material.gp2m_sample = sound
+        return {"FINISHED"}
+
+
+def _active_material(context):
+    comp = active_composition(context)
+    if comp is None or not comp.material_slots:
+        return None
+    return comp.material_slots[comp.active_material_index].material
+
+
 class GP2M_OT_remove_instrument(bpy.types.Operator):
     """Togli lo strumento attivo dalla composizione (i suoi tratti passano al primo strumento)"""
 
@@ -376,6 +422,7 @@ classes = (
     GP2M_OT_rebuild_board,
     GP2M_OT_export,
     GP2M_OT_add_instrument,
+    GP2M_OT_load_sample,
     GP2M_OT_remove_instrument,
     GP2M_OT_add_layer,
     GP2M_OT_remove_layer,

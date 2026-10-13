@@ -12,7 +12,7 @@ import time
 import bpy
 from bpy.app.handlers import persistent
 
-from . import board, engine, prefs
+from . import board, engine, feedback, prefs
 
 _dirty = set()
 _last_change = [0.0]
@@ -78,6 +78,7 @@ def flush():
             if not board.has_board(obj):  # file from 0.0.1, or board removed
                 board.rebuild(obj, engine.scene_of(obj))
             board.ensure_order(obj.data)  # layers added with Blender's own "+"
+            feedback.sync(obj)  # also keeps every modifier off the board
             engine.regenerate_safe(obj)
 
 
@@ -98,18 +99,31 @@ def transform_running():
     return False
 
 
+_scale_base = {}  # composition -> (length, octaves) when its scale left 1
+_scale_seen = {}  # composition -> (scale tuple, time) to know when it stops moving
+SCALE_SETTLE = 0.5  # seconds the scale must stay still before it is applied
+
+
+def _scale_of(obj):
+    return tuple(round(abs(v), 5) for v in obj.scale)
+
+
 def apply_scale(obj):
     """Object scale X = loop length, Z = octaves; the strokes are not stretched.
 
-    Called once the transform is finished: the scale goes back to 1 and the
+    The new values are computed from the ones the composition had when the
+    scale left 1 (never compounded), then the scale goes back to 1 and the
     board is rebuilt bigger or smaller.
     """
-    sx, sz = abs(obj.scale.x), abs(obj.scale.z)
-    if abs(sx - 1.0) < 1e-4 and abs(sz - 1.0) < 1e-4 and abs(abs(obj.scale.y) - 1.0) < 1e-4:
+    sx, sy, sz = _scale_of(obj)
+    base = _scale_base.pop(obj.name, None)
+    _scale_seen.pop(obj.name, None)
+    if abs(sx - 1.0) < 1e-4 and abs(sy - 1.0) < 1e-4 and abs(sz - 1.0) < 1e-4:
         return False
     s = obj.gp2m
-    length = min(max(s.length * sx, 1.0), 300.0)
-    octaves = int(min(max(round(s.octaves * sz), 1), 7))
+    base_length, base_octaves = base if base is not None else (s.length, s.octaves)
+    length = round(min(max(base_length * sx, 1.0), 300.0), 3)
+    octaves = int(min(max(round(base_octaves * sz), 1), 7))
     obj.scale = (1.0, 1.0, 1.0)
     if abs(length - s.length) > 1e-6:
         s.length = length
@@ -119,18 +133,38 @@ def apply_scale(obj):
     return True
 
 
+def _scale_pending():
+    """Apply finished scale gestures; returns seconds to wait, or None when done."""
+    now = time.monotonic()
+    waiting = False
+    for name in list(_scaled):
+        obj = bpy.data.objects.get(name)
+        if obj is None or not obj.gp2m.is_composition:
+            _scaled.discard(name)
+            continue
+        current = _scale_of(obj)
+        seen = _scale_seen.get(name)
+        if seen is None or seen[0] != current:
+            _scale_seen[name] = (current, now)
+            waiting = True
+            continue
+        if transform_running() or now - seen[1] < SCALE_SETTLE:
+            waiting = True
+            continue
+        _scaled.discard(name)
+        if apply_scale(obj):
+            _dirty.add(name)
+    return SCALE_SETTLE / 2 if waiting else None
+
+
 def _tick():
     wait = prefs.get_prefs().debounce - (time.monotonic() - _last_change[0])
     if wait > 0.0:
         return wait
     if _scaled:
-        if transform_running():
-            return 0.25  # wait for the end of the S drag
-        for name in list(_scaled):
-            obj = bpy.data.objects.get(name)
-            if obj is not None and obj.gp2m.is_composition and apply_scale(obj):
-                _dirty.add(name)
-        _scaled.clear()
+        wait = _scale_pending()
+        if wait is not None:
+            return wait  # the S drag is still going on
     if _cleanup_needed[0]:
         _cleanup_needed[0] = False
         try:
@@ -145,16 +179,24 @@ def _tick():
             if engine.find_strip(engine.scene_of(obj), obj) is None:
                 _dirty.add(obj.name)
         for scene in bpy.data.scenes:
+            engine.resolve_channels(scene)
             engine.arrange_safe(scene)
     flush()
     _show_popups()
     return None
 
 
+def _stack_count(obj):
+    return len(feedback.user_modifiers(obj)) + len(getattr(obj, "shader_effects", ()))
+
+
 def _check_stack(obj):
-    count = len(obj.modifiers) + len(getattr(obj, "shader_effects", ()))
+    count = _stack_count(obj)
     previous = _stack_counts.get(obj.name, 0)
     _stack_counts[obj.name] = count
+    if count > previous:
+        _dirty.add(obj.name)  # the timer keeps new modifiers off the board
+        _ensure_timer()
     if count > previous and not obj.gp2m.use_modifiers:
         _popup_queue.append(obj.name)
         _ensure_timer()
@@ -195,7 +237,10 @@ def on_depsgraph_update(_scene, depsgraph):
                 _check_stack(original)
                 if update.is_updated_geometry or update.is_updated_shading:
                     mark_dirty(original)
-                if update.is_updated_transform and tuple(original.scale) != (1.0, 1.0, 1.0):
+                if update.is_updated_transform and _scale_of(original) != (1.0, 1.0, 1.0):
+                    if original.name not in _scale_base:
+                        _scale_base[original.name] = (original.gp2m.length,
+                                                      original.gp2m.octaves)
                     _scaled.add(original.name)
                     _ensure_timer()
         elif isinstance(original, bpy.types.Material):
@@ -215,7 +260,7 @@ def on_load_post(*_args):
     _stack_counts.clear()
     _object_signature[0] = _signature()
     for obj in compositions():
-        _stack_counts[obj.name] = len(obj.modifiers) + len(getattr(obj, "shader_effects", ()))
+        _stack_counts[obj.name] = _stack_count(obj)
         # Sound files live in a temporary folder: recreate them for this session,
         # even when automatic updates are off.
         _dirty.add(obj.name)
