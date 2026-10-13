@@ -31,6 +31,26 @@ SOFTNESS_ITEMS = (
     ("NONE", "Nessuno", "La morbidezza non influisce sul suono"),
 )
 
+MAPPING_PRESETS = {
+    "CLASSIC": ("Classico", "Spessore = volume, opacità = brillantezza, morbidezza = attacco",
+                dict(map_thickness="VOLUME", map_opacity="BRIGHTNESS", map_vertex_color="NONE",
+                     map_softness="ATTACK", vibrato_depth=0.6, vibrato_rate=5.5)),
+    "EXPRESSIVE": ("Espressivo", "Il jitter dello spessore è vibrato, il colore sposta il "
+                   "suono a destra/sinistra",
+                   dict(map_thickness="VOLUME_VIBRATO", map_opacity="BRIGHTNESS",
+                        map_vertex_color="PAN", map_softness="ATTACK", vibrato_depth=0.9,
+                        vibrato_rate=5.5)),
+    "MCLAREN": ("McLaren", "Come il suono ottico disegnato: quantità di inchiostro "
+                "(spessore e opacità) = volume, colore chiaro = suono brillante",
+                dict(map_thickness="VOLUME", map_opacity="VOLUME",
+                     map_vertex_color="BRIGHTNESS", map_softness="NONE", vibrato_depth=0.3,
+                     vibrato_rate=6.0)),
+    "CLEAN": ("Pulito", "Ogni tratto suona uguale: conta solo dove lo disegni (utile per "
+              "MIDI e spartiti)",
+              dict(map_thickness="NONE", map_opacity="NONE", map_vertex_color="NONE",
+                   map_softness="NONE", vibrato_depth=0.6, vibrato_rate=5.5)),
+}
+
 
 NAMING_ITEMS = (
     ("EN", "C D E F G A B", "Nomi inglesi (C4 = Do centrale)"),
@@ -153,6 +173,10 @@ class GP2M_Preferences(bpy.types.AddonPreferences):
         box.prop(self, "resume_after_undo")
         box = layout.box()
         box.label(text="Cosa suona nel tratto", icon="SOUND")
+        row = box.row(align=True)
+        row.label(text="Preset:")
+        for ident, (label, _description, _values) in MAPPING_PRESETS.items():
+            row.operator("gp2m.mapping_preset", text=label).preset = ident
         grid = box.grid_flow(row_major=True, columns=2, even_columns=True, align=True)
         for attr, label in (("map_thickness", "Spessore"), ("map_opacity", "Opacità"),
                             ("map_vertex_color", "Vertex color"),
@@ -251,4 +275,36 @@ def get_mapping():
                    vibrato_depth=p.vibrato_depth, vibrato_rate=p.vibrato_rate)
 
 
-classes = (GP2M_Preferences,)
+def applied_preset(p=None):
+    """The preset matching the current mapping, or None."""
+    p = p or get_prefs()
+    for ident, (_label, _description, values) in MAPPING_PRESETS.items():
+        if all(abs(getattr(p, k) - v) < 1e-6 if isinstance(v, float) else getattr(p, k) == v
+               for k, v in values.items()):
+            return ident
+    return None
+
+
+class GP2M_OT_mapping_preset(bpy.types.Operator):
+    """Imposta come spessore, opacità, colore e morbidezza diventano suono"""
+
+    bl_idname = "gp2m.mapping_preset"
+    bl_label = "Preset di mappatura"
+    bl_options = {"INTERNAL"}
+
+    preset: EnumProperty(items=[(k, v[0], v[1]) for k, v in MAPPING_PRESETS.items()])
+
+    @classmethod
+    def description(cls, _context, properties):
+        return MAPPING_PRESETS[properties.preset][1]
+
+    def execute(self, _context):
+        p = get_prefs()
+        if p is _Defaults:
+            return {"CANCELLED"}
+        for key, value in MAPPING_PRESETS[self.preset][2].items():
+            setattr(p, key, value)
+        return {"FINISHED"}
+
+
+classes = (GP2M_Preferences, GP2M_OT_mapping_preset)

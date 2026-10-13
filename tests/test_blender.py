@@ -882,3 +882,20 @@ def test_library_instrument_from_soundfont(comp, tmp_path):
     result = engine.regenerate(comp)
     assert [n.pitch for n in result.notes] == [69]
     assert np.abs(result.audio[int(1.4 * 44100):int(1.6 * 44100)]).max() > 0.05
+
+
+def test_mapping_presets(addon):
+    prefs = sub("prefs")
+    p = prefs.get_prefs()
+    try:
+        assert bpy.ops.gp2m.mapping_preset(preset="MCLAREN") == {"FINISHED"}
+        assert (p.map_thickness, p.map_opacity, p.map_vertex_color) == (
+            "VOLUME", "VOLUME", "BRIGHTNESS")
+        assert prefs.applied_preset() == "MCLAREN"
+        p.map_softness = "ATTACK"
+        assert prefs.applied_preset() is None
+        assert prefs.get_mapping().opacity == "VOLUME"
+    finally:
+        bpy.ops.gp2m.mapping_preset(preset="CLASSIC")
+    assert prefs.applied_preset() == "CLASSIC"
+    assert p.map_thickness == "VOLUME" and p.map_opacity == "BRIGHTNESS"
