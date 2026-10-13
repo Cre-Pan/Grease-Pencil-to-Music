@@ -53,11 +53,15 @@ def comp(addon):
     sub("engine")._state.pop(obj.name, None)
 
 
-def add_stroke(obj, layer_index, points, radius=0.02, material_index=0):
+def add_stroke(obj, layer_index, points, radius=0.02, material_index=0, frame=None):
     """``points``: (x, z) pairs in board coordinates; ``layer_index`` counts the
-    user layers only (0 = "Livello 1")."""
+    user layers only (0 = "Livello 1"); ``frame``: keyframe number (new if missing)."""
     layer = sub("board").user_layers(obj.data)[layer_index]
-    drawing = layer.frames[0].drawing
+    if frame is None:
+        drawing = layer.frames[0].drawing
+    else:
+        key = next((f for f in layer.frames if f.frame_number == frame), None)
+        drawing = (key or layer.frames.new(frame)).drawing
     drawing.add_strokes([len(points)])
     stroke = drawing.strokes[len(drawing.strokes) - 1]
     stroke.material_index = material_index
@@ -689,6 +693,65 @@ def test_keyboard_recording_and_notes(comp):
     buffer = keyboard.note_buffer("SINE", 69)
     assert buffer.shape[1] == 2 and np.abs(buffer).max() > 0.1
     assert keyboard.composition_seconds(comp, scene, scene.frame_start) == 0.0
+
+
+def test_keyframe_sections(comp):
+    """Every keyframe starts a section that loops its drawing until the next one."""
+    engine, board, keyboard = sub("engine"), sub("board"), sub("keyboard")
+    scene = bpy.context.scene
+    fps = scene.render.fps / scene.render.fps_base
+    start = scene.frame_start
+    comp.gp2m.length = 2.0
+    add_stroke(comp, 0, line(comp, 0.5, 1.0, 60))
+    add_stroke(comp, 0, line(comp, 0.5, 1.0, 64), frame=start + round(5 * fps))
+    result = engine.regenerate(comp)
+    assert [n.pitch for n in result.notes] == [60]  # off: only the first keyframe
+    assert engine.state(comp)["stats"]["multi_keyframes"] == ["Livello 1"]
+
+    comp.gp2m.use_sections = True
+    result = engine.regenerate(comp)
+    assert result.sections == (0.0, 5.0) and result.duration == pytest.approx(7.0)
+    assert [(n.pitch, round(n.start, 2)) for n in result.notes] == [
+        (60, 0.5), (60, 2.5), (60, 4.5), (64, 5.5)]
+    assert len(result.audio) == round(7.0 * result.sample_rate)
+    strip = engine.find_strip(scene, comp)
+    assert strip.duration == round(7.0 * fps)  # the strip covers the song
+    assert engine.duration(comp) == pytest.approx(7.0)
+
+    def head_at(seconds):
+        scene.frame_set(start + round(seconds * fps))
+        evaluated = comp.evaluated_get(bpy.context.evaluated_depsgraph_get())
+        return evaluated.data.layers[board.HEAD_LAYER].translation[0] / comp.gp2m.seconds_width
+
+    assert head_at(1.0) == pytest.approx(1.0, abs=0.05)
+    assert head_at(3.0) == pytest.approx(1.0, abs=0.05)  # second loop of section 1
+    assert head_at(5.5) == pytest.approx(0.5, abs=0.05)  # section 2 restarts the loop
+    scene.frame_set(start)
+
+    # A note played at 6 s is recorded into the drawing of the second section.
+    assert keyboard.record_stroke(comp, scene, 67, 6.0, 6.5, 0) == 1
+    result = engine.regenerate(comp)
+    assert (67, 6.0) in [(n.pitch, round(n.start, 2)) for n in result.notes]
+    assert (67, 2.0) not in [(n.pitch, round(n.start, 2)) for n in result.notes]
+    comp.gp2m.use_sections = False
+    engine.regenerate(comp)
+    assert engine.find_strip(scene, comp).duration == round(2.0 * fps)
+
+
+def test_gesture_mode_reads_drawing_time(comp):
+    engine, props = sub("engine"), sub("props")
+    add_stroke(comp, 0, line(comp, 1.0, 1.25, 60, n=50))
+    drawing = sub("board").user_layers(comp.data)[0].frames[0].drawing
+    assert drawing.attributes.get("delta_time") is None
+    settings = props.find_layer_settings(comp.data, "Livello 1")
+    settings.mode = "GESTURE"
+    result = engine.regenerate(comp)  # no drawing time: read like "Quantizzata"
+    assert [(n.start, round(n.end, 2)) for n in result.notes] == [(1.0, 1.25)]
+    attr = drawing.attributes.new("delta_time", "FLOAT", "POINT")
+    attr.data.foreach_set("value", np.linspace(0.0, 1.5, 50, dtype=np.float32))
+    drawing.tag_positions_changed()
+    result = engine.regenerate(comp)  # drawn in 1.5 s: the note lasts 1.5 s
+    assert [(n.start, round(n.end, 2)) for n in result.notes] == [(1.0, 2.5)]
 
 
 def test_midi_keyboard_plays_and_records(comp):

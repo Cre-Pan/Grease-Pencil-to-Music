@@ -128,10 +128,14 @@ def draw_status(layout, comp):
     if stats:
         layout.label(text=f"{stats['notes']} note · {stats['seconds'] * 1000:.0f} ms",
                      icon="SOUND")
+        if stats.get("sections", 0) > 1:
+            layout.label(text=f"{stats['sections']} sezioni · "
+                         f"{engine.duration(comp):.1f} s", icon="KEYFRAME")
         if stats["multi_keyframes"]:
             box = layout.box()
             box.label(text="Viene letto solo il keyframe all'inizio della scena:", icon="INFO")
             box.label(text=", ".join(stats["multi_keyframes"]))
+            box.prop(comp.gp2m, "use_sections")
     if reader.has_unsupported_stack(comp):
         box = layout.box()
         if comp.gp2m.use_modifiers:
@@ -157,6 +161,7 @@ def draw_board(layout, s):
     col.prop(s, "bpm")
     col.prop(s, "length")
     col.prop(s, "loop")
+    col.prop(s, "use_sections")
     col = layout.column(align=True)
     low = s.low_note
     col.prop(s, "low_note", text=f"Nota più bassa ({music.note_name(low, style)})")
@@ -215,6 +220,12 @@ def draw_layer_details(layout, gp, layer):
     if settings.mode == "LEGATO":
         box.prop(settings, "glide")
     box.prop(settings, "fill_mode")
+    col = box.column(align=True)
+    col.prop(settings, "canon_voices")
+    sub = col.column(align=True)
+    sub.active = settings.canon_voices > 1
+    sub.prop(settings, "canon_delay")
+    sub.prop(settings, "canon_transpose")
     draw_effects(box, settings)
 
 

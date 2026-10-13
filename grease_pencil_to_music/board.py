@@ -412,11 +412,24 @@ def _remove_legacy_children(comp):
                 bpy.data.curves.remove(data)
 
 
-def _playhead_expression(seconds_width, offset_frames):
-    return (f"(frame - start - {int(offset_frames)}) * base / fps * {seconds_width:.6f}")
+def _playhead_expression(seconds_width, offset_frames, sections=None, length=0.0):
+    """x of the playhead: seconds since the composition start * seconds_width.
+
+    With keyframe sections the playhead restarts at every section and loops
+    inside it (only simple-expression functions: fmod and conditionals, so the
+    driver works even with Python auto-run disabled).
+    """
+    t = f"(frame - start - {int(offset_frames)}) * base / fps"
+    if not sections or len(sections) < 2 or length <= 0:
+        return f"{t} * {seconds_width:.6f}"
+    expression = f"fmod({t}, {length:.6f})"
+    for begin in sections[1:]:
+        expression = (f"(fmod({t} - {begin:.6f}, {length:.6f}) if {t} >= {begin:.6f} "
+                      f"else {expression})")
+    return f"{expression} * {seconds_width:.6f}"
 
 
-def set_playhead_offset(comp, offset_frames):
+def set_playhead_offset(comp, offset_frames, sections=None):
     """Shift the playhead when the composition starts later (sequence mode)."""
     data = comp.data.animation_data
     if data is None:
@@ -424,7 +437,8 @@ def set_playhead_offset(comp, offset_frames):
     curve = data.drivers.find(f'layers["{HEAD_LAYER}"].translation', index=0)
     if curve is None:
         return
-    expression = _playhead_expression(comp.gp2m.seconds_width, offset_frames)
+    expression = _playhead_expression(comp.gp2m.seconds_width, offset_frames, sections,
+                                      comp.gp2m.length)
     if curve.driver.expression != expression:
         curve.driver.expression = expression
 

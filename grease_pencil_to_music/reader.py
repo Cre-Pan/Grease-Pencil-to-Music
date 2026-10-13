@@ -111,6 +111,8 @@ def read_drawing(drawing, materials, layer_name, matrix=None, radius_divisors=No
     softness = _attribute(drawing, "softness", curves, default=0.0)
     fill_id = _attribute(drawing, "fill_id", curves, default=0).astype(np.int64)
     cyclic = _attribute(drawing, "cyclic", curves, default=0).astype(bool)
+    has_time = drawing.attributes.get("delta_time") is not None  # drawing speed
+    times = _attribute(drawing, "delta_time", points) if has_time else None
 
     strokes = []
     for i in range(curves):
@@ -134,6 +136,7 @@ def read_drawing(drawing, materials, layer_name, matrix=None, radius_divisors=No
             fx=material_fx(material),
             filled=bool(fill_id[i] != 0) and b - a >= 3,
             cyclic=bool(cyclic[i]),
+            times=None if times is None else times[a:b].astype(np.float64),
         ))
     return strokes
 

@@ -57,9 +57,21 @@ def _layer_fx(settings):
     )
 
 
-def render_composition(obj, scene):
-    s = obj.gp2m
-    reads = reader.read_composition(obj, scene.frame_start, use_modifiers=s.use_modifiers)
+MAX_SECTIONS = 24
+
+
+def section_frames(obj, scene):
+    """Scene frames where a keyframe section starts (the first is the scene start)."""
+    start = scene.frame_start
+    frames = {start}
+    for layer in board.user_layers(obj.data):
+        for frame in layer.frames:
+            frames.add(max(int(frame.frame_number), start))
+    return sorted(frames)[:MAX_SECTIONS]
+
+
+def _layer_inputs(obj, reads):
+    beat = 60.0 / max(obj.gp2m.bpm, 1e-6)
     layers = []
     for read in reads:
         settings = props.find_layer_settings(obj.data, read.name)
@@ -71,10 +83,48 @@ def render_composition(obj, scene):
             glide=settings.glide if settings else 0.12,
             gain=read.opacity,
             fx=_layer_fx(settings),
+            canon_voices=settings.canon_voices if settings else 1,
+            canon_delay=settings.canon_delay * beat if settings else 0.0,
+            canon_transpose=settings.canon_transpose if settings else 0,
         ))
-    result = mixer.render(layers, board_spec(s), prefs.get_mapping(), int(s.sample_rate),
-                          loop=s.loop, master_volume=s.master_volume)
-    return result, reads
+    return layers
+
+
+def render_composition(obj, scene):
+    """Render the loop drawn at the scene start, or every keyframe section."""
+    s = obj.gp2m
+    spec, mapping, rate = board_spec(s), prefs.get_mapping(), int(s.sample_rate)
+    frames = section_frames(obj, scene) if s.use_sections else [scene.frame_start]
+    if len(frames) == 1:
+        reads = reader.read_composition(obj, frames[0], use_modifiers=s.use_modifiers)
+        result = mixer.render(_layer_inputs(obj, reads), spec, mapping, rate, loop=s.loop,
+                              master_volume=s.master_volume)
+        result.duration = s.length
+        return result, reads
+    times = [(frame - scene.frame_start) / _fps(scene) for frame in frames]
+    parts, first_reads = [], None
+    for i, frame in enumerate(frames):
+        reads = reader.read_composition(obj, frame, use_modifiers=s.use_modifiers)
+        first_reads = reads if first_reads is None else first_reads
+        end = times[i + 1] if i + 1 < len(times) else times[i] + s.length
+        parts.append((times[i], end, mixer.render(
+            _layer_inputs(obj, reads), spec, mapping, rate, loop=False,
+            master_volume=s.master_volume)))
+    return mixer.sequence(parts, s.length, rate, loop=s.loop), first_reads
+
+
+def duration(obj):
+    """Seconds the composition lasts in the scene (one loop, or all its sections)."""
+    return state(obj).get("duration") or obj.gp2m.length
+
+
+def locate(obj, seconds):
+    """``(section start frame offset in seconds, seconds inside the loop)`` for a time
+    of the composition: where a note played at that moment belongs on the board."""
+    sections = state(obj).get("sections") or (0.0,)
+    length = obj.gp2m.length
+    start = max([t for t in sections if t <= seconds + 1e-9], default=sections[0])
+    return start, (seconds - start) % length if length > 0 else 0.0
 
 
 # --- Files -------------------------------------------------------------------
@@ -309,7 +359,7 @@ def _arrange(scene):
         return
     play = scene.gp2m_play
     fps = _fps(scene)
-    lengths = {obj.name: max(1, int(round(obj.gp2m.length * fps))) for obj in comps}
+    lengths = {obj.name: max(1, int(round(duration(obj) * fps))) for obj in comps}
     solo = _active_composition(scene) if play.mode == "SOLO" else None
     if play.mode == "SOLO" and solo is None:
         solo = next((o for o in comps if o.name == _last_solo.get(scene.name)),
@@ -324,7 +374,7 @@ def _arrange(scene):
         if play.mode == "SEQUENCE":
             offset += lengths[obj.name]
         st["offset_frames"] = start_offset
-        board.set_playhead_offset(obj, start_offset)
+        board.set_playhead_offset(obj, start_offset, st.get("sections"))
         strip = find_strip(scene, obj)
         if strip is None:
             continue
@@ -382,7 +432,8 @@ def timeline_data(result, settings):
     return {"peaks": (peaks / top).astype(np.float32), "rate": PEAKS_PER_SECOND,
             "notes": notes, "curves": curves, "curve_rate": interpret.CONTROL_RATE / 4,
             "low": settings.low_note,
-            "high": settings.low_note + settings.octaves * 12, "length": settings.length}
+            "high": settings.low_note + settings.octaves * 12,
+            "length": result.duration or settings.length}
 
 
 def regenerate(obj, scene=None, force=False):
@@ -414,6 +465,8 @@ def regenerate(obj, scene=None, force=False):
                 pass  # still in use (Windows) or already gone
         st["key"] = result.key
         st["path"] = path
+        st["sections"] = result.sections
+        st["duration"] = result.duration or s.length
         st["timeline"] = timeline_data(result, s)
         from . import timeline
         timeline.tag_redraw()
@@ -422,7 +475,9 @@ def regenerate(obj, scene=None, force=False):
         "notes": len(result.notes),
         "voices": result.voice_count,
         "seconds": time.perf_counter() - began,
-        "multi_keyframes": [r.name for r in reads if r.keyframes > 1],
+        "multi_keyframes": [] if s.use_sections else [r.name for r in reads
+                                                       if r.keyframes > 1],
+        "sections": len(result.sections),
     }
     st["error"] = None
     return result

@@ -109,10 +109,15 @@ def composition_seconds(comp, scene, frame):
 
 
 def record_stroke(comp, scene, pitch, t0, t1, material_index):
-    """Add a recorded note as a stroke on the active layer. Returns the stroke count."""
+    """Add a recorded note as a stroke on the active layer. Returns the stroke count.
+
+    ``t0``/``t1`` are composition seconds; with keyframe sections the note goes
+    into the drawing of the section being played, at its place inside the loop.
+    """
     s = comp.gp2m
-    t0 = min(max(t0, 0.0), s.length)
-    t1 = s.length if t1 < t0 else min(t1, s.length)  # wrapped around the loop end
+    section, local = engine.locate(comp, max(t0, 0.0))
+    span = s.length if t1 < t0 else t1 - t0  # wrapped around the end of the scene
+    t0, t1 = local, min(local + span, s.length)
     if t1 - t0 < 0.02:
         t1 = min(t0 + 0.08, s.length)
     if not s.low_note <= pitch <= s.low_note + s.octaves * 12 or t1 <= t0:
@@ -124,9 +129,11 @@ def record_stroke(comp, scene, pitch, t0, t1, material_index):
         if not layers:
             return 0
         layer = layers[-1]
-    drawing = reader.drawing_at(layer, scene.frame_start)
+    fps = scene.render.fps / scene.render.fps_base
+    frame = scene.frame_start + int(round(section * fps))
+    drawing = reader.drawing_at(layer, frame)
     if drawing is None:
-        drawing = layer.frames.new(min(1, scene.frame_start)).drawing
+        drawing = layer.frames.new(frame).drawing
     from . import prefs
     count = max(2, int((t1 - t0) * 20) + 1)
     x = np.linspace(t0 * s.seconds_width, t1 * s.seconds_width, count)

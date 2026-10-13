@@ -16,7 +16,7 @@ Two reading modes exist per layer:
 Pure Python + NumPy: no ``bpy`` import.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 
@@ -41,6 +41,7 @@ class StrokeData:
     filled: bool = False  # filled shape: read as a cluster
     fx: tuple = None  # instrument effects (mixer.LayerFx fields) or None
     cyclic: bool = False  # closed outline (not filled)
+    times: np.ndarray = None  # seconds since the stroke began, per point (drawing speed)
 
 
 @dataclass
@@ -367,6 +368,8 @@ def interpret_stroke(stroke, spec, mapping, mode="QUANTIZED", radius_ref=0.0,
     if stroke.filled:
         return _interpret_fill(stroke, spec, mapping, fill_mode, radius_ref)
 
+    if mode == "GESTURE":
+        return _interpret_gesture(stroke, spec, mapping, radius_ref)
     x = np.asarray(stroke.x, dtype=np.float64)
     arrays = [np.asarray(stroke.z, dtype=np.float64),
               np.asarray(stroke.radius, dtype=np.float64),
@@ -386,6 +389,30 @@ def interpret_stroke(stroke, spec, mapping, mode="QUANTIZED", radius_ref=0.0,
         result.voices.extend(part.voices)
         result.notes.extend(part.notes)
     return result
+
+
+def gesture_times(stroke):
+    """Seconds since the stroke began for each point, or None when the stroke
+    has no usable drawing time (made by a script, imported, all zero)."""
+    times = stroke.times
+    if times is None or len(times) != len(stroke.x) or len(times) < 2:
+        return None
+    times = np.maximum.accumulate(np.asarray(times, dtype=np.float64) - float(times[0]))
+    return times if times[-1] > 1e-3 else None
+
+
+def _interpret_gesture(stroke, spec, mapping, radius_ref):
+    """The rhythm of the hand: the stroke starts where its first point is and each
+    point sounds when it was drawn. Notes follow the rows (scale), without grid.
+    Strokes without drawing time are read as "Quantizzata"."""
+    times = gesture_times(stroke)
+    if times is None:
+        return interpret_stroke(stroke, spec, mapping, "QUANTIZED", radius_ref)
+    x = float(stroke.x[0]) + times * spec.seconds_width
+    arrays = [np.asarray(a, dtype=np.float64) if a is not None else None
+              for a in (stroke.z, stroke.radius, stroke.opacity, stroke.color)]
+    return _interpret_run(stroke, x, arrays, replace(spec, time_grid="OFF"), mapping,
+                          "QUANTIZED", radius_ref)
 
 
 def _legato(stroke, result, pitches, tc, count, t1c, channels, spec, step, attack, min_len,

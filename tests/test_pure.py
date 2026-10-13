@@ -530,3 +530,64 @@ def test_midi_input_decoding():
     assert midi_input.decode([0xB0, 7, 127]) is None  # other controllers ignored
     assert midi_input.decode([0xF8]) is None  # clock
     assert midi_input.decode(None) is None
+
+
+def test_sections_repeat_each_loop_until_the_next_one():
+    def part(pitch):
+        return mixer.render([mixer.LayerInput("L", [stroke((0.5, 1.0), (pitch, pitch))])],
+                            free_spec(length=2.0), interpret.Mapping(), SR, loop=False)
+
+    first, second = part(C4_ROW), part(C4_ROW + 4)
+    joined = mixer.sequence([(0.0, 5.0, first), (5.0, 7.0, second)], 2.0, SR)
+    assert joined.duration == 7.0 and joined.sections == (0.0, 5.0)
+    assert len(joined.audio) == 7 * SR
+    assert [(n.pitch, n.start) for n in joined.notes] == [
+        (60, 0.5), (60, 2.5), (60, 4.5), (64, 5.5)]
+    rms = [float(np.sqrt(np.mean(joined.audio[int(t * SR):int((t + 0.3) * SR)] ** 2)))
+           for t in (0.6, 1.6, 2.6, 4.6, 5.1, 5.6)]
+    assert rms[0] > 0.01 and rms[2] > 0.01 and rms[3] > 0.01 and rms[5] > 0.01
+    assert rms[1] < rms[0] * 0.2 and rms[4] < rms[0] * 0.2
+    # A section shorter than a loop cuts its repetition (fading) and its notes.
+    short = mixer.sequence([(0.0, 0.75, first), (0.75, 2.75, second)], 2.0, SR)
+    assert [(n.pitch, n.start, n.end) for n in short.notes][0] == (60, 0.5, 0.75)
+    assert mixer.sequence([(0.0, 5.0, first)], 2.0, SR).key != joined.key
+
+
+def test_canon_repeats_the_layer_in_later_transposed_voices():
+    line = stroke((0.5, 1.0), (C4_ROW, C4_ROW))
+    spec, mapping = free_spec(length=2.0), interpret.Mapping()
+    plain = mixer.render([mixer.LayerInput("L", [line])], spec, mapping, SR)
+    canon = mixer.render([mixer.LayerInput("L", [line], canon_voices=3, canon_delay=1.0,
+                                           canon_transpose=12)], spec, mapping, SR)
+    # Third voice enters at 2.5 s: in a 2 s loop it wraps to 0.5 s.
+    assert sorted((n.pitch, n.start) for n in canon.notes) == [(60, 0.5), (72, 1.5),
+                                                               (84, 0.5)]
+    assert canon.key != plain.key and canon.voice_count == 3 * plain.voice_count
+    window = slice(int(1.6 * SR), int(1.9 * SR))
+    assert np.abs(plain.audio[window]).max() < 0.01 < np.abs(canon.audio[window]).max()
+    flat = mixer.render([mixer.LayerInput("L", [line], canon_voices=2, canon_delay=1.0)],
+                        spec, mapping, SR, loop=False)
+    assert [(n.pitch, n.start) for n in flat.notes] == [(60, 0.5), (60, 1.5)]
+
+
+def test_gesture_mode_follows_the_drawing_speed():
+    # A vertical stroke (C4 up to G4) drawn in one second: a rising scale run.
+    n = 100
+    rising = interpret.StrokeData(
+        x=np.full(n, 1.0), z=(np.linspace(C4_ROW, C4_ROW + 7, n) + 0.5) * H,
+        radius=np.full(n, 0.02), opacity=np.ones(n), instrument="SINE", layer="L1",
+        times=np.linspace(0.0, 1.0, n))
+    spec, mapping = interpret.BoardSpec(time_grid="1_16", min_note=0.05), interpret.Mapping()
+    result = interpret.interpret_stroke(rising, spec, mapping, "GESTURE")
+    assert [n.pitch for n in result.notes] == list(range(60, 68))
+    assert result.notes[0].start == pytest.approx(1.0, abs=0.01)
+    assert result.notes[-1].end == pytest.approx(2.0, abs=0.02)
+    # The same horizontal stroke drawn slowly lasts longer than drawn fast.
+    flat = stroke((1.0, 1.5), (C4_ROW, C4_ROW), n=n)
+    flat.times = np.linspace(0.0, 2.0, n)
+    note = interpret.interpret_stroke(flat, spec, mapping, "GESTURE").notes[0]
+    assert (note.start, round(note.end, 2)) == (1.0, 3.0)
+    # Without drawing time (script, MIDI import): read as "Quantizzata".
+    flat.times = np.zeros(n)
+    assert interpret.interpret_stroke(flat, spec, mapping, "GESTURE").notes == \
+        interpret.interpret_stroke(flat, spec, mapping, "QUANTIZED").notes

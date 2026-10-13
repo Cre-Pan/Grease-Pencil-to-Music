@@ -6,7 +6,7 @@ Pure Python + NumPy: no ``bpy`` import.
 
 import hashlib
 from collections import OrderedDict
-from dataclasses import astuple, dataclass, field
+from dataclasses import astuple, dataclass, field, replace
 
 import numpy as np
 
@@ -32,6 +32,9 @@ class LayerInput:
     glide: float = 0.12
     gain: float = 1.0
     fx: LayerFx = field(default_factory=LayerFx)
+    canon_voices: int = 1  # the layer repeated by later voices (a round)
+    canon_delay: float = 2.0  # seconds between two entries
+    canon_transpose: int = 0  # semitones from one voice to the next
 
 
 @dataclass
@@ -42,6 +45,8 @@ class RenderResult:
     key: str  # changes whenever the audio would change
     voice_count: int = 0
     curves: list = field(default_factory=list)  # (start, pitch curve, instrument) glides
+    duration: float = 0.0  # seconds of music (without tails); 0 = one loop
+    sections: tuple = ()  # start seconds of the keyframe sections (empty = one loop)
 
 
 class _LRU:
@@ -76,7 +81,7 @@ def clear_cache():
 
 def _stroke_key(stroke, context_key):
     h = hashlib.blake2b(digest_size=16)
-    for arr in (stroke.x, stroke.z, stroke.radius, stroke.opacity, stroke.color):
+    for arr in (stroke.x, stroke.z, stroke.radius, stroke.opacity, stroke.color, stroke.times):
         if arr is None:
             h.update(b"-")
         else:
@@ -87,19 +92,35 @@ def _stroke_key(stroke, context_key):
 
 
 def _render_stroke(stroke, spec, mapping, mode, fill_mode, radius_ref, sample_rate,
-                   context_key, glide=0.12):
-    key = _stroke_key(stroke, (context_key, mode, fill_mode, round(glide, 4)))
+                   context_key, glide=0.12, transpose=0):
+    key = _stroke_key(stroke, (context_key, mode, fill_mode, round(glide, 4), transpose))
     cached = _stroke_cache.get(key)
     if cached is not None:
         return key, cached
     interp = interpret.interpret_stroke(stroke, spec, mapping, mode, radius_ref, fill_mode,
                                         glide)
+    if transpose:
+        interp.voices = [replace(v, pitch=v.pitch + transpose) for v in interp.voices]
+        interp.notes = [replace(n, pitch=min(max(n.pitch + transpose, 0), 127))
+                        for n in interp.notes]
     rendered = [synth.render_voice(v, sample_rate, mapping.vibrato_rate) for v in interp.voices]
     curves = [(v.start, v.pitch[::4].astype(np.float32), v.instrument) for v in interp.voices
               if len(v.pitch) > 1 and float(np.ptp(v.pitch)) > 0.05]
     value = (rendered, interp.notes, curves)
     _stroke_cache.put(key, value)
     return key, value
+
+
+def _shift_notes(notes, seconds, length, loop):
+    """Notes of a later canon voice; in a loop they wrap around like its sound."""
+    out = []
+    for note in notes:
+        start, end = note.start + seconds, note.end + seconds
+        if loop and length > 0:
+            turns = int(start // length)
+            start, end = start - turns * length, end - turns * length
+        out.append(replace(note, start=start, end=end))
+    return out
 
 
 def _sum(rendered, length):
@@ -135,15 +156,26 @@ def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.
     voice_count = 0
     for layer in layers:
         stroke_keys = []
-        stroke_results = []
+        stroke_results = []  # (instrument fx, rendered voices)
+        copies = [(k * layer.canon_transpose, int(round(k * layer.canon_delay * sample_rate)))
+                  for k in range(max(1, layer.canon_voices))]
         for stroke in layer.strokes:
-            key, value = _render_stroke(stroke, spec, mapping, layer.mode, layer.fill_mode,
-                                        radius_ref, sample_rate, context_key, layer.glide)
-            stroke_keys.append(key)
-            stroke_results.append(value)
-            notes.extend(value[1])
-            curves.extend(value[2])
-            voice_count += len(value[0])
+            for transpose, shift in copies:
+                key, value = _render_stroke(stroke, spec, mapping, layer.mode,
+                                            layer.fill_mode, radius_ref, sample_rate,
+                                            context_key, layer.glide, transpose)
+                stroke_keys.append((key, shift))
+                rendered, stroke_notes, stroke_curves = value
+                if shift:
+                    rendered = [(offset + shift, buf) for offset, buf in rendered]
+                    stroke_notes = _shift_notes(stroke_notes, shift / sample_rate,
+                                                spec.length, loop)
+                    stroke_curves = [(start + shift / sample_rate, pitch, ident)
+                                     for start, pitch, ident in stroke_curves]
+                stroke_results.append((stroke.fx, rendered))
+                notes.extend(stroke_notes)
+                curves.extend(stroke_curves)
+                voice_count += len(rendered)
 
         layer_key = hashlib.blake2b(
             repr((stroke_keys, astuple(layer.fx), spec.bpm, sample_rate)).encode(),
@@ -152,8 +184,8 @@ def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.
         if buffer is None:
             # Strokes are summed per instrument effect chain first...
             groups = {}
-            for stroke, (rendered, _n, _c) in zip(layer.strokes, stroke_results):
-                groups.setdefault(stroke.fx, []).extend(rendered)
+            for fx, rendered in stroke_results:
+                groups.setdefault(fx, []).extend(rendered)
             buffer = np.zeros((loop_n, 2), dtype=np.float32)
             for fx, rendered in groups.items():
                 part = _sum(rendered, loop_n)
@@ -187,3 +219,61 @@ def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.
         digest_size=16).hexdigest()
     return RenderResult(master.astype(np.float32), sample_rate, notes, key, voice_count,
                         curves)
+
+
+SECTION_FADE = 0.01  # seconds of fade where a section cuts a repetition short
+
+
+def sequence(parts, length, sample_rate, loop=True):
+    """Join keyframe sections into one piece.
+
+    ``parts``: ``[(start, end, RenderResult)]`` sorted by start, each rendered
+    with ``loop=False`` (one loop of ``length`` seconds plus its tails). Every
+    section repeats its loop from ``start`` until ``end``; a repetition cut by
+    the next section fades out quickly, a whole one keeps its tail.
+    """
+    loop_n = max(1, int(round(length * sample_rate)))
+    total = max((end for _start, end, _r in parts), default=length)
+    total_n = max(1, int(round(total * sample_rate)))
+    master = np.zeros((total_n, 2), dtype=np.float32)
+    notes, curves, keys, voices = [], [], [], 0
+    fade_n = max(1, int(SECTION_FADE * sample_rate))
+    for start, end, result in parts:
+        keys.append((round(start, 6), round(end, 6), result.key))
+        voices += result.voice_count
+        begin, stop = int(round(start * sample_rate)), int(round(end * sample_rate))
+        span = end - start
+        repeats = max(1, int(np.ceil(span / length - 1e-9)))
+        for k in range(repeats):
+            offset = begin + k * loop_n
+            chunk = result.audio
+            if offset + loop_n > stop:  # cut short by the next section
+                chunk = chunk[:max(stop - offset, 0)].copy()
+                ramp = min(fade_n, len(chunk))
+                if ramp:
+                    chunk[-ramp:] *= np.linspace(1.0, 0.0, ramp, dtype=np.float32)[:, None]
+            if offset + len(chunk) > len(master):
+                master = np.concatenate(
+                    (master, np.zeros((offset + len(chunk) - len(master), 2), np.float32)))
+            master[offset:offset + len(chunk)] += chunk
+            shift, limit = start + k * length, end
+            for note in result.notes:
+                if shift + note.start < limit:
+                    notes.append(replace(note, start=shift + note.start,
+                                         end=min(shift + note.end, limit)))
+            for c_start, pitch, ident in result.curves:
+                if shift + c_start < limit:
+                    curves.append((shift + c_start, pitch, ident))
+    if loop and len(master) > total_n:
+        tail, master = master[total_n:], master[:total_n].copy()
+        for begin in range(0, len(tail), total_n):
+            chunk = tail[begin:begin + total_n]
+            master[:len(chunk)] += chunk
+    peak = float(np.max(np.abs(master))) if len(master) else 0.0
+    if peak > 0.98:
+        master *= 0.98 / peak
+    key = hashlib.blake2b(repr((keys, round(length, 6), loop, sample_rate)).encode(),
+                          digest_size=16).hexdigest()
+    notes.sort(key=lambda n: (n.start, n.pitch))
+    return RenderResult(master, sample_rate, notes, key, voices, curves, duration=total,
+                        sections=tuple(start for start, _end, _r in parts))

@@ -58,6 +58,9 @@ LAYER_MODES = (
     ("LEGATO", "Legato (morphing)",
      "Note della scala unite da glissandi: un'unica voce che scivola da una nota all'altra "
      "senza riattacco"),
+    ("GESTURE", "Gesto (tempo del disegno)",
+     "Il ritmo è quello della mano: il tratto parte dove inizia e dura quanto hai impiegato "
+     "a disegnarlo (una linea verticale veloce diventa una scala rapida)"),
 )
 
 
@@ -95,6 +98,16 @@ class GP2M_LayerSettings(bpy.types.PropertyGroup):
                                subtype="FACTOR", update=_sound_changed)
     lofi: FloatProperty(name="Lo-fi", default=0.0, min=0.0, max=1.0, subtype="FACTOR",
                         update=_sound_changed)
+    canon_voices: IntProperty(name="Voci del canone", default=1, min=1, max=4,
+                              description="Il livello si ripete in altre voci che entrano una "
+                              "dopo l'altra (1 = nessun canone)", update=_sound_changed)
+    canon_delay: FloatProperty(name="Entrata (battiti)", default=4.0, min=0.25, max=32.0,
+                               step=25, description="Battiti tra l'entrata di una voce e "
+                               "la successiva", update=_sound_changed)
+    canon_transpose: IntProperty(name="Trasposizione (semitoni)", default=0, min=-24, max=24,
+                                 description="Ogni voce è trasposta rispetto alla precedente "
+                                 "(12 = un'ottava sopra, -5 = una quarta sotto…)",
+                                 update=_sound_changed)
 
 
 class GP2M_Effects(bpy.types.PropertyGroup):
@@ -172,6 +185,11 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
                        description="Le code (eco, riverbero, note lunghe) rientrano "
                        "dall'inizio del loop",
                        update=_sound_changed)
+    use_sections: BoolProperty(name="Sezioni da keyframe", default=False,
+                               description="Ogni keyframe del Grease Pencil apre una sezione: "
+                               "il suo disegno si ripete in loop fino al keyframe successivo "
+                               "(strofa, ritornello…). L'ultima sezione suona un loop",
+                               update=_sound_changed)
     auto_update: BoolProperty(name="Aggiornamento automatico", default=True,
                               description="Rigenera il suono a ogni modifica dei tratti")
     sample_rate: EnumProperty(name="Frequenza", items=SAMPLE_RATES, default="44100",
