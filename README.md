@@ -153,7 +153,8 @@ Per installarla come app sulla schermata Home, che funziona anche offline:
    **/docs**, poi *Save*.
 2. Dopo un minuto apri in **Safari** sull'iPad
    `https://cre-pan.github.io/Grease-Pencil-to-Music/app/`.
-3. *Condividi → Aggiungi alla schermata Home*. Si apre a tutto schermo e funziona anche
+3. *Condividi → Aggiungi alla schermata Home* (anche da Chrome per iPad: Condividi nella barra
+   degli indirizzi → Aggiungi alla schermata Home). Si apre a tutto schermo e funziona anche
    senza connessione; i disegni restano salvati nell'app. Per esportare usa il foglio di
    condivisione → *Salva su File*.
 
@@ -166,6 +167,19 @@ arrotondata che applica iPadOS. Disegna il logo su una tela quadrata 1024 o 2048
 template come livello in alto, esporta un PNG quadrato senza angoli arrotondati come
 `web/icon.png` e rilancia `tools/build_web.py`. I template ufficiali sono negli
 [Apple Design Resources](https://developer.apple.com/design/resources/).
+
+### Gesti della web app
+
+| Gesto | Azione |
+|---|---|
+| Tocco con due / tre / quattro dita | annulla / ripeti / play-stop |
+| Pinch, due dita che trascinano | ingrandisci, sposta la tavola |
+| Tieni premuto su un tratto | contagocce: strumento e opacità |
+| Tocco sui numeri di battuta | da dove parte il play |
+| Livello: scorri a sinistra / a destra | elimina / seleziona più livelli |
+| Livello: tieni premuto e trascina | cambia l'ordine |
+| Occhio o altoparlante tenuti premuti | solo quel livello visibile / udibile |
+| Nome di una traccia del beat tenuto premuto | volume e intonazione |
 
 ## Limiti noti (0.0.x)
 

@@ -442,6 +442,12 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   background: var(--fg); color: var(--paper); animation: toast-in 0.34s var(--spring) both;
 }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 10px) scale(0.94); } to { opacity: 1; transform: translate(-50%, 0); } }
+.zoom-pill {
+  position: absolute; z-index: 4; padding: 7px 13px; border-radius: 999px; font-size: 13px; font-weight: 650;
+  font-family: var(--font-round); font-variant-numeric: tabular-nums; animation: pop-in 0.3s var(--spring) both;
+}
+.layer.lifted { position: relative; z-index: 3; box-shadow: var(--shadow-lg); border-radius: 16px; }
+.layer.lifted .layer-row { transition: none; }
 .hint { position: absolute; z-index: 3; right: max(16px, env(safe-area-inset-right, 0px)); bottom: 28px; font-size: 12px; color: var(--fg-2); pointer-events: none; }
 
 @supports (corner-shape: squircle) {
@@ -491,6 +497,7 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6.5l4.5 4.5-4.5 4.5"/><path d="M19 11H9.5a5 5 0 0 0 0 10H12"/></svg>
       </button>
     </aside>
+    <button class="zoom-pill glass" id="zoomPill" hidden title="Torna al 100%"></button>
     <div class="hint" id="hint">Spessore = volume · opacità = brillantezza · altezza = nota</div>
   </section>
 
@@ -513,7 +520,7 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
         <div class="card beat-grid"><div class="beat-inner" id="beatGrid"></div></div>
         <div class="beat-foot">
           <span class="legend"><i></i>spento</span><span class="legend"><i class="on"></i>colpo</span><span class="legend"><i class="acc"></i>accento</span>
-          <span>Tocca un pad per cambiarlo, trascina per dipingere più passi. Tocca il nome per sentire il suono.</span>
+          <span>Tocca un pad per cambiarlo, trascina per dipingere più passi. Tocca il nome per sentire il suono, tienilo premuto per volume e intonazione.</span>
           <button class="chip" id="beatClear">Svuota</button>
         </div>
       </div>
@@ -662,7 +669,7 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
       </button>
     </div>
     <div id="layerList"></div>
-    <p class="layer-hint">Tocca un livello per sceglierlo, di nuovo per le impostazioni. Scorri a sinistra per eliminarlo, a destra per selezionarne più di uno. Tieni premuto l'occhio o l'altoparlante per vedere o sentire solo quel livello.</p>
+    <p class="layer-hint">Tocca un livello per sceglierlo, di nuovo per le impostazioni. Scorri a sinistra per eliminarlo, a destra per selezionarne più di uno. Tieni premuto un livello e trascinalo per spostarlo; tieni premuto l'occhio o l'altoparlante per vedere o sentire solo quel livello.</p>
   </section>
 
   <section class="popover" id="popInst" hidden aria-label="Strumenti">
@@ -673,6 +680,14 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
     <div class="inst-grid" id="instDrum"></div>
     <div class="label">I tuoi suoni</div>
     <div class="inst-grid" id="instSmp"></div>
+  </section>
+
+  <section class="popover" id="popTrack" hidden aria-label="Traccia del beat">
+    <div class="pop-head"><h2 id="trackTitle"></h2></div>
+    <div class="group">
+      <div class="item col"><div class="item" style="padding:0;min-height:0"><label for="inTrackVol">Volume</label><span class="v" id="valTrackVol"></span></div><input id="inTrackVol" type="range" min="0" max="1.5" step="0.01"></div>
+      <div class="item"><span>Intonazione</span><div class="stepper"><button id="tuneDown" aria-label="Più grave">−</button><span id="tuneLabel"></span><button id="tuneUp" aria-label="Più acuto">+</button></div></div>
+    </div>
   </section>
 
   <section class="popover" id="popRec" hidden aria-label="Nuovo suono">
@@ -786,8 +801,14 @@ let state = null;
 const ui = {
   view: "draw", tool: "brush", inst: "EPIANO", size: 0.5, opacity: 1, naming: "IT", stabilize: 0.3,
   playing: false, open: null, openBtn: null, metronome: false, recording: false, kbBase: 60, repeats: 1, exportBeat: true,
-  stems: false, picked: new Set(), swipeOpen: null, layerOpen: null,
+  stems: false, picked: new Set(), swipeOpen: null, layerOpen: null, startFrac: 0,
 };
+/* Tap the bar numbers (or the piano roll): Play starts there; while playing it jumps. */
+function seek(frac) {
+  ui.startFrac = clamp(frac, 0, 0.999);
+  if (ui.playing && player) startPlayer(ui.startFrac);
+  requestFrame();
+}
 let history = [], future = [];
 let uid = 1;
 const newId = p => p + (uid++).toString(36) + Math.random().toString(36).slice(2, 6);
@@ -803,7 +824,7 @@ function applyPreset(beat, key) {
     const row = pr.rows[id] || "";
     const p = new Array(32).fill(0);
     for (let i = 0; i < 32; i++) { const ch = row[i % 16] || "."; p[i] = ch === "X" ? 2 : ch === "x" ? 1 : 0; }
-    beat.tracks[id] = { mute: false, p };
+    beat.tracks[id] = { ...beat.tracks[id], mute: false, p };
   }
 }
 
@@ -880,7 +901,8 @@ function sanitize(s) {
     for (const id of BEAT_TRACKS) if (s.beat.tracks[id] && Array.isArray(s.beat.tracks[id].p)) {
       const p = s.beat.tracks[id].p.slice(0, 32).map(v => clamp(v | 0, 0, 2));
       while (p.length < 32) p.push(0);
-      beat.tracks[id] = { mute: !!s.beat.tracks[id].mute, p };
+      const t = s.beat.tracks[id];
+      beat.tracks[id] = { mute: !!t.mute, p, vol: clamp(t.vol ?? 1, 0, 1.5), tune: clamp(Math.round(t.tune || 0), -12, 12) };
     }
   }
   beat.steps = beat.steps === 32 ? 32 : 16;
@@ -1125,7 +1147,7 @@ function beatHits(force) {
       const tr = b.tracks[id], v = tr.p[i];
       if (!v || tr.mute) continue;
       const beats = s * 0.25 + (s % 2 ? b.swing * 0.125 : 0);
-      hits.push({ id, t: beats * k, vel: v === 2 ? 1 : 0.7 });
+      hits.push({ id, t: beats * k, vel: (v === 2 ? 1 : 0.7) * (tr.vol ?? 1), tune: tr.tune || 0 });
     }
   }
   return hits;
@@ -1352,8 +1374,9 @@ function scheduleVoice(ctx, dest, v, when, track) {
   if (track) track.push(...nodes);
 }
 
-function scheduleDrum(ctx, dest, id, s, a, track) {
+function scheduleDrum(ctx, dest, id, s, a, track, tune = 0) {
   const out = ctx.createGain(); out.gain.value = a; out.connect(dest);
+  const tk = Math.pow(2, tune / 12);  // the track's tuning moves tones and filters together
   const nodes = [];
   const env = (peak, decay, attack = 0) => {
     const g = ctx.createGain();
@@ -1362,10 +1385,10 @@ function scheduleDrum(ctx, dest, id, s, a, track) {
     g.gain.exponentialRampToValueAtTime(0.0001, s + attack + decay); g.connect(out); return g;
   };
   const noiseSrc = () => { const n = ctx.createBufferSource(); n.buffer = noise(); nodes.push([n, Math.random() * 1.5]); return n; };
-  const filt = (type, f, q, to) => { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; b.connect(to); return b; };
+  const filt = (type, f, q, to) => { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = Math.min(f * tk, 20000); b.Q.value = q; b.connect(to); return b; };
   const tone = (type, f0, f1, t) => {
-    const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f0, s);
-    if (f1) o.frequency.exponentialRampToValueAtTime(f1, s + t);
+    const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f0 * tk, s);
+    if (f1) o.frequency.exponentialRampToValueAtTime(f1 * tk, s + t);
     nodes.push([o, 0]); return o;
   };
   let len = 0.6;
@@ -1529,7 +1552,7 @@ async function renderParts(voices, hits) {
   const ctx = new OfflineAudioContext(2, Math.ceil((loopSec() + TAIL) * SR), SR);
   const out = ctx.createGain(); out.connect(ctx.destination);
   for (const v of voices) scheduleVoice(ctx, out, v, 0);
-  for (const h of hits) scheduleDrum(ctx, out, h.id, h.t, h.vel);
+  for (const h of hits) scheduleDrum(ctx, out, h.id, h.t, h.vel, null, h.tune);
   return ctx.startRendering();
 }
 async function layerBuffer(layer) {
@@ -1547,7 +1570,7 @@ async function layerBuffer(layer) {
 async function beatBuffer() {
   const hits = beatHits(true);
   if (!hits.length) return null;
-  const key = JSON.stringify(["beat", state.bpm, state.bars, hits.map(h => [h.id, +h.t.toFixed(5), h.vel])]);
+  const key = JSON.stringify(["beat", state.bpm, state.bars, hits.map(h => [h.id, +h.t.toFixed(5), h.vel, h.tune])]);
   const hit = cacheGet(key);
   if (hit) return hit;
   const buf = await renderParts([], hits);
@@ -1687,7 +1710,7 @@ async function play() {
   ui.playing = true; updateTransport();
   await ensureLoop();
   if (!ui.playing || player) return;
-  startPlayer(0);
+  startPlayer(ui.startFrac || 0);
   requestFrame();
 }
 function stop() {
@@ -2121,18 +2144,38 @@ function layoutDraw() {
   if (narrow) right = Math.min(right, tools.left - r.left - 10);
   const top = (narrow ? 64 : 70) + 18;
   geo = { keyW, left, right, top, bottom: H - 84 };
-  cacheBoard(); renderInk(); requestFrame();
+  cacheBoard(); renderInk(); syncZoomPill(); requestFrame();
 }
 
-const xOf = b => geo.left + b / loopBeats() * (geo.right - geo.left);
-const yOf = p => geo.bottom - (p - state.low) / rowsCount() * (geo.bottom - geo.top);
-const bOf = x => (x - geo.left) / (geo.right - geo.left) * loopBeats();
-const pOf = y => state.low + (geo.bottom - y) / (geo.bottom - geo.top) * rowsCount();
-const rowPx = () => (geo.bottom - geo.top) / rowsCount();
+/* The visible part of the board: pinch to zoom, two fingers to move (like Procreate). */
+const view = { zoom: 1, bx: 0, ry: 0 };  // zoom, first visible beat, first visible row
+const visBeats = () => loopBeats() / view.zoom;
+const visRows = () => rowsCount() / view.zoom;
+function clampView() {
+  view.zoom = clamp(view.zoom, 1, 8);
+  view.bx = clamp(view.bx, 0, loopBeats() - visBeats());
+  view.ry = clamp(view.ry, 0, rowsCount() - visRows());
+}
+const xOf = b => geo.left + (b - view.bx) / visBeats() * (geo.right - geo.left);
+const yOf = p => geo.bottom - (p - state.low - view.ry) / visRows() * (geo.bottom - geo.top);
+const bOf = x => view.bx + (x - geo.left) / (geo.right - geo.left) * visBeats();
+const pOf = y => state.low + view.ry + (geo.bottom - y) / (geo.bottom - geo.top) * visRows();
+const rowPx = () => (geo.bottom - geo.top) / visRows();
+let viewDirty = false;
+function viewChanged() { clampView(); viewDirty = true; requestFrame(); }
+function syncZoomPill() {
+  const pill = $("#zoomPill");
+  pill.hidden = view.zoom <= 1.001 || !geo;
+  if (pill.hidden) return;
+  pill.textContent = Math.round(view.zoom * 100) + "%";
+  pill.style.left = (geo.left + 10) + "px"; pill.style.top = (geo.top + 10) + "px";
+}
+$("#zoomPill").onclick = () => { view.zoom = 1; view.bx = 0; view.ry = 0; viewChanged(); };
 function roundRect(c, x, y, w, h, r) { c.beginPath(); if (c.roundRect) c.roundRect(x, y, w, h, r); else c.rect(x, y, w, h); }
 
 function cacheBoard() {
   if (!geo) return;
+  clampView();
   const c = boardCanvas.getContext("2d");
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
   c.fillStyle = colors.ground; c.fillRect(0, 0, W, H);
@@ -2141,29 +2184,37 @@ function cacheBoard() {
   c.save();
   roundRect(c, left - keyW, top, right - left + keyW, bottom - top, 18); c.clip();
   c.fillStyle = colors.paper; c.fillRect(left - keyW, top, right - left + keyW, bottom - top);
-  for (let i = 0; i < rows; i++) {
-    const m = state.low + i, y = bottom - (i + 1) * rh;
+  const firstRow = Math.max(0, Math.floor(view.ry)), lastRow = Math.min(rows - 1, Math.ceil(view.ry + visRows()));
+  for (let i = firstRow; i <= lastRow; i++) {
+    const m = state.low + i, y = yOf(m + 1);
     if (BLACK.has(m % 12)) { c.fillStyle = colors["row-black"]; c.fillRect(left, y, right - left, rh); }
     if (m % 12 === 0) { c.fillStyle = colors["grid-c"]; c.fillRect(left, y + rh - 0.5, right - left, 1); }
   }
-  for (let k = 0; k <= loopBeats(); k++) {
+  const sub = view.zoom >= 3 && state.grid ? state.grid : 0;  // zoomed in: the rhythm grid too
+  if (sub) for (let k = Math.ceil(view.bx / sub); k * sub <= view.bx + visBeats(); k++) {
+    c.fillStyle = colors["grid-beat"]; c.globalAlpha = 0.45; c.fillRect(Math.round(xOf(k * sub)), top, 1, bottom - top); c.globalAlpha = 1;
+  }
+  for (let k = Math.floor(view.bx); k <= Math.min(loopBeats(), Math.ceil(view.bx + visBeats())); k++) {
     const x = Math.round(xOf(k)) + 0.5;
     c.fillStyle = k % 4 === 0 ? colors["grid-bar"] : colors["grid-beat"];
     c.fillRect(x - 0.5, top, 1, bottom - top);
   }
-  for (let i = 0; i < rows; i++) {
-    const m = state.low + i, y = bottom - (i + 1) * rh;
+  for (let i = firstRow; i <= lastRow; i++) {
+    const m = state.low + i, y = yOf(m + 1);
     c.fillStyle = BLACK.has(m % 12) ? colors["key-black"] : colors["key-white"];
     c.fillRect(left - keyW, y, keyW - 2, rh);
     c.fillStyle = colors["key-edge"]; c.fillRect(left - keyW, y + rh - 0.5, keyW - 2, 0.5);
-    if (m % 12 === 0 && rh >= 7) {
+    if ((m % 12 === 0 && rh >= 7) || (rh >= 18 && !BLACK.has(m % 12))) {
       c.fillStyle = colors["key-label"]; c.font = `600 ${Math.min(11, Math.max(8, rh * 0.8))}px ${font}`;
       c.textBaseline = "middle"; c.fillText(noteName(m), left - keyW + 5, y + rh / 2);
     }
   }
   c.restore();
   c.fillStyle = colors["fg-2"]; c.font = `600 11px ${font}`; c.textBaseline = "bottom";
-  for (let bar = 0; bar < state.bars; bar++) c.fillText(String(bar + 1), xOf(bar * 4) + 5, top - 5);
+  for (let bar = 0; bar < state.bars; bar++) {
+    const x = xOf(bar * 4);
+    if (x >= left - 1 && x < right - 8) c.fillText(String(bar + 1), x + 5, top - 5);
+  }
 }
 
 /* A smooth filled outline with round caps: the width follows the pen. */
@@ -2230,11 +2281,17 @@ function drawBoard() {
   c.drawImage(boardCanvas, 0, 0); c.drawImage(inkCanvas, 0, 0);
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
   if (current) { c.save(); clipBoard(c); paintStroke(c, current, current.pred); c.restore(); }
-  if (ui.playing) {
-    const x = xOf(fraction() * loopBeats());
-    c.fillStyle = colors.playhead;
-    c.fillRect(Math.round(x) - 1, geo.top, 2, geo.bottom - geo.top);
-    c.beginPath(); c.arc(x, geo.top - 6, 5, 0, Math.PI * 2); c.fill();
+  const head = xOf((ui.playing ? fraction() : ui.startFrac) * loopBeats());
+  if (head >= geo.left - 1 && head <= geo.right + 1) {
+    if (ui.playing) {
+      c.fillStyle = colors.playhead;
+      c.fillRect(Math.round(head) - 1, geo.top, 2, geo.bottom - geo.top);
+      c.beginPath(); c.arc(head, geo.top - 6, 5, 0, Math.PI * 2); c.fill();
+    } else if (ui.startFrac > 0) {  // where Play will start
+      c.fillStyle = colors["fg-2"];
+      c.beginPath(); c.moveTo(head - 6, geo.top - 12); c.lineTo(head + 6, geo.top - 12); c.lineTo(head, geo.top - 3); c.closePath(); c.fill();
+      c.globalAlpha = 0.35; c.fillRect(Math.round(head), geo.top, 1, geo.bottom - geo.top); c.globalAlpha = 1;
+    }
   }
   if (hover && !current) {
     const r = ui.tool === "eraser" ? eraserRadius() : Math.max(2, ui.size * rowPx() / 2);
@@ -2247,6 +2304,42 @@ function drawBoard() {
 
 let strokeStart = 0, penSeen = false, erasing = false, smooth = null, gesture = null;
 let pendingTap = null;  // a finger tap that may still become the first finger of a two-finger tap
+let pinch = null, paintOpSlider = () => {};
+function pinchPoints() {
+  const [a, b] = [...touches.values()];
+  return { mx: (a.cx + b.cx) / 2, my: (a.cy + b.cy) / 2, d: Math.max(20, Math.hypot(a.cx - b.cx, a.cy - b.cy)) };
+}
+function pinchStart() { const q = pinchPoints(); pinch = { d0: q.d, z0: view.zoom, b: bOf(q.mx), r: pOf(q.my) - state.low }; }
+function pinchMove() {
+  const q = pinchPoints(), w = geo.right - geo.left, h = geo.bottom - geo.top;
+  view.zoom = clamp(pinch.z0 * q.d / pinch.d0, 1, 8);
+  view.bx = pinch.b - (q.mx - geo.left) / w * visBeats();
+  view.ry = pinch.r - (geo.bottom - q.my) / h * visRows();
+  viewChanged();
+}
+/* Touch and hold on a stroke: take its instrument and opacity (Procreate's eyedropper). */
+function strokeAt(x, y) {
+  const rh = rowPx();
+  for (const layer of state.layers.slice().reverse()) {
+    if (!layer.visible) continue;
+    const mine = state.strokes.filter(st => st.layer === layer.id);
+    for (let i = mine.length - 1; i >= 0; i--) {
+      if (mine[i].pts.some(q => Math.hypot(xOf(q[0]) - x, yOf(q[1]) - y) < Math.max(9, q[2] * rh / 2 + 4))) return mine[i];
+    }
+  }
+  return null;
+}
+function eyedrop(cur) {
+  if (current !== cur) return;
+  const hit = strokeAt(cur.x0, cur.y0);
+  if (!hit) return;
+  current = null; thereminStop();
+  ui.inst = hit.inst; ui.opacity = hit.op;
+  paintOpSlider(); syncChrome(); syncMidiChip(); saveSoon();
+  toast(`Strumento: ${INST[hit.inst].name} · opacità ${Math.round(hit.op * 100)}%`);
+  previewNote(hit.inst, snapScale(Math.floor(hit.pts[0][1])), 0.7, hit.op);
+  requestFrame();
+}
 const touches = new Map();
 const eraserRadius = () => Math.max(12, ui.size * rowPx());
 const inBoard = (x, y) => geo && x >= geo.left - 4 && x <= geo.right + 4 && y >= geo.top - 4 && y <= geo.bottom + 4;
@@ -2299,7 +2392,8 @@ canvas.addEventListener("pointerdown", e => {
   closePopovers();
   if (isPen(e)) penSeen = true;
   if (e.pointerType === "touch") {
-    touches.set(e.pointerId, pointerXY(e));
+    const p0 = pointerXY(e);
+    touches.set(e.pointerId, { x: p0.x, y: p0.y, cx: p0.x, cy: p0.y });
     if (!gesture) gesture = { start: e.timeStamp, max: 0, moved: false };
     gesture.max = Math.max(gesture.max, touches.size);
     if (pendingTap) {
@@ -2311,10 +2405,12 @@ canvas.addEventListener("pointerdown", e => {
       }
       tap.commit();  // a quick series of finger dots: keep the first one
     }
-    if (touches.size >= 2 && current) { current = null; thereminStop(); requestFrame(); }
+    if (touches.size >= 2 && current) { clearTimeout(current.hold); current = null; thereminStop(); requestFrame(); }
+    if (touches.size === 2 && geo) pinchStart(); else pinch = null;
     if ((penSeen && !stylusRecent()) || touches.size >= 2) return;  // palm rejection once a pen is used
   }
   const { x, y } = pointerXY(e);
+  if (geo && y < geo.top && y > geo.top - 32 && x >= geo.left && x <= geo.right) { seek(bOf(x) / loopBeats()); return; }
   if (!inBoard(x, y) || e.button > 0) return;
   const layer = activeLayer();
   if (!layer.visible) { toast("«" + layer.name + "» è nascosto: rendilo visibile per disegnare."); return; }
@@ -2323,6 +2419,8 @@ canvas.addEventListener("pointerdown", e => {
   strokeStart = e.timeStamp; smooth = null;
   current = { id: newId("s"), layer: layer.id, inst: ui.inst, op: +ui.opacity.toFixed(3), pts: [toPoint(e, true)], pointer: e.pointerId, pred: null, finger: !isPen(e) && e.pointerType === "touch", x0: x, y0: y, heard: false };
   if (!current.finger) { soundWhileDrawing(e, true); current.heard = true; }
+  const cur = current;
+  cur.hold = setTimeout(() => eyedrop(cur), 520);
   requestFrame();
 });
 
@@ -2330,11 +2428,14 @@ canvas.addEventListener("pointermove", e => {
   const pos = pointerXY(e);
   if (e.pointerType === "touch" && touches.has(e.pointerId)) {
     const t = touches.get(e.pointerId);
+    t.cx = pos.x; t.cy = pos.y;
     if (gesture && Math.hypot(pos.x - t.x, pos.y - t.y) > 18) gesture.moved = true;
+    if (pinch && touches.size === 2 && gesture && gesture.moved) { pinchMove(); return; }
   }
   hover = e.pointerType === "touch" ? null : pos;
   if (erasing) { eraseAt(pos.x, pos.y); return; }
   if (!current || current.pointer !== e.pointerId) { if (hover) requestFrame(); return; }
+  if (current.hold && Math.hypot(pos.x - current.x0, pos.y - current.y0) > 6) { clearTimeout(current.hold); current.hold = 0; }
   const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
   for (const ce of (events.length ? events : [e])) current.pts.push(toPoint(ce, true, e.pressure));
   const preds = e.getPredictedEvents ? e.getPredictedEvents() : [];
@@ -2348,6 +2449,7 @@ canvas.addEventListener("pointermove", e => {
 function finish(e) {
   if (e.pointerType === "touch") {
     touches.delete(e.pointerId);
+    if (touches.size < 2 && pinch) { pinch = null; if (view.zoom < 1.06) { view.zoom = 1; viewChanged(); } }
     if (gesture && touches.size === 0) {
       const quick = e.timeStamp - gesture.start < 450 && !gesture.moved;
       if (quick && gesture.max === 2) { undo(); toast("Annullato"); }
@@ -2361,6 +2463,7 @@ function finish(e) {
   thereminStop();
   const st = current;
   current = null;
+  clearTimeout(st.hold); delete st.hold;
   if (e.type === "pointercancel") { requestFrame(); return; }
   smooth = null; st.pts.push(toPoint(e, false));
   const tap = st.finger && !st.heard && e.timeStamp - strokeStart < 250;
@@ -2382,6 +2485,22 @@ function commitStroke(st) {
 canvas.addEventListener("pointerup", finish);
 canvas.addEventListener("pointercancel", finish);
 canvas.addEventListener("pointerleave", () => { hover = null; if (!current) requestFrame(); });
+// Trackpad and mouse: pinch or Ctrl + wheel zooms, two-finger scroll moves.
+canvas.addEventListener("wheel", e => {
+  if (!geo) return;
+  e.preventDefault();
+  const { x, y } = pointerXY(e), w = geo.right - geo.left, h = geo.bottom - geo.top;
+  if (e.ctrlKey || e.metaKey) {
+    const b = bOf(x), r = pOf(y) - state.low;
+    view.zoom = clamp(view.zoom * Math.exp(-e.deltaY * 0.01), 1, 8);
+    view.bx = b - (x - geo.left) / w * visBeats();
+    view.ry = r - (geo.bottom - y) / h * visRows();
+  } else {
+    view.bx += e.deltaX / w * visBeats();
+    view.ry -= e.deltaY / h * visRows();
+  }
+  viewChanged();
+}, { passive: false });
 
 function eraseAt(x, y) {
   const r = eraserRadius(), layer = activeLayer(), rh = rowPx(), before = state.strokes.length;
@@ -2396,6 +2515,7 @@ let frameQueued = false;
 function requestFrame() { if (!frameQueued) { frameQueued = true; requestAnimationFrame(frame); } }
 function frame() {
   frameQueued = false;
+  if (viewDirty && ui.view === "draw") { viewDirty = false; cacheBoard(); renderInk(); syncZoomPill(); }
   if (ui.view === "draw") drawBoard();
   else if (ui.view === "beat") markStep();
   else if (ui.view === "midi") drawRoll(false);
@@ -2403,7 +2523,7 @@ function frame() {
   if (ui.playing) requestFrame();
 }
 function updateClock() {
-  const beats = fraction() * loopBeats();
+  const beats = (ui.playing ? fraction() : ui.startFrac) * loopBeats();
   $("#clockNow").textContent = (Math.floor(beats / 4) + 1) + "." + (Math.floor(beats % 4) + 1);
 }
 
@@ -2423,7 +2543,8 @@ function buildBeatGrid() {
     name.className = "beat-name";
     const dot = document.createElement("i"); dot.style.background = colorOf(id);
     name.append(dot, document.createTextNode(INST[id].name));
-    name.onclick = () => previewNote(id, 60, 0.9, 1);
+    if ((tr.vol ?? 1) !== 1 || tr.tune) name.title = `Volume ${Math.round((tr.vol ?? 1) * 100)}% · intonazione ${tr.tune > 0 ? "+" : ""}${tr.tune || 0}`;
+    pressable(name, () => previewDrum(id), () => openTrack(id, name));
     const mute = document.createElement("button");
     mute.className = "mute"; mute.textContent = "M"; mute.title = "Muto";
     mute.setAttribute("aria-label", "Silenzia " + INST[id].name); mute.setAttribute("aria-pressed", String(tr.mute));
@@ -2473,6 +2594,37 @@ document.addEventListener("pointermove", e => {
   setPad(pad, painting.value);
 });
 document.addEventListener("pointerup", () => { if (painting) { painting = null; changed(); } });
+function previewDrum(id) {
+  const tr = state.beat.tracks[id], ctx = audio();
+  const g = ctx.createGain(); g.connect(liveOut); g.connect(liveSend);
+  scheduleDrum(ctx, g, id, ctx.currentTime + 0.004, 0.9 * (tr.vol ?? 1), null, tr.tune || 0);
+}
+/* Long press on a track name: its volume and tuning. */
+let trackOpen = null;
+function openTrack(id, anchor) {
+  closePopovers();
+  const tr = state.beat.tracks[id], pop = $("#popTrack"), app = $("#app").getBoundingClientRect(), r = anchor.getBoundingClientRect();
+  trackOpen = id;
+  $("#trackTitle").textContent = INST[id].name;
+  setRange($("#inTrackVol"), tr.vol ?? 1); $("#valTrackVol").textContent = Math.round((tr.vol ?? 1) * 100) + "%";
+  $("#tuneLabel").textContent = (tr.tune > 0 ? "+" : "") + (tr.tune || 0);
+  pop.hidden = false;
+  pop.style.left = clamp(r.left - app.left, 12, app.width - pop.offsetWidth - 12) + "px";
+  pop.style.top = (r.bottom - app.top + 8) + "px"; pop.style.bottom = ""; pop.style.setProperty("--origin", "top left");
+  ui.open = "popTrack"; ui.openBtn = null;
+}
+$("#inTrackVol").addEventListener("input", e => {
+  const tr = state.beat.tracks[trackOpen]; tr.vol = +e.target.value; fillRange(e.target);
+  $("#valTrackVol").textContent = Math.round(tr.vol * 100) + "%";
+});
+$("#inTrackVol").addEventListener("change", () => { changed(); previewDrum(trackOpen); });
+for (const [btnId, step] of [["#tuneDown", -1], ["#tuneUp", 1]]) $(btnId).onclick = () => {
+  const tr = state.beat.tracks[trackOpen];
+  tr.tune = clamp((tr.tune || 0) + step, -12, 12);
+  $("#tuneLabel").textContent = (tr.tune > 0 ? "+" : "") + tr.tune;
+  previewDrum(trackOpen); changed();
+};
+
 function markStep() {
   const step = ui.playing ? Math.floor(fraction() * loopBeats() * 4) % state.beat.steps : -1;
   if (step === lastStep) return;
@@ -2566,12 +2718,19 @@ function drawRoll(rebuild) {
   }
   const c = roll.getContext("2d");
   c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(rollBg, 0, 0);
-  if (ui.playing) {
+  if (ui.playing || ui.startFrac > 0) {
     c.setTransform(rollGeo.d, 0, 0, rollGeo.d, 0, 0);
-    const x = rollGeo.left + fraction() * (rollGeo.right - rollGeo.left);
-    c.fillStyle = colors.playhead; c.fillRect(Math.round(x) - 1, rollGeo.top, 2, rollGeo.bottom - rollGeo.top);
+    const x = rollGeo.left + (ui.playing ? fraction() : ui.startFrac) * (rollGeo.right - rollGeo.left);
+    c.fillStyle = ui.playing ? colors.playhead : colors["fg-2"]; c.globalAlpha = ui.playing ? 1 : 0.6;
+    c.fillRect(Math.round(x) - 1, rollGeo.top, 2, rollGeo.bottom - rollGeo.top); c.globalAlpha = 1;
   }
 }
+
+roll.addEventListener("pointerdown", e => {
+  if (!rollGeo) return;
+  const x = e.clientX - roll.getBoundingClientRect().left;
+  if (x >= rollGeo.left) { seek((x - rollGeo.left) / (rollGeo.right - rollGeo.left)); drawRoll(false); }
+});
 
 const KEYMAP = { KeyA: 0, KeyW: 1, KeyS: 2, KeyE: 3, KeyD: 4, KeyF: 5, KeyT: 6, KeyG: 7, KeyY: 8, KeyH: 9, KeyU: 10, KeyJ: 11, KeyK: 12, KeyO: 13, KeyL: 14, KeyP: 15, Semicolon: 16 };
 const heldNotes = new Map();
@@ -2817,6 +2976,7 @@ function vslider(el, get, set, label, fmt) {
   });
   el.addEventListener("blur", () => { bubble.hidden = true; });
   paint();
+  return paint;
 }
 
 const POPS = { btnActions: "popActions", btnBoard: "popBoard", btnLayers: "popLayers", btnInst: "popInst" };
@@ -2842,6 +3002,7 @@ function openPopover(btnId, popId = POPS[btnId]) {
 function closePopovers() {
   if (rec) stopRecording();
   $("#popRec").hidden = true;
+  if (!$("#popTrack").hidden) { $("#popTrack").hidden = true; if (ui.view === "beat") buildBeatGrid(); }
   for (const popId of Object.values(POPS)) $("#" + popId).hidden = true;
   for (const btnId of Object.keys(POPS).concat(["midiInst"])) $("#" + btnId).setAttribute("aria-expanded", "false");
   ui.open = null; ui.openBtn = null;
@@ -2926,15 +3087,27 @@ function deleteLayers(ids) {
   changed({ ink: true }); renderLayers();
   toast((names.length === 1 ? `Eliminato «${names[0]}»` : `Eliminati ${names.length} livelli`) + " · due dita per annullare");
 }
+let reordering = false;
+$("#layerList").addEventListener("touchmove", e => { if (reordering) e.preventDefault(); }, { passive: false });
 function attachSwipe(wrap, row, layer) {
   let g = null;
+  const box = () => row.closest(".layer");
   row.addEventListener("pointerdown", e => {
     if (e.target.closest(".lbtn")) return;
     g = { x: e.clientX, y: e.clientY, id: e.pointerId, dx: 0, on: false, base: ui.swipeOpen === layer.id ? -SWIPE_OPEN : 0 };
+    const mine = g;
+    g.hold = setTimeout(() => {  // touch and hold: pick the layer up and move it
+      if (g !== mine || g.on) return;
+      g.reorder = true; reordering = true;
+      try { row.setPointerCapture(mine.id); } catch (err) { /* ignore */ }
+      box().classList.add("lifted"); box().style.transform = "scale(1.03)";
+    }, 420);
   });
   row.addEventListener("pointermove", e => {
     if (!g || e.pointerId !== g.id) return;
     const dx = e.clientX - g.x, dy = e.clientY - g.y;
+    if (g.reorder) { g.dy = dy; box().style.transform = `translateY(${dy}px) scale(1.03)`; return; }
+    if (Math.hypot(dx, dy) > 8) clearTimeout(g.hold);
     if (!g.on) {
       if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { g = null; return; }  // scrolling the list
       if (Math.abs(dx) < 10) return;
@@ -2948,6 +3121,21 @@ function attachSwipe(wrap, row, layer) {
   const end = () => {
     if (!g) return;
     const done = g; g = null;
+    clearTimeout(done.hold);
+    if (done.reorder) {
+      reordering = false; swipedAt = performance.now();
+      const boxes = [...$("#layerList").querySelectorAll(".layer")], el = box(), from = boxes.indexOf(el);
+      const step = el.offsetHeight + 6, to = clamp(from + Math.round((done.dy || 0) / step), 0, boxes.length - 1);
+      el.classList.remove("lifted"); el.style.transform = "";
+      if (to !== from) {  // the list shows the top layer first
+        remember();
+        const n = state.layers.length, i = state.layers.indexOf(layer);
+        state.layers.splice(i, 1); state.layers.splice(n - 1 - to, 0, layer);
+        changed({ ink: true });
+      }
+      renderLayers();
+      return;
+    }
     if (!done.on) return;
     row.classList.remove("dragging"); swipedAt = performance.now();
     if (done.dx < -row.offsetWidth * 0.6) { deleteLayers([layer.id]); return; }  // full swipe, like Mail
@@ -3455,7 +3643,7 @@ load();
 seg($("#segNaming"), ui.naming, v => { ui.naming = v; cacheBoard(); syncChrome(); requestFrame(); saveSoon(); if (ui.view === "midi") { buildKeys(); drawRoll(true); } });
 const SIZE_MIN = 0.12, SIZE_MAX = 1.2;
 vslider($("#sizeSlider"), () => (ui.size - SIZE_MIN) / (SIZE_MAX - SIZE_MIN), v => { ui.size = SIZE_MIN + v * (SIZE_MAX - SIZE_MIN); requestFrame(); }, "Spessore", v => Math.round(v * 100) + "%");
-vslider($("#opSlider"), () => (ui.opacity - 0.15) / 0.85, v => { ui.opacity = 0.15 + v * 0.85; }, "Opacità", v => Math.round((0.15 + v * 0.85) * 100) + "%");
+paintOpSlider = vslider($("#opSlider"), () => (ui.opacity - 0.15) / 0.85, v => { ui.opacity = 0.15 + v * 0.85; }, "Opacità", v => Math.round((0.15 + v * 0.85) * 100) + "%");
 syncChrome(); syncMidiChip(); updateUndo(); updateTransport();
 loadSampleAudio();
 const hashView = { disegna: "draw", beat: "beat", midi: "midi", esporta: "export" }[(location.hash || "").slice(1)];
@@ -3478,5 +3666,5 @@ if (!inArtifact && "serviceWorker" in navigator && (location.protocol === "https
 // No page zoom from pinches on the interface (Safari).
 document.addEventListener("gesturestart", e => e.preventDefault());
 
-window.__gp2m = { state: () => state, ui, renderAll, reviewAudio, detectPitch, sampleBuffers, deleteLayers, collectParts, tiled, allNotes, midiBytes, wavBytes, zipBlob, parseMidi, importMidi, beatHits, showView, loop, ensureLoop };
+window.__gp2m = { screenOf: (b, p) => [xOf(b), yOf(p)], geoTop: () => geo.top, state: () => state, ui, renderAll, reviewAudio, detectPitch, sampleBuffers, deleteLayers, collectParts, tiled, allNotes, midiBytes, wavBytes, zipBlob, parseMidi, importMidi, beatHits, showView, loop, ensureLoop };
 </script>

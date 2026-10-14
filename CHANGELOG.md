@@ -21,6 +21,14 @@
   singoli fuori da claude.ai. Import MIDI fino a 32 battute, salta le battute vuote iniziali
   e aggiunge livelli alla composizione se c'è già musica.
 - Template dell'icona (`tools/icon_template.py`) e icona personalizzata da `web/icon.png`.
+- Tavola: pinch per ingrandire (fino all'800%) e spostarsi con due dita, come in Procreate;
+  rotella o trackpad sul Mac; da vicino compaiono i nomi di tutte le note e la griglia
+  ritmica; un tocco sulla percentuale torna al 100%.
+- Contagocce: tieni premuto su un tratto per prenderne strumento e opacità.
+- Righello: tocca i numeri di battuta (o il piano roll in MIDI) per scegliere da dove parte il
+  play; durante il play salta lì.
+- Livelli: tieni premuto e trascina per cambiarne l'ordine.
+- Beat: tieni premuto il nome di una traccia per volume e intonazione.
 
 ## 0.0.5
 
