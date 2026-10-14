@@ -65,8 +65,7 @@ for m in re.finditer(r'"((?:[^"\\\n]|\\.)*)"|\'((?:[^\'\\\n]|\\.)*)\'|`((?:[^`\\
         add(s)
 
 out = ROOT / "web" / "i18n" / "source.json"
-out.write_text(json.dumps(found, ensure_ascii=False, indent=1), encoding="utf-8")
-print(len(found), "strings ->", out)
+print(len(found), "strings found")
 
 # ---- curation: code that looks like text, and the composite phrases built with "+" ----
 DROP = {"use strict", "SMP:", "WAV:", "Nota saltata:", "Render non riuscito:", "MThd", "MTrk", ").trim() ||",
@@ -77,7 +76,7 @@ DROP = {"use strict", "SMP:", "WAV:", "Nota saltata:", "Render non riuscito:", "
         "Tastiera MIDI:", "MIDI non leggibile:", "Progetto aperto:", "Progetto non leggibile:", "Come funziona:",
         "· due dita per annullare", "· vuoto", "Fai suonare", "(tieni premuto: solo questo)", "s · tocca per fermare",
         "· {0} tratti ora suonano Piano elettrico", "Strumento:", "Battuta", "Registrazione", "Nascondi", "Mostra", "Silenzia",
-        "Spazio · B · E · S · L", "Do Re Mi"}
+        "Spazio · B · E · S · L", "Do Re Mi", "Italiano", "English", "Français", "Español", "script, style, [data-notr]"}
 ADD = ["Pronto: {0}", "Salvato: {0}", "Ora suonano: {0}", "«{0}» è nascosto: rendilo visibile per disegnare.",
        "{0} è fuori dalla tavola: cambia la nota più bassa in Tavola.", "Tastiera MIDI: {0}", "MIDI non leggibile: {0}",
        "Progetto aperto: {0}", "Progetto non leggibile: {0}", "Come funziona: {0}", "due dita per annullare",
@@ -88,8 +87,13 @@ ADD = ["Pronto: {0}", "Salvato: {0}", "Ora suonano: {0}", "«{0}» è nascosto: 
        "Livello {0}", "{0} battute", "{0} battuta", "1 tratto", "1 livello", "rilevata", "leggera", "decisa", "media",
        "pausa", "spessore", "Registrazione", "Spazio", "nessuna nota chiara: {0}"]
 found = [s for s in found if s not in DROP]
+# keep the strings added by hand earlier (labels built in code the scan cannot see)
+prev = json.loads(out.read_text(encoding="utf-8")) if out.exists() else []
 for s in ADD:
     if s not in found:
+        found.append(s)
+for s in prev:
+    if s not in found and s not in DROP:
         found.append(s)
 out.write_text(json.dumps(found, ensure_ascii=False, indent=1), encoding="utf-8")
 print(len(found), "after curation")
