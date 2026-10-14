@@ -442,6 +442,16 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   background: var(--fg); color: var(--paper); animation: toast-in 0.34s var(--spring) both;
 }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 10px) scale(0.94); } to { opacity: 1; transform: translate(-50%, 0); } }
+.brush-list { display: grid; gap: 4px; }
+.brush { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; align-items: center; padding: 8px; border-radius: 14px; text-align: left; transition: background 0.2s, transform 0.2s var(--spring); }
+.brush:active { transform: scale(0.98); }
+.brush[aria-pressed="true"] { background: var(--fill); box-shadow: inset 0 0 0 2px var(--blue); }
+.brush canvas { width: 112px; height: 40px; }
+.brush b { display: block; font-size: 15px; font-weight: 600; }
+.brush small { display: block; font-size: 12.5px; color: var(--fg-2); line-height: 1.35; }
+.sel-bar { top: 74px; left: 50%; transform: translateX(-50%); padding: 6px; gap: 6px; animation: pop-in 0.3s var(--spring) both; }
+.sel-count { padding: 0 8px 0 12px; font-size: 14px; font-weight: 600; color: var(--fg-2); white-space: nowrap; }
+.chip.danger { color: var(--red); }
 .zoom-pill {
   position: absolute; z-index: 4; padding: 7px 13px; border-radius: 999px; font-size: 13px; font-weight: 650;
   font-family: var(--font-round); font-variant-numeric: tabular-nums; animation: pop-in 0.3s var(--spring) both;
@@ -475,6 +485,8 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   .keys-card { height: 140px; }
   .tempo span { min-width: 54px; }
   .clock { min-width: 52px; }
+  .sel-bar { top: auto; bottom: 136px; max-width: calc(100% - 24px); }
+  .sel-count { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -605,6 +617,9 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
     <button class="ib" id="btnEraser" title="Gomma (E)" aria-label="Gomma" aria-pressed="false">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"><path d="M14.5 4.5l5 5-9 9H6l-2.5-2.5z"/><path d="M9 10l5 5M10.5 18.5H20"/></svg>
     </button>
+    <button class="ib" id="btnLasso" title="Lazo: seleziona e sposta (S)" aria-label="Lazo" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><ellipse cx="12" cy="10" rx="8" ry="5.5" stroke-dasharray="3.2 3"/><path d="M8.5 15c-1.2 1.8-.8 4 1.6 5"/></svg>
+    </button>
     <button class="ib" id="btnLayers" title="Livelli (L)" aria-label="Livelli" aria-expanded="false" aria-controls="popLayers">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 4l8.5 4.5L12 13 3.5 8.5z"/><path d="M3.5 12.5L12 17l8.5-4.5M3.5 16.5L12 21l8.5-4.5"/></svg>
     </button>
@@ -628,6 +643,13 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   </div>
 
   <div class="bubble" id="bubble" hidden></div>
+  <div class="cap sel-bar glass" id="selBar" hidden>
+    <span class="sel-count" id="selCount"></span>
+    <button class="chip" id="selDup">Duplica</button>
+    <button class="chip" id="selInst">Strumento attuale</button>
+    <button class="chip danger" id="selDel">Elimina</button>
+    <button class="chip" id="selDone">Fine</button>
+  </div>
 
   <!-- Popovers -->
   <section class="popover" id="popActions" hidden aria-label="Composizione">
@@ -659,6 +681,14 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
     <div class="label">Pennello</div>
     <div class="group">
       <div class="item col"><div class="item" style="padding:0;min-height:0"><span>Stabilizzazione</span><span class="v" id="valStab"></span></div><input id="inStab" type="range" min="0" max="0.85" step="0.01" aria-label="Stabilizzazione"></div>
+    </div>
+  </section>
+
+  <section class="popover" id="popBrush" hidden aria-label="Pennelli">
+    <div class="pop-head"><h2>Pennelli</h2></div>
+    <div class="brush-list" id="brushList"></div>
+    <div class="group" id="roughBox" hidden style="margin-top:10px">
+      <div class="item col"><div class="item" style="padding:0;min-height:0"><label for="inRough">Ruvidezza</label><span class="v" id="valRough"></span></div><input id="inRough" type="range" min="0" max="1" step="0.01"></div>
     </div>
   </section>
 
@@ -795,11 +825,29 @@ const PRESETS = {
   EMPTY: { name: "Vuoto", swing: 0, rows: {} },
 };
 
+/* Brushes: how a stroke looks and what it does to the sound. */
+const BRUSHES = [
+  { id: "smooth", name: "Liscio", sound: "Lo spessore segue la pressione: è il volume." },
+  { id: "ink", name: "Inchiostro ruvido", sound: "Rumore su altezza e spessore, come Ink Rough di Blender: vibrato e tremolo irregolari." },
+  { id: "pencil", name: "Matita", sound: "Grana di grafite, tratto sottile: suono più scuro." },
+  { id: "marker", name: "Pennarello", sound: "Spessore costante, punta piatta: volume fermo." },
+  { id: "air", name: "Aerografo", sound: "Bordi sfumati: la nota entra piano (attacco lento)." },
+  { id: "dots", name: "Puntini", sound: "Un punto a ogni passo della griglia: il gesto diventa un arpeggio." },
+  { id: "fill", name: "Pieno", sound: "Chiude la forma: suona tutte le note che copre, un cluster." },
+];
+const BRUSH = Object.fromEntries(BRUSHES.map(b => [b.id, b]));
+/* Smooth 1-D value noise in [-1, 1]. */
+function noise1(t, seed) {
+  const h = n => { const x = Math.sin((n + seed * 57.13) * 127.1) * 43758.5453; return x - Math.floor(x); };
+  const i = Math.floor(t), f = t - i, u = f * f * (3 - 2 * f);
+  return (h(i) * (1 - u) + h(i + 1) * u) * 2 - 1;
+}
+
 /* ---------- state ---------- */
 
 let state = null;
 const ui = {
-  view: "draw", tool: "brush", inst: "EPIANO", size: 0.5, opacity: 1, naming: "IT", stabilize: 0.3,
+  view: "draw", tool: "brush", brush: "smooth", rough: 0.5, inst: "EPIANO", size: 0.5, opacity: 1, naming: "IT", stabilize: 0.3,
   playing: false, open: null, openBtn: null, metronome: false, recording: false, kbBase: 60, repeats: 1, exportBeat: true,
   stems: false, picked: new Set(), swipeOpen: null, layerOpen: null, startFrac: 0,
 };
@@ -872,7 +920,7 @@ function makeStroke(layer, inst, path, w, op, bpm) {
 
 function save() {
   try {
-    localStorage.setItem(STORE_KEY, JSON.stringify({ state, ui: { inst: ui.inst, size: ui.size, opacity: ui.opacity, naming: ui.naming, stabilize: ui.stabilize, kbBase: ui.kbBase, view: ui.view } }));
+    localStorage.setItem(STORE_KEY, JSON.stringify({ state, ui: { brush: ui.brush, rough: ui.rough, inst: ui.inst, size: ui.size, opacity: ui.opacity, naming: ui.naming, stabilize: ui.stabilize, kbBase: ui.kbBase, view: ui.view } }));
   } catch (e) { /* storage blocked */ }
 }
 let saveTimer = 0;
@@ -930,6 +978,7 @@ function load() {
         state = s;
         Object.assign(ui, data.ui || {});
         if (!INST[ui.inst]) ui.inst = "EPIANO";
+        if (!BRUSH[ui.brush]) ui.brush = "smooth";
         if (!["draw", "beat", "midi", "export"].includes(ui.view)) ui.view = "draw";
         return;
       }
@@ -962,6 +1011,7 @@ function redo() {
   history.push(snapshot()); restore(future.pop()); afterUndo();
 }
 function afterUndo() {
+  sel = null; $("#selBar").hidden = true;
   changed({ ink: true }); refreshPanels(); updateUndo();
   if (ui.view === "beat") { buildBeatGrid(); syncBeatControls(); }
 }
@@ -1046,7 +1096,57 @@ function interpretLayer(layer, voices, notes) {
   for (const st of state.strokes) if (st.layer === layer.id && st.pts.length) interpretStroke(st, layer, voices, notes);
 }
 
+/* A filled shape: in every grid column it plays the scale notes it covers (a cluster). */
+function interpretFill(st, layer, voices, notes) {
+  const k = spb(), poly = st.pts, n = poly.length, xs = poly.map(q => q[0]);
+  const b0 = Math.max(0, Math.min(...xs)), b1 = Math.min(loopBeats(), Math.max(...xs));
+  if (b1 - b0 < 0.05) return;
+  const step = state.grid || 0.125, cols = [];
+  for (let c = Math.floor(b0 / step) * step; c < b1; c += step) {
+    const mid = c + step / 2, ys = [];
+    for (let i = 0; i < n; i++) {
+      const [xa, ya] = poly[i], [xb, yb] = poly[(i + 1) % n];
+      if ((xa <= mid && xb > mid) || (xb <= mid && xa > mid)) ys.push(ya + (mid - xa) / (xb - xa) * (yb - ya));
+    }
+    ys.sort((a, b) => a - b);
+    const set = new Set();
+    for (let j = 0; j + 1 < ys.length; j += 2) {
+      for (let m = Math.ceil(ys[j] - 0.5); m <= Math.floor(ys[j + 1] - 0.5); m++) set.add(snapScale(m));
+    }
+    if (!set.size && ys.length) set.add(snapScale(Math.floor((ys[0] + ys[ys.length - 1]) / 2)));
+    let pitches = [...set].sort((a, b) => a - b);
+    if (pitches.length > 12) pitches = pitches.filter((_, i) => i % Math.ceil(pitches.length / 12) === 0);
+    cols.push({ start: Math.max(c, 0), end: Math.min(c + step, loopBeats()), pitches });
+  }
+  const most = Math.max(1, ...cols.map(c => c.pitches.length));
+  const w = st.pts.reduce((a, q) => a + q[2], 0) / n;
+  const amp = clamp(ampOf(w) * 1.15 / Math.sqrt(most), 0.05, 1);
+  const vel = Math.round(clamp(20 + 107 * amp, 1, 127));
+  if (isDrum(st.inst)) {  // a filled drum shape is a roll: one hit per column
+    for (const c of cols) if (c.pitches.length) {
+      const a = clamp(amp * Math.sqrt(c.pitches.length / most) * 1.4, 0.1, 1);
+      voices.push({ inst: st.inst, bright: st.op, layer: layer.id, start: c.start * k, dur: 0.1, midi: 60, amp: Float32Array.of(a, a) });
+      notes.push({ start: c.start * k, end: c.start * k + 0.1, midi: 60, vel, inst: st.inst, layer: layer.id });
+    }
+    return;
+  }
+  const open = new Map();
+  const close = (m, end) => {
+    const start = open.get(m); open.delete(m);
+    voices.push({ inst: st.inst, bright: st.op, layer: layer.id, start: start * k, dur: (end - start) * k, midi: m, amp: Float32Array.of(amp, amp) });
+    notes.push({ start: start * k, end: end * k, midi: m, vel, inst: st.inst, layer: layer.id });
+  };
+  let prevEnd = null;
+  for (const c of cols) {
+    for (const m of [...open.keys()]) if (!c.pitches.includes(m) || prevEnd !== c.start) close(m, prevEnd);
+    for (const m of c.pitches) if (!open.has(m)) open.set(m, c.start);
+    prevEnd = c.end;
+  }
+  for (const m of [...open.keys()]) close(m, prevEnd);
+}
+
 function interpretStroke(st, layer, voices, notes) {
+  if (st.brush === "fill" && st.pts.length >= 3) { interpretFill(st, layer, voices, notes); return; }
   const k = spb();
   let mode = isDrum(st.inst) ? "QUANTIZED" : layer.mode;
   if (layer.mode === "GESTURE") {
@@ -1069,7 +1169,7 @@ function readRun(run, st, layer, mode, step, voices, notes) {
   const t0 = t[0], t1 = t[t.length - 1];
   if (t1 < 0 || t0 >= L) return;
   const snap = x => (step ? Math.round(x / step) * step : x);
-  const base = { inst: st.inst, bright: st.op, layer: layer.id };
+  const base = { inst: st.inst, bright: st.op * (st.brush === "pencil" ? 0.65 : 1), layer: layer.id, soft: st.brush === "air" };
   const mean = a => a.reduce((s, v) => s + v, 0) / a.length;
   const note = (start, end, midi, amp) => notes.push({ start, end, midi: Math.round(midi), vel: Math.round(clamp(20 + 107 * amp, 1, 127)), inst: st.inst, layer: layer.id });
 
@@ -1246,7 +1346,11 @@ function scheduleVoice(ctx, dest, v, when, track) {
   const e = s + Math.max(v.dur, 0.02);
   const bright = clamp(v.bright, 0, 1);
   const amp = ctx.createGain(); amp.connect(dest); ampCurve(amp.gain, v, s);
-  const env = ctx.createGain(); env.connect(amp);
+  const env = ctx.createGain();
+  if (v.soft) {  // airbrush: the note fades in
+    const fade = ctx.createGain(); fade.gain.setValueAtTime(0, s); fade.gain.linearRampToValueAtTime(1, s + 0.16);
+    env.connect(fade); fade.connect(amp);
+  } else env.connect(amp);
   const f0 = hz(v.curve ? v.curve[0] : v.midi);
   const nodes = [];
   const osc = (type, map = hz, detune = 0) => {
@@ -2252,12 +2356,65 @@ function screenPoints(pts) {
   }
   return out;
 }
+const grains = new Map();
+function grainPattern(c, color) {  // graphite: specks of the colour with holes
+  if (!grains.has(color)) {
+    const cv = document.createElement("canvas"); cv.width = cv.height = 64;
+    const g = cv.getContext("2d"), img = g.createImageData(64, 64);
+    const rgb = [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16));
+    for (let i = 0; i < 64 * 64; i++) {
+      const a = Math.random();
+      img.data.set([rgb[0], rgb[1], rgb[2], a < 0.25 ? 0 : 120 + a * 135], i * 4);
+    }
+    g.putImageData(img, 0, 0);
+    grains.set(color, cv);
+  }
+  return c.createPattern(grains.get(color), "repeat");
+}
+/* Draw screen points [x, y, radius] in a brush style. */
+function drawStyled(c, brush, sp, color, op) {
+  if (!sp.length) return;
+  c.save();
+  c.globalAlpha = op;
+  switch (brush) {
+    case "marker": {
+      const w = Math.max(2, sp.reduce((a, q) => a + q[2], 0) / sp.length * 2);
+      c.globalAlpha = op * 0.8; c.strokeStyle = color; c.lineWidth = w; c.lineCap = "square"; c.lineJoin = "round";
+      c.beginPath(); c.moveTo(sp[0][0], sp[0][1]);
+      for (const q of sp.slice(1)) c.lineTo(q[0], q[1]);
+      if (sp.length === 1) c.lineTo(sp[0][0] + 0.1, sp[0][1]);
+      c.stroke();
+      break;
+    }
+    case "pencil": c.fillStyle = grainPattern(c, color); strokeShape(c, sp); break;
+    case "air": {
+      const avg = sp.reduce((a, q) => a + q[2], 0) / sp.length;
+      const k = c.getTransform().a || 1;
+      c.shadowColor = color; c.shadowBlur = Math.max(4, avg * 1.4) * k; c.shadowOffsetX = 10000 * k;
+      c.translate(-10000, 0); c.globalAlpha = op * 0.95; c.fillStyle = color;
+      strokeShape(c, sp.map(q => [q[0], q[1], q[2] * 0.75]));
+      break;
+    }
+    case "dots":
+      c.fillStyle = color;
+      for (const q of sp) { c.beginPath(); c.arc(q[0], q[1], Math.max(1.5, q[2]), 0, Math.PI * 2); c.fill(); }
+      break;
+    case "fill":
+      c.beginPath(); c.moveTo(sp[0][0], sp[0][1]);
+      for (const q of sp.slice(1)) c.lineTo(q[0], q[1]);
+      c.closePath();
+      c.globalAlpha = op * 0.42; c.fillStyle = color; c.fill();
+      c.globalAlpha = op; c.strokeStyle = color; c.lineWidth = 2; c.lineJoin = "round"; c.stroke();
+      break;
+    default: c.fillStyle = color; strokeShape(c, sp);
+  }
+  c.restore();
+}
 function paintStroke(c, st, extra) {
   const pts = extra ? st.pts.concat(extra) : st.pts;
   if (!pts.length) return;
-  c.globalAlpha = st.op; c.fillStyle = colorOf(st.inst);
-  strokeShape(c, screenPoints(pts));
-  c.globalAlpha = 1;
+  if (st.brush === "dots" && st.dots) { drawStyled(c, "dots", screenPoints(st.dots), colorOf(st.inst), st.op); return; }
+  drawStyled(c, st.brush || "smooth", screenPoints(pts), colorOf(st.inst), st.op);
 }
 function clipBoard(c) { roundRect(c, geo.left, geo.top, geo.right - geo.left, geo.bottom - geo.top, [0, 18, 18, 0]); c.clip(); }
 function renderInk() {
@@ -2268,10 +2425,77 @@ function renderInk() {
   c.save(); clipBoard(c);
   for (const layer of state.layers) {
     if (!layer.visible) continue;
-    for (const st of state.strokes) if (st.layer === layer.id) paintStroke(c, st);
+    for (const st of state.strokes) if (st.layer === layer.id && !(sel && sel.ids.has(st.id))) paintStroke(c, st);
   }
   c.restore();
 }
+
+/* ---------- lasso: select, move (snapped to the grid and to semitones), duplicate ---------- */
+let sel = null, lasso = null, drag = null;
+const beatPx = () => (geo.right - geo.left) / visBeats();
+function selectedStrokes() { return sel ? state.strokes.filter(st => sel.ids.has(st.id)) : []; }
+function inPolygon(x, y, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function selectionBox() {
+  const pts = selectedStrokes().flatMap(st => st.pts);
+  if (!pts.length) return null;
+  const xs = pts.map(q => xOf(q[0] + sel.db)), ys = pts.map(q => yOf(q[1] + sel.dp));
+  return { x0: Math.min(...xs) - 10, x1: Math.max(...xs) + 10, y0: Math.min(...ys) - 10, y1: Math.max(...ys) + 10 };
+}
+function selectInPolygon(poly) {
+  const layer = activeLayer();
+  const ids = new Set(state.strokes.filter(st => st.layer === layer.id && layer.visible)
+    .filter(st => st.pts.filter(q => inPolygon(xOf(q[0]), yOf(q[1]), poly)).length >= st.pts.length / 2).map(st => st.id));
+  if (!ids.size) { toast("Nessun tratto qui: cerchia i tratti del livello attivo."); clearSelection(); return; }
+  sel = { ids, db: 0, dp: 0 };
+  syncSelBar(); renderInk(); requestFrame();
+}
+function clearSelection() {
+  if (!sel && !lasso) return;
+  sel = null; lasso = null; drag = null;
+  $("#selBar").hidden = true;
+  renderInk(); requestFrame();
+}
+function syncSelBar() {
+  $("#selBar").hidden = !sel;
+  if (sel) $("#selCount").textContent = sel.ids.size === 1 ? "1 tratto" : `${sel.ids.size} tratti`;
+}
+function applyMove() {
+  if (!sel || (!sel.db && !sel.dp)) return;
+  remember();
+  for (const st of selectedStrokes()) {
+    st.pts = st.pts.map(q => [+(q[0] + sel.db).toFixed(4), +(q[1] + sel.dp).toFixed(4), q[2], q[3]]);
+    if (st.dots) delete st.dots;
+  }
+  sel.db = 0; sel.dp = 0;
+  changed(); renderInk();
+}
+$("#selDup").onclick = () => {
+  remember();
+  const copies = selectedStrokes().map(st => ({ ...JSON.parse(JSON.stringify(st)), id: newId("s") }));
+  state.strokes.push(...copies);
+  sel = { ids: new Set(copies.map(c => c.id)), db: 0, dp: 0 };
+  syncSelBar(); changed({ ink: true }); toast("Duplicato: trascinalo dove vuoi");
+};
+$("#selInst").onclick = () => {
+  remember();
+  for (const st of selectedStrokes()) st.inst = ui.inst;
+  changed({ ink: true }); requestFrame(); toast("Ora suonano: " + INST[ui.inst].name);
+};
+$("#selDel").onclick = () => {
+  remember();
+  const ids = sel.ids;
+  state.strokes = state.strokes.filter(st => !ids.has(st.id));
+  sel = null; $("#selBar").hidden = true;
+  changed({ ink: true }); refreshPanels(); toast("Eliminato · due dita per annullare");
+};
+$("#selDone").onclick = () => clearSelection();
 
 let hover = null, current = null;
 function drawBoard() {
@@ -2280,7 +2504,23 @@ function drawBoard() {
   c.setTransform(1, 0, 0, 1, 0, 0);
   c.drawImage(boardCanvas, 0, 0); c.drawImage(inkCanvas, 0, 0);
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
-  if (current) { c.save(); clipBoard(c); paintStroke(c, current, current.pred); c.restore(); }
+  if (current) { c.save(); clipBoard(c); paintStroke(c, current, current.brush === "dots" ? null : current.pred); c.restore(); }
+  if (sel) {
+    c.save(); clipBoard(c);
+    for (const st of selectedStrokes()) paintStroke(c, { ...st, dots: null, pts: st.pts.map(q => [q[0] + sel.db, q[1] + sel.dp, q[2], q[3]]) });
+    c.restore();
+    const bx = selectionBox();
+    if (bx) {
+      c.save(); c.strokeStyle = SYS.blue[darkMode ? 1 : 0]; c.lineWidth = 1.5; c.setLineDash([6, 5]);
+      roundRect(c, bx.x0, bx.y0, bx.x1 - bx.x0, bx.y1 - bx.y0, 10); c.stroke(); c.restore();
+    }
+  }
+  if (lasso && lasso.pts.length > 1) {
+    c.save(); c.strokeStyle = colors.fg; c.globalAlpha = 0.7; c.lineWidth = 1.5; c.setLineDash([5, 5]);
+    c.beginPath(); c.moveTo(lasso.pts[0][0], lasso.pts[0][1]);
+    for (const q of lasso.pts) c.lineTo(q[0], q[1]);
+    c.stroke(); c.restore();
+  }
   const head = xOf((ui.playing ? fraction() : ui.startFrac) * loopBeats());
   if (head >= geo.left - 1 && head <= geo.right + 1) {
     if (ui.playing) {
@@ -2334,9 +2574,9 @@ function eyedrop(cur) {
   const hit = strokeAt(cur.x0, cur.y0);
   if (!hit) return;
   current = null; thereminStop();
-  ui.inst = hit.inst; ui.opacity = hit.op;
+  ui.inst = hit.inst; ui.opacity = hit.op; ui.brush = hit.brush || "smooth";
   paintOpSlider(); syncChrome(); syncMidiChip(); saveSoon();
-  toast(`Strumento: ${INST[hit.inst].name} · opacità ${Math.round(hit.op * 100)}%`);
+  toast(`${INST[hit.inst].name} · ${BRUSH[ui.brush].name} · opacità ${Math.round(hit.op * 100)}%`);
   previewNote(hit.inst, snapScale(Math.floor(hit.pts[0][1])), 0.7, hit.op);
   requestFrame();
 }
@@ -2381,7 +2621,33 @@ function toPoint(e, stabilized, fallback) {
   return [+bOf(x).toFixed(4), +pOf(y).toFixed(4), +widthFor(e, fallback).toFixed(3), Math.round(e.timeStamp - strokeStart)];
 }
 
+/* Every new point goes through the brush: noise, fixed width, dots on the grid. */
+function addPoint(cur, q) {
+  const last = cur.pts[cur.pts.length - 1];
+  if (last) cur.len += Math.hypot((q[0] - last[0]) * beatPx(), (q[1] - last[1]) * rowPx());
+  switch (cur.brush) {
+    case "marker": q[2] = +(ui.size * 0.8).toFixed(3); break;
+    case "pencil": q[2] = +(q[2] * 0.55 * (1 + 0.18 * noise1(cur.len / 5, cur.seed))).toFixed(3); break;
+    case "air": q[2] = +(q[2] * 1.35).toFixed(3); break;
+    case "ink": {
+      const r = ui.rough;
+      q[1] = +(q[1] + r * 0.55 * noise1(cur.len / 26, cur.seed)).toFixed(4);
+      q[0] = +(q[0] + r * 0.04 * noise1(cur.len / 33, cur.seed + 7)).toFixed(4);
+      q[2] = +Math.max(0.03, q[2] * (1 + r * 0.75 * noise1(cur.len / 11, cur.seed + 3))).toFixed(3);
+      break;
+    }
+  }
+  cur.pts.push(q);
+  if (cur.brush === "dots") {
+    const cell = Math.floor(q[0] / (state.grid || 0.25));
+    if (cur.cell !== cell) {
+      cur.cell = cell; cur.dots.push(q.slice());
+      previewNote(cur.inst, snapScale(Math.floor(q[1])), ampOf(q[2]), cur.op);
+    }
+  }
+}
 function soundWhileDrawing(e, first) {
+  if (current.brush === "dots" || current.brush === "fill") return;
   const p = pOf(pointerXY(e).y), w = widthFor(e), layer = activeLayer();
   if (isDrum(current.inst)) { if (first) previewNote(current.inst, 60, ampOf(w), ui.opacity); return; }
   if (layer.mode === "OPTICAL") { if (first) thereminStart(current.inst, p - 0.5, ampOf(w)); else thereminMove(p - 0.5, ampOf(w)); return; }
@@ -2416,8 +2682,18 @@ canvas.addEventListener("pointerdown", e => {
   if (!layer.visible) { toast("«" + layer.name + "» è nascosto: rendilo visibile per disegnare."); return; }
   try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* pointer already gone */ }
   if (ui.tool === "eraser") { remember(); erasing = true; eraseAt(x, y); return; }
+  if (ui.tool === "lasso") {
+    const bx = sel && selectionBox();
+    if (bx && x >= bx.x0 && x <= bx.x1 && y >= bx.y0 && y <= bx.y1) { drag = { x, y, pointer: e.pointerId }; return; }
+    if (sel) clearSelection();
+    lasso = { pts: [[x, y]], pointer: e.pointerId };
+    requestFrame();
+    return;
+  }
   strokeStart = e.timeStamp; smooth = null;
-  current = { id: newId("s"), layer: layer.id, inst: ui.inst, op: +ui.opacity.toFixed(3), pts: [toPoint(e, true)], pointer: e.pointerId, pred: null, finger: !isPen(e) && e.pointerType === "touch", x0: x, y0: y, heard: false };
+  current = { id: newId("s"), layer: layer.id, inst: ui.inst, op: +ui.opacity.toFixed(3), brush: ui.brush, pts: [], len: 0, seed: Math.random() * 1000, dots: [],
+    pointer: e.pointerId, pred: null, finger: !isPen(e) && e.pointerType === "touch", x0: x, y0: y, heard: false };
+  addPoint(current, toPoint(e, true));
   if (!current.finger) { soundWhileDrawing(e, true); current.heard = true; }
   const cur = current;
   cur.hold = setTimeout(() => eyedrop(cur), 520);
@@ -2434,10 +2710,21 @@ canvas.addEventListener("pointermove", e => {
   }
   hover = e.pointerType === "touch" ? null : pos;
   if (erasing) { eraseAt(pos.x, pos.y); return; }
+  if (lasso && lasso.pointer === e.pointerId) { lasso.pts.push([pos.x, pos.y]); requestFrame(); return; }
+  if (drag && drag.pointer === e.pointerId) {
+    const step = state.grid || 0;
+    let db = (pos.x - drag.x) / beatPx();
+    if (step) db = Math.round(db / step) * step;
+    sel.db = db; sel.dp = Math.round((drag.y - pos.y) / rowPx());
+    const h = $("#hint"); clearTimeout(hintTimer);
+    h.textContent = `Sposta: ${sel.dp > 0 ? "+" : ""}${sel.dp} semitoni · ${db > 0 ? "+" : ""}${+db.toFixed(2)} battiti`;
+    requestFrame();
+    return;
+  }
   if (!current || current.pointer !== e.pointerId) { if (hover) requestFrame(); return; }
   if (current.hold && Math.hypot(pos.x - current.x0, pos.y - current.y0) > 6) { clearTimeout(current.hold); current.hold = 0; }
   const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
-  for (const ce of (events.length ? events : [e])) current.pts.push(toPoint(ce, true, e.pressure));
+  for (const ce of (events.length ? events : [e])) addPoint(current, toPoint(ce, true, e.pressure));
   const preds = e.getPredictedEvents ? e.getPredictedEvents() : [];
   current.pred = preds.length ? preds.slice(0, 3).map(pe => toPoint(pe, false, e.pressure)) : null;
   if (!current.heard && Math.hypot(pos.x - current.x0, pos.y - current.y0) > 6) { soundWhileDrawing(e, true); current.heard = true; }
@@ -2459,15 +2746,22 @@ function finish(e) {
     }
   }
   if (erasing) { erasing = false; if (history.length && history[history.length - 1] === snapshot()) { history.pop(); updateUndo(); } return; }
+  if (lasso && lasso.pointer === e.pointerId) {
+    const poly = lasso.pts; lasso = null;
+    if (poly.length > 4 && e.type === "pointerup") selectInPolygon(poly); else requestFrame();
+    return;
+  }
+  if (drag && drag.pointer === e.pointerId) { drag = null; applyMove(); $("#hint").textContent = HINT; return; }
   if (!current || current.pointer !== e.pointerId) return;
   thereminStop();
   const st = current;
   current = null;
   clearTimeout(st.hold); delete st.hold;
   if (e.type === "pointercancel") { requestFrame(); return; }
-  smooth = null; st.pts.push(toPoint(e, false));
+  smooth = null;
+  if (st.brush !== "dots") addPoint(st, toPoint(e, false));
   const tap = st.finger && !st.heard && e.timeStamp - strokeStart < 250;
-  delete st.pointer; delete st.pred; delete st.finger; delete st.x0; delete st.y0; delete st.heard;
+  for (const k of ["pointer", "pred", "finger", "x0", "y0", "heard", "len", "seed", "cell"]) delete st[k];
   if (tap) {  // wait a moment: a second finger turns it into an undo gesture
     const commit = () => { commitStroke(st); previewNote(st.inst, snapScale(Math.floor(st.pts[0][1])), 0.7, st.op); };
     pendingTap = { time: e.timeStamp, commit, timer: setTimeout(() => { pendingTap = null; commit(); }, 90) };
@@ -2477,9 +2771,15 @@ function finish(e) {
   commitStroke(st);
 }
 function commitStroke(st) {
-  remember(); state.strokes.push(st);
+  let made = [st];
+  if (st.brush === "dots") {  // every dot is its own short note
+    made = (st.dots.length ? st.dots : st.pts.slice(0, 1)).map(q => ({ id: newId("s"), layer: st.layer, inst: st.inst, op: st.op, brush: "dots", pts: [q] }));
+  } else if (st.brush === "fill" && st.pts.length < 4) st.brush = "smooth";
+  delete st.dots;
+  if (st.brush === "smooth") delete st.brush;
+  remember(); state.strokes.push(...made);
   const c = inkCanvas.getContext("2d");
-  c.save(); c.setTransform(dpr, 0, 0, dpr, 0, 0); clipBoard(c); paintStroke(c, st); c.restore();
+  c.save(); c.setTransform(dpr, 0, 0, dpr, 0, 0); clipBoard(c); for (const m of made) paintStroke(c, m); c.restore();
   changed(); refreshPanels();
 }
 canvas.addEventListener("pointerup", finish);
@@ -2938,6 +3238,7 @@ function showView(view, instant) {
     $(TAB[k]).setAttribute("aria-selected", String(on));
   }
   $("#tools").hidden = view !== "draw";
+  if (view !== "draw") clearSelection();
   movePill();
   if (view === "draw") layoutDraw();
   if (view === "beat") { buildBeatGrid(); syncBeatControls(); }
@@ -2989,6 +3290,7 @@ function openPopover(btnId, popId = POPS[btnId]) {
   if (popId === "popBoard") syncBoardForm();
   if (popId === "popActions") $("#actNewConfirm").hidden = true;
   if (popId === "popInst") renderInstruments();
+  if (popId === "popBrush") renderBrushes();
   pop.hidden = false;
   const pw = pop.offsetWidth, leftSide = r.left + r.width / 2 < app.left + app.width / 2;
   const fromBottom = r.top - app.top > app.height * 0.55;
@@ -3002,6 +3304,7 @@ function openPopover(btnId, popId = POPS[btnId]) {
 function closePopovers() {
   if (rec) stopRecording();
   $("#popRec").hidden = true;
+  $("#popBrush").hidden = true; $("#btnBrush").setAttribute("aria-expanded", "false");
   if (!$("#popTrack").hidden) { $("#popTrack").hidden = true; if (ui.view === "beat") buildBeatGrid(); }
   for (const popId of Object.values(POPS)) $("#" + popId).hidden = true;
   for (const btnId of Object.keys(POPS).concat(["midiInst"])) $("#" + btnId).setAttribute("aria-expanded", "false");
@@ -3506,12 +3809,58 @@ function syncMidiChip() {
 
 function setTool(tool) {
   ui.tool = tool;
+  if (tool !== "lasso") clearSelection();
   $("#btnBrush").setAttribute("aria-pressed", String(tool === "brush"));
   $("#btnEraser").setAttribute("aria-pressed", String(tool === "eraser"));
+  $("#btnLasso").setAttribute("aria-pressed", String(tool === "lasso"));
   requestFrame();
 }
-$("#btnBrush").onclick = () => { closePopovers(); setTool("brush"); };
+/* Brush: the first tap picks the brush tool, the next one opens the brush library. */
+$("#btnBrush").onclick = e => {
+  e.stopPropagation();
+  if (ui.tool === "brush") openPopover("btnBrush", "popBrush");
+  else { closePopovers(); setTool("brush"); }
+};
 $("#btnEraser").onclick = () => { closePopovers(); setTool("eraser"); };
+$("#btnLasso").onclick = () => { closePopovers(); setTool(ui.tool === "lasso" ? "brush" : "lasso"); if (ui.tool === "lasso") toast("Cerchia i tratti del livello attivo, poi trascinali"); };
+function brushPreview(cv, id) {
+  const d = Math.min(devicePixelRatio || 1, 2), w = 112, h = 40;
+  cv.width = w * d; cv.height = h * d;
+  const c = cv.getContext("2d"); c.scale(d, d);
+  const color = colorOf(ui.inst), seed = 3, sp = [];
+  if (id === "fill") {
+    for (let i = 0; i < 40; i++) { const a = i / 40 * Math.PI * 2; sp.push([56 + Math.cos(a) * 40, 20 + Math.sin(a) * 13 + Math.sin(a * 3) * 3, 2]); }
+  } else if (id === "dots") {
+    for (let i = 0; i < 9; i++) sp.push([10 + i * 11.5, 20 - Math.sin(i / 8 * Math.PI * 1.6) * 11, 2.6 + (i % 3) * 0.5]);
+  } else {
+    for (let i = 0; i <= 60; i++) {
+      const u = i / 60, pr = Math.sin(Math.PI * u);
+      let y = 20 - Math.sin(u * Math.PI * 2) * 9, r = id === "marker" ? 4 : (id === "pencil" ? 1.6 : 1 + 4.5 * pr) * (id === "air" ? 1.4 : 1);
+      if (id === "ink") { y += noise1(u * 9, seed) * 3; r *= 1 + 0.7 * noise1(u * 16, seed + 3); }
+      if (id === "pencil") r *= 1 + 0.2 * noise1(u * 30, seed);
+      sp.push([8 + u * 96, y, Math.max(0.6, r)]);
+    }
+  }
+  drawStyled(c, id, sp, color, 1);
+}
+function renderBrushes() {
+  const list = $("#brushList");
+  list.textContent = "";
+  for (const b of BRUSHES) {
+    const btn = document.createElement("button");
+    btn.className = "brush"; btn.setAttribute("aria-pressed", String(ui.brush === b.id));
+    const cv = document.createElement("canvas"); brushPreview(cv, b.id);
+    const txt = document.createElement("span");
+    const nm = document.createElement("b"); nm.textContent = b.name;
+    const sm = document.createElement("small"); sm.textContent = b.sound;
+    txt.append(nm, sm); btn.append(cv, txt);
+    btn.onclick = () => { ui.brush = b.id; saveSoon(); renderBrushes(); };
+    list.append(btn);
+  }
+  $("#roughBox").hidden = ui.brush !== "ink";
+  setRange($("#inRough"), ui.rough); $("#valRough").textContent = Math.round(ui.rough * 100) + "%";
+}
+$("#inRough").addEventListener("input", e => { ui.rough = +e.target.value; fillRange(e.target); $("#valRough").textContent = Math.round(ui.rough * 100) + "%"; saveSoon(); });
 $("#btnUndo").onclick = undo;
 $("#btnRedo").onclick = redo;
 $("#btnPlay").onclick = () => (ui.playing ? stop() : play());
@@ -3626,6 +3975,7 @@ document.addEventListener("keydown", e => {
   else if (e.key === "4") showView("export");
   else if (e.key === "b" && ui.view === "draw") setTool("brush");
   else if (e.key === "e" && ui.view === "draw") setTool("eraser");
+  else if (e.key === "s" && ui.view === "draw") setTool("lasso");
   else if (e.key === "l" && ui.view === "draw") openPopover("btnLayers");
   else if (e.key === "Escape") closePopovers();
 });
