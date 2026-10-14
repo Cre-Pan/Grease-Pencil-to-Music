@@ -2,8 +2,10 @@
 """Sound drawn in the Timeline / Dope Sheet, with a header button (music note,
 next to Overlays) that chooses what to show.
 
-Sources: the active composition, all compositions, one composition, the mix
-of the Video Sequencer, one Sequencer channel, Speaker objects. Layers:
+Sources: everything (every sound of the Sequencer, on any channel, the
+Speakers and the compositions with their notes), the active composition, all
+compositions, one composition, the mix of the Video Sequencer, one Sequencer
+channel, Speaker objects. Plain audio and compositions get their own colors. Layers:
 waveform (peaks, filled, outline, RMS), note blocks (MIDI) and pitch curves
 of optical strokes.
 
@@ -19,7 +21,7 @@ import numpy as np
 
 _handles = []
 _reported = [False]
-_file_cache = {}  # (path, mtime, size) -> (peaks, rate)
+_file_cache = {}  # (path, mtime, size) -> (peaks, rate), or None if unreadable
 PEAK_RATE = 100  # peaks per second for sound files
 
 
@@ -122,40 +124,95 @@ def note_geometry(data, start_frame, fps, to_x, width, y0, y1, show_notes=True,
 
 # --- Sources -----------------------------------------------------------------------
 
+def _peaks_of(sound):
+    """``(peaks, rate)`` of an ``aud.Sound`` (loudest channel)."""
+    rate = int(sound.specs[0])
+    data = np.abs(sound.data())
+    mono = data.max(axis=1) if data.ndim == 2 else data
+    hop = max(1, rate // PEAK_RATE)
+    usable = len(mono) // hop * hop
+    peaks = mono[:usable].reshape(-1, hop).max(axis=1) if usable else np.zeros(0)
+    return peaks.astype(np.float32), PEAK_RATE
+
+
+def _remember(key, value):
+    if len(_file_cache) > 64:
+        _file_cache.clear()
+    _file_cache[key] = value
+    return value
+
+
 def file_peaks(path):
-    """Peaks (0..1, PEAK_RATE per second) of a sound file, cached."""
+    """Peaks (0..1, PEAK_RATE per second) of a sound file, cached.
+
+    Unreadable files are cached too, so a broken path is not decoded again
+    at every redraw."""
     try:
         stat = os.stat(path)
     except OSError:
         return None
     key = (path, stat.st_mtime, stat.st_size)
-    cached = _file_cache.get(key)
-    if cached is not None:
-        return cached
+    if key in _file_cache:
+        return _file_cache[key]
     import aud
     try:
-        sound = aud.Sound(path)
-        rate = int(sound.specs[0])
-        data = np.abs(sound.data())
+        found = _peaks_of(aud.Sound(path))
     except Exception:
+        found = None
+    return _remember(key, found)
+
+
+def sound_peaks(sound):
+    """Peaks of a Blender sound datablock: from its file, or from memory when
+    it is packed in the .blend (or the file is missing)."""
+    if sound is None:
         return None
-    mono = data.max(axis=1) if data.ndim == 2 else data
-    hop = max(1, rate // PEAK_RATE)
-    usable = len(mono) // hop * hop
-    peaks = mono[:usable].reshape(-1, hop).max(axis=1) if usable else np.zeros(0)
-    if len(_file_cache) > 64:
-        _file_cache.clear()
-    _file_cache[key] = (peaks.astype(np.float32), PEAK_RATE)
-    return _file_cache[key]
+    if sound.packed_file is None:
+        path = bpy.path.abspath(sound.filepath, library=sound.library)
+        found = file_peaks(path)
+        if found is not None:
+            return found
+        if os.path.exists(path):
+            return None  # the file exists but cannot be decoded
+    key = ("packed", sound.name_full,
+           sound.packed_file.size if sound.packed_file is not None else 0)
+    if key in _file_cache:
+        return _file_cache[key]
+    found = None
+    try:
+        if sound.packed_file is not None:
+            found = _packed_peaks(sound)
+        elif sound.factory is not None:
+            found = _peaks_of(sound.factory)
+    except Exception:
+        found = None
+    return _remember(key, found)
 
 
-def _sound_path(sound):
-    if sound is None or sound.packed_file is not None:
-        return None
-    return bpy.path.abspath(sound.filepath, library=sound.library)
+def _packed_peaks(sound):
+    """aud reads files only: decode the packed bytes from a temporary copy."""
+    import tempfile
+    import aud
+    ext = os.path.splitext(sound.filepath)[1] or ".wav"
+    handle, path = tempfile.mkstemp(suffix=ext, prefix="gp2m_peaks_")
+    try:
+        with os.fdopen(handle, "wb") as out:
+            out.write(sound.packed_file.data)
+        return _peaks_of(aud.Sound(path))
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
-def _strip_segments(scene, channel=None):
+def _is_composition_strip(strip):
+    from .engine import STRIP_PREFIX
+    return strip.name.startswith(STRIP_PREFIX)
+
+
+def _strip_segments(scene, channel=None, skip_compositions=False):
+    """Every audible sound strip of the Sequencer (on any channel, or one)."""
     editor = scene.sequence_editor
     if editor is None:
         return []
@@ -165,12 +222,13 @@ def _strip_segments(scene, channel=None):
             continue
         if channel is not None and strip.channel != channel:
             continue
+        if skip_compositions and _is_composition_strip(strip):
+            continue
         channel_data = editor.channels[strip.channel] if strip.channel < len(
             editor.channels) else None
         if channel_data is not None and channel_data.mute:
             continue
-        path = _sound_path(strip.sound)
-        found = file_peaks(path) if path else None
+        found = sound_peaks(strip.sound)
         if found is None:
             continue
         peaks, rate = found
@@ -191,8 +249,7 @@ def _speaker_segments(scene):
             for strip in track.strips:
                 if strip.type != "SOUND" or strip.mute:
                     continue
-                path = _sound_path(obj.data.sound)
-                found = file_peaks(path) if path else None
+                found = sound_peaks(obj.data.sound)
                 if found is None:
                     continue
                 peaks, rate = found
@@ -224,19 +281,28 @@ def _composition_items(context, settings):
     return items
 
 
+def _composition_segments(items):
+    return [{"start": start, "peaks": data["peaks"], "rate": data["rate"],
+             "frame_from": start, "frame_to": end} for data, start, end in items]
+
+
 def collect(context, settings):
-    """``(wave segments, composition items)`` for the chosen source."""
+    """``(audio segments, composition segments, composition items)`` for the
+    chosen source. Audio is every other sound (Sequencer, Speakers)."""
     scene = context.scene
-    if settings.source == "VSE_MIX":
-        return _strip_segments(scene), []
-    if settings.source == "VSE_CHANNEL":
-        return _strip_segments(scene, settings.channel), []
-    if settings.source == "SPEAKERS":
-        return _speaker_segments(scene), []
+    source = settings.source
+    if source == "EVERYTHING":
+        items = _composition_items(context, settings)
+        audio = _strip_segments(scene, skip_compositions=True) + _speaker_segments(scene)
+        return audio, _composition_segments(items), items
+    if source == "VSE_MIX":
+        return _strip_segments(scene), [], []
+    if source == "VSE_CHANNEL":
+        return _strip_segments(scene, settings.channel), [], []
+    if source == "SPEAKERS":
+        return _speaker_segments(scene), [], []
     items = _composition_items(context, settings)
-    segments = [{"start": start, "peaks": data["peaks"], "rate": data["rate"],
-                 "frame_from": start, "frame_to": end} for data, start, end in items]
-    return segments, items
+    return [], _composition_segments(items), items
 
 
 # --- Drawing -----------------------------------------------------------------------
@@ -253,8 +319,8 @@ def _draw():
         region = context.region
         if region is None or region.type != "WINDOW" or region.view2d is None:
             return
-        segments, items = collect(context, settings)
-        if not segments and not items:
+        audio, composed, items = collect(context, settings)
+        if not audio and not composed and not items:
             return
         import gpu
         from gpu_extras.batch import batch_for_shader
@@ -278,13 +344,18 @@ def _draw():
         gpu.state.blend_set("ALPHA")
         alpha = settings.opacity
 
-        frames, amplitude = build_wave(segments, frame_min, frame_max, fps,
-                                       bins_per_frame=max(1.0, min(4.0, ppf)))
-        for primitive, vertices, weight in wave_geometry(to_x(frames), amplitude, y0, y1,
-                                                         settings.wave_style):
-            batch = batch_for_shader(shader, primitive, {"pos": vertices})
-            shader.uniform_float("color", (*settings.wave_color, 0.35 * alpha * weight))
-            batch.draw(shader)
+        bins = max(1.0, min(4.0, ppf))
+        for segments, color in ((audio, settings.audio_color),
+                                (composed, settings.wave_color)):
+            if not segments:
+                continue
+            frames, amplitude = build_wave(segments, frame_min, frame_max, fps,
+                                           bins_per_frame=bins)
+            for primitive, vertices, weight in wave_geometry(
+                    to_x(frames), amplitude, y0, y1, settings.wave_style):
+                batch = batch_for_shader(shader, primitive, {"pos": vertices})
+                shader.uniform_float("color", (*color, 0.35 * alpha * weight))
+                batch.draw(shader)
 
         for data, start, _end in items:
             tris, lines = note_geometry(data, start, fps, to_x, region.width, y0, y1,
@@ -340,9 +411,12 @@ class GP2M_PT_timeline(bpy.types.Panel):
             col.prop(settings, "channel")
         col.separator()
         col.prop(settings, "wave_style")
-        col.prop(settings, "wave_color")
+        if settings.source in ("EVERYTHING", "VSE_MIX", "VSE_CHANNEL", "SPEAKERS"):
+            col.prop(settings, "audio_color")
+        if settings.source not in ("VSE_MIX", "VSE_CHANNEL", "SPEAKERS"):
+            col.prop(settings, "wave_color")
         sub = col.column(heading="Mostra")
-        sub.active = settings.source in ("ACTIVE", "ALL", "PICK")
+        sub.active = settings.source in ("EVERYTHING", "ACTIVE", "ALL", "PICK")
         sub.prop(settings, "show_notes")
         sub.prop(settings, "show_optical")
         col.separator()

@@ -89,6 +89,33 @@
   Interfaccia → Lingua); al primo avvio segue la lingua del dispositivo. I nomi che scrivi
   (livelli, composizione, suoni, onde) non vengono tradotti.
 
+## 0.0.6
+
+Novità
+- **Timeline: audio + composizioni**. Nuova sorgente *Tutto* (ora predefinita): ogni strip
+  audio del Sequencer su **qualsiasi canale** (anche il canale 1 quando non è una
+  composizione), gli Speaker e le composizioni con note e curve, insieme. L'audio
+  "normale" e le composizioni hanno due colori (*Colore audio*, *Colore composizioni*);
+  la strip di una composizione non viene contata due volte.
+- **Cinque letture** con lettere e icone, come nella web app: Q (Quantizzata), QL
+  (Quantizzata legata), O (Ottica), **OL (Ottica legata, nuova)**, G (Gesto). I file
+  salvati con 0.0.5 mantengono la loro lettura.
+- **Legato tra i tratti** (QL e OL): i tratti dello stesso strumento (e con gli stessi
+  effetti) più vicini di *Unisci tratti entro* diventano una sola voce che scivola, in
+  altezza e volume, attraverso la pausa. Le percussioni non si legano.
+- **Ottica per chitarra e campana**: in lettura ottica (e legata) un tono morbido tiene il
+  suono dopo il pizzico e segue la linea, così il glissando si sente fino in fondo.
+
+Miglioramenti tecnici
+- **Render robusto**: un tratto o una nota che non si riesce a generare viene saltato
+  (e segnalato nel pannello, *N parti saltate*, con il primo errore in console) invece di
+  far fallire tutta la composizione; le parti saltate vengono riprovate al render dopo.
+- **Memoria della cache limitata**: la cache dei tratti si ferma a 512 MB di audio e
+  quella dei livelli a 256 MB (prima contava solo il numero di elementi); l'analisi dei
+  tratti ha una cache a parte, così cambiare il legato non rilegge tutto.
+- **Timeline**: i file audio che non si riescono a decodificare non vengono riletti a ogni
+  ridisegno; i suoni impacchettati nel .blend ora si vedono.
+
 ## 0.0.5
 
 Novità

@@ -230,6 +230,27 @@ def test_layer_modes_and_effects(comp):
     assert optical.voice_count == 1 and quantized.voice_count > 1
 
 
+def test_five_readings_and_legato_across_strokes(comp):
+    engine, props = sub("engine"), sub("props")
+    items = props.GP2M_LayerSettings.bl_rna.properties["mode"].enum_items
+    assert [i.identifier for i in items] == ["QUANTIZED", "LEGATO", "OPTICAL",
+                                             "OPTICAL_LEGATO", "GESTURE"]
+    # Saved numbers are those of 0.0.5 (older files keep their reading).
+    assert {i.identifier: i.value for i in items} == {
+        "QUANTIZED": 0, "OPTICAL": 1, "LEGATO": 2, "GESTURE": 3, "OPTICAL_LEGATO": 4}
+    assert [i.name.split(" · ")[0] for i in items] == ["Q", "QL", "O", "OL", "G"]
+    add_stroke(comp, 0, line(comp, 1.0, 1.5, 60))
+    add_stroke(comp, 0, line(comp, 1.7, 2.2, 64))
+    settings = props.find_layer_settings(comp.data, "Livello 1")
+    settings.mode = "OPTICAL"
+    assert engine.regenerate(comp).voice_count == 2
+    settings.mode = "OPTICAL_LEGATO"
+    joined = engine.regenerate(comp)
+    assert joined.voice_count == 1 and len(joined.notes) == 2
+    settings.legato_gap = 0.0
+    assert engine.regenerate(comp).voice_count == 2
+
+
 def test_export_wav_mp3_midi(comp, tmp_path):
     add_stroke(comp, 0, line(comp, 0.5, 1.5, 60))
     add_stroke(comp, 1, line(comp, 2.0, 2.2, 40), material_index=7)  # drums
@@ -550,16 +571,65 @@ def test_timeline_sources(comp):
     add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
     engine.regenerate(comp)
     settings = bpy.context.scene.gp2m_timeline
-    for source in ("ACTIVE", "ALL", "VSE_MIX", "VSE_CHANNEL"):
+    assert settings.source == "EVERYTHING"  # the default
+    for source in ("EVERYTHING", "ACTIVE", "ALL", "VSE_MIX", "VSE_CHANNEL"):
         settings.source = source
         settings.channel = engine.find_strip(bpy.context.scene, comp).channel
-        segments, items = timeline.collect(bpy.context, settings)
+        audio, composed, items = timeline.collect(bpy.context, settings)
+        segments = audio + composed
         assert segments, source
         assert any(len(s["peaks"]) and s["peaks"].max() > 0 for s in segments)
-        assert bool(items) == (source in ("ACTIVE", "ALL"))
+        assert bool(items) == (source in ("EVERYTHING", "ACTIVE", "ALL"))
+        # The composition's own strip is not counted twice next to its notes.
+        assert not audio if source in ("EVERYTHING", "ACTIVE", "ALL") else not composed
     settings.source = "SPEAKERS"
-    assert timeline.collect(bpy.context, settings) == ([], [])
-    settings.source = "ACTIVE"
+    assert timeline.collect(bpy.context, settings) == ([], [], [])
+    settings.source = "EVERYTHING"
+
+
+def _tone_file(path, seconds=2.0, rate=22050):
+    t = np.arange(int(seconds * rate)) / rate
+    data = (np.sin(2 * np.pi * 330 * t) * 0.5 * 32767).astype("<i2")
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(rate)
+        handle.writeframes(data.tobytes())
+    return path
+
+
+def test_timeline_shows_plain_audio_with_the_compositions(comp, tmp_path):
+    """Any sound strip (channel 1 included, not a composition) is drawn next to
+    the compositions, even when it is packed in the .blend file."""
+    engine, timeline = sub("engine"), sub("timeline")
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
+    engine.regenerate(comp)
+    scene = bpy.context.scene
+    path = _tone_file(tmp_path / "voice.wav")
+    strip = scene.sequence_editor.strips.new_sound("Voce", str(path), 1, scene.frame_start)
+    try:
+        assert strip.channel == 1
+        settings = scene.gp2m_timeline
+        settings.source = "EVERYTHING"
+        audio, composed, items = timeline.collect(bpy.context, settings)
+        assert len(audio) == 1 and audio[0]["peaks"].max() > 0.4
+        assert composed and items
+        settings.source = "VSE_CHANNEL"
+        settings.channel = 1
+        on_one = timeline.collect(bpy.context, settings)[0]
+        assert any(abs(seg["peaks"].max() - 0.5) < 0.01 for seg in on_one)
+        strip.sound.pack()
+        os.remove(path)
+        settings.source = "EVERYTHING"
+        audio, _composed, _items = timeline.collect(bpy.context, settings)
+        assert len(audio) == 1 and audio[0]["peaks"].max() > 0.4
+        strip.mute = True
+        assert timeline.collect(bpy.context, settings)[0] == []
+    finally:
+        sound = strip.sound
+        scene.sequence_editor.strips.remove(strip)
+        bpy.data.sounds.remove(sound)
+        scene.gp2m_timeline.source = "EVERYTHING"
 
 
 def test_timeline_header_and_popover_draw(comp):
@@ -568,7 +638,8 @@ def test_timeline_header_and_popover_draw(comp):
     timeline.GP2M_PT_timeline.draw(_Drawer(log), bpy.context)
     timeline.draw_header_button(_Drawer(log), bpy.context)
     drawn = {entry[1] for entry in log}
-    assert {"source", "wave_style", "show_notes", "show_optical", "enabled"} <= drawn
+    assert {"source", "wave_style", "show_notes", "show_optical", "enabled",
+            "audio_color", "wave_color"} <= drawn
 
 
 

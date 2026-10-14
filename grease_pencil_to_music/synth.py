@@ -308,6 +308,19 @@ def _sample(ident, freq, sample_rate):
 
 # --- Voice rendering ---------------------------------------------------------
 
+GLIDE_HOLD = ("PLUCK", "BELL")  # struck / plucked: the sound dies before the line ends
+GLIDE_HOLD_MIN = 0.2  # seconds: shorter voices are just notes
+
+
+def _glide_hold(phase, ts, sample_rate, brightness):
+    """A soft sustained tone under a plucked or struck sound read optically (or
+    legato): it rises after the attack and carries the glide on, so the pitch
+    keeps moving with the line after the pluck has faded."""
+    tone = (2.0 / np.pi) * np.arcsin(np.sin(phase)) + 0.25 * np.sin(2.0 * phase)
+    tone = _lowpass(tone, sample_rate, 500.0 + brightness * 2600.0)
+    return 0.3 * tone * np.clip(ts / 0.14, 0.0, 1.0)
+
+
 def voice_length(voice, sample_rate):
     inst = get_instrument(voice.instrument)
     if inst.percussive:
@@ -367,6 +380,9 @@ def render_voice(voice, sample_rate=44100, vibrato_rate=5.5):
                                                   NOISE_BAND):
         dull = _lowpass(signal, sample_rate, 2.5 * f0)
         signal = brightness * signal + (1.0 - brightness) * dull
+
+    if voice.glide and inst.ident in GLIDE_HOLD and voice.duration > GLIDE_HOLD_MIN:
+        signal = signal + _glide_hold(phase, ts, sample_rate, float(np.mean(brightness)))
 
     attack = max(voice.attack, 0.12 if inst.ident == "STRINGS" else 0.0)
     envelope = ctrl(voice.amp) * np.clip(ts / max(attack, 1e-4), 0.0, 1.0)

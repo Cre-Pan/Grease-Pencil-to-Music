@@ -81,6 +81,7 @@ def _layer_inputs(obj, reads):
             mode=settings.mode if settings else "QUANTIZED",
             fill_mode=settings.fill_mode if settings else "TONAL",
             glide=settings.glide if settings else 0.12,
+            legato_gap=settings.legato_gap if settings else 1.0,
             gain=read.opacity,
             fx=_layer_fx(settings),
             canon_voices=settings.canon_voices if settings else 1,
@@ -478,6 +479,7 @@ def regenerate(obj, scene=None, force=False):
         "multi_keyframes": [] if s.use_sections else [r.name for r in reads
                                                        if r.keyframes > 1],
         "sections": len(result.sections),
+        "skipped": result.errors,
     }
     st["error"] = None
     return result

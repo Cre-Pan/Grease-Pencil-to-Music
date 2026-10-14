@@ -7,11 +7,17 @@ The board lives in the object's local X-Z plane:
 * Z is pitch: each row of height ``row_height`` is one semitone, the bottom
   row (``0 <= z < row_height``) is ``low_note``.
 
-Two reading modes exist per layer:
+Five reading modes exist per layer (letters as shown in the interface):
 
-* ``QUANTIZED``: the stroke is split into notes every time it crosses a row;
-  pitches snap to the chosen scale, start/end snap to the rhythmic grid.
-* ``OPTICAL``: McLaren style; the pitch follows the line continuously.
+* ``QUANTIZED`` (Q): the stroke is split into notes every time it crosses a
+  row; pitches snap to the chosen scale, start/end snap to the rhythmic grid.
+* ``LEGATO`` (QL): the same notes joined by glides, without a new attack.
+* ``OPTICAL`` (O): McLaren style; the pitch follows the line continuously.
+* ``OPTICAL_LEGATO`` (OL): optical, and strokes closer than a beat join.
+* ``GESTURE`` (G): the rhythm of the hand that drew the stroke.
+
+In the two legato modes nearby strokes of the same instrument become one
+voice (:func:`legato_join`), gliding through the gap between them.
 
 Pure Python + NumPy: no ``bpy`` import.
 """
@@ -85,6 +91,10 @@ class Voice:
     instrument: str = "SINE"
     band_low: np.ndarray = None  # noise band edges (MIDI pitch), NOISE clusters only
     band_high: np.ndarray = None
+    glide: bool = False  # the pitch moves freely: struck sounds keep a sustained tone
+
+
+LEGATO_MODES = ("LEGATO", "OPTICAL_LEGATO")
 
 
 NOISE_BAND = "NOISE_BAND"  # internal instrument of noise clusters
@@ -370,6 +380,8 @@ def interpret_stroke(stroke, spec, mapping, mode="QUANTIZED", radius_ref=0.0,
 
     if mode == "GESTURE":
         return _interpret_gesture(stroke, spec, mapping, radius_ref)
+    if mode == "OPTICAL_LEGATO":  # strokes are joined later, by legato_join
+        mode = "OPTICAL"
     x = np.asarray(stroke.x, dtype=np.float64)
     arrays = [np.asarray(stroke.z, dtype=np.float64),
               np.asarray(stroke.radius, dtype=np.float64),
@@ -441,7 +453,7 @@ def _legato(stroke, result, pitches, tc, count, t1c, channels, spec, step, attac
     curves = {key: np.interp(times, tc, values) for key, values in channels.items()}
     voice = Voice(start=v_start, duration=v_end - v_start, pitch=pitch_curve, amp=curves["amp"],
                   vibrato=curves["vibrato"], brightness=curves["brightness"], pan=curves["pan"],
-                  attack=attack, instrument=stroke.instrument)
+                  attack=attack, instrument=stroke.instrument, glide=True)
     result.voices.append(voice)
     for start, end, pitch in notes:
         mask = (times >= start) & (times <= end)
@@ -532,8 +544,9 @@ def _interpret_run(stroke, x, arrays, spec, mapping, mode, radius_ref, glide=0.1
         return float(tc[i1]) if i1 < count else t1c
 
     if mode == "OPTICAL":
-        result.voices.append(
-            _make_voice(t0c, t1c - t0c, cont, channels, 0, count, attack, stroke.instrument))
+        result.voices.append(replace(
+            _make_voice(t0c, t1c - t0c, cont, channels, 0, count, attack, stroke.instrument),
+            glide=True))
         for i0, i1, pitch in _segments(np.round(cont).astype(np.int64), min_len):
             amp = channels["amp"][i0:i1]
             result.notes.append(MidiNote(float(tc[i0]), note_end(i1), pitch, _velocity(amp),
@@ -569,3 +582,75 @@ def _interpret_run(stroke, x, arrays, spec, mapping, mode, radius_ref, glide=0.1
             result.notes.append(MidiNote(start, start + step, pitch, _velocity(voice.amp),
                                          stroke.instrument, stroke.layer))
     return result
+
+
+# --- Legato across strokes ---------------------------------------------------------
+
+_CURVES = ("pitch", "amp", "vibrato", "brightness", "pan")
+
+
+def legato_groups(voices, gap):
+    """Indices of ``voices`` (one instrument) grouped for legato: a voice that
+    starts less than ``gap`` seconds after the previous ones have ended joins
+    them. Groups are sorted by start."""
+    order = sorted(range(len(voices)), key=lambda i: voices[i].start)
+    groups, end = [], -np.inf
+    for i in order:
+        voice = voices[i]
+        if not groups or voice.start - end > gap:
+            groups.append([])
+            end = -np.inf
+        groups[-1].append(i)
+        end = max(end, voice.start + voice.duration)
+    return groups
+
+
+def join_voices(voices):
+    """One voice out of several (sorted by start): where they overlap the one
+    that started last sounds; across a gap pitch and loudness glide in a
+    straight line from the end of one to the start of the next."""
+    if len(voices) == 1:
+        return voices[0]
+    start = voices[0].start
+    end = max(v.start + v.duration for v in voices)
+    n = max(2, int(round((end - start) * CONTROL_RATE)) + 1)
+    times = start + np.arange(n) / CONTROL_RATE
+    curves = {name: np.full(n, np.nan) for name in _CURVES}
+    for voice in voices:
+        own = voice.start + np.arange(len(voice.pitch)) / CONTROL_RATE
+        inside = (times >= voice.start - 1e-9) & (times <= voice.start + voice.duration + 1e-9)
+        if not np.any(inside):
+            continue
+        for name in _CURVES:
+            values = np.asarray(getattr(voice, name), dtype=np.float64)
+            if len(values) != len(own):
+                values = _resample(values, len(own))
+            curves[name][inside] = np.interp(times[inside], own, values)
+    known = ~np.isnan(curves["pitch"])
+    for name in _CURVES:
+        curve = curves[name]
+        curve[~known] = np.interp(times[~known], times[known], curve[known])
+    first = voices[0]
+    return Voice(start=float(start), duration=float(end - start), pitch=curves["pitch"],
+                 amp=curves["amp"], vibrato=curves["vibrato"],
+                 brightness=curves["brightness"], pan=curves["pan"], attack=first.attack,
+                 instrument=first.instrument, glide=True)
+
+
+def legato_join(voices, gap, joinable=lambda voice: True):
+    """Join the voices of the same instrument closer than ``gap`` seconds.
+
+    Returns ``[(indices, voice)]``: the indices of the original voices each
+    resulting voice is made of (voices that cannot join stay alone)."""
+    out, by_instrument = [], {}
+    for i, voice in enumerate(voices):
+        if voice.instrument == NOISE_BAND or not joinable(voice):
+            out.append(([i], voice))
+        else:
+            by_instrument.setdefault(voice.instrument, []).append(i)
+    for indices in by_instrument.values():
+        members = [voices[i] for i in indices]
+        for group in legato_groups(members, gap):
+            out.append(([indices[k] for k in group], join_voices([members[k] for k in group])))
+    out.sort(key=lambda item: item[1].start)
+    return out

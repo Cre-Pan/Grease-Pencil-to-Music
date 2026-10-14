@@ -131,6 +131,9 @@ def draw_status(layout, comp):
         if stats.get("sections", 0) > 1:
             layout.label(text=f"{stats['sections']} sezioni · "
                          f"{engine.duration(comp):.1f} s", icon="KEYFRAME")
+        if stats.get("skipped"):
+            layout.label(text=f"{stats['skipped']} parti saltate (vedi la console)",
+                         icon="ERROR")
         if stats["multi_keyframes"]:
             box = layout.box()
             box.label(text="Viene letto solo il keyframe all'inizio della scena:", icon="INFO")
@@ -219,6 +222,8 @@ def draw_layer_details(layout, gp, layer):
     box.prop(settings, "mode")
     if settings.mode == "LEGATO":
         box.prop(settings, "glide")
+    if settings.mode in ("LEGATO", "OPTICAL_LEGATO"):
+        box.prop(settings, "legato_gap")
     box.prop(settings, "fill_mode")
     col = box.column(align=True)
     col.prop(settings, "canon_voices")

@@ -50,17 +50,24 @@ def _composition_poll(_self, obj):
     return obj.type == "GREASEPENCIL" and obj.gp2m.is_composition
 
 
+# Explicit numbers keep the values saved in older .blend files (enums are stored
+# by number); the letters are the ones of the web app, like Procreate's blend modes.
 LAYER_MODES = (
-    ("QUANTIZED", "Quantizzata",
-     "Il tratto diventa note: cambia nota ogni volta che attraversa una riga"),
-    ("OPTICAL", "Ottica (libera)",
-     "Stile McLaren: l'altezza segue la linea in modo continuo, con glissandi"),
-    ("LEGATO", "Legato (morphing)",
-     "Note della scala unite da glissandi: un'unica voce che scivola da una nota all'altra "
-     "senza riattacco"),
-    ("GESTURE", "Gesto (tempo del disegno)",
+    ("QUANTIZED", "Q · Quantizzata",
+     "Il tratto diventa note: cambia nota ogni volta che attraversa una riga, agganciata "
+     "alla scala e alla griglia; ogni nota attacca da capo", "IPO_CONSTANT", 0),
+    ("LEGATO", "QL · Quantizzata legata",
+     "Le note della scala unite da glissandi, senza riattacco: anche da un tratto al "
+     "successivo dello stesso strumento, se sono vicini", "IPO_LINEAR", 2),
+    ("OPTICAL", "O · Ottica",
+     "Stile McLaren: l'altezza segue la linea in modo continuo, con glissandi. Chitarra e "
+     "campana tengono il suono e scivolano", "IPO_SINE", 1),
+    ("OPTICAL_LEGATO", "OL · Ottica legata",
+     "Come Ottica, ma i tratti vicini dello stesso strumento diventano una sola voce: la "
+     "linea continua anche nelle pause, senza riattacco", "IPO_BEZIER", 4),
+    ("GESTURE", "G · Gesto",
      "Il ritmo è quello della mano: il tratto parte dove inizia e dura quanto hai impiegato "
-     "a disegnarlo (una linea verticale veloce diventa una scala rapida)"),
+     "a disegnarlo (una linea verticale veloce diventa una scala rapida)", "HAND", 3),
 )
 
 
@@ -86,6 +93,12 @@ class GP2M_LayerSettings(bpy.types.PropertyGroup):
                          subtype="TIME_ABSOLUTE", unit="TIME_ABSOLUTE",
                          description="Durata dello scivolamento da una nota all'altra",
                          update=_sound_changed)
+    legato_gap: FloatProperty(name="Unisci tratti entro (battiti)", default=1.0, min=0.0,
+                              max=8.0, step=25,
+                              description="Nelle letture legate, i tratti dello stesso "
+                              "strumento più vicini di così diventano una sola voce che "
+                              "scivola nella pausa (0 = solo quelli che si toccano)",
+                              update=_sound_changed)
     delay_mix: FloatProperty(name="Eco", default=0.0, min=0.0, max=1.0, subtype="FACTOR",
                              update=_sound_changed)
     delay_beats: FloatProperty(name="Tempo eco (battiti)", default=0.75, min=0.125, max=4.0,
@@ -237,6 +250,9 @@ class GP2M_PlaySettings(bpy.types.PropertyGroup):
 
 
 TIMELINE_SOURCES = (
+    ("EVERYTHING", "Tutto (audio + composizioni)",
+     "Ogni suono della scena: le strip audio del Sequencer su qualsiasi canale, gli "
+     "Speaker e le composizioni con le loro note"),
     ("ACTIVE", "Composizione attiva", "La composizione attiva (o tutte, se nessuna è attiva)"),
     ("ALL", "Tutte le composizioni", "Tutte le composizioni della scena, al loro posto"),
     ("PICK", "Una composizione", "Solo la composizione scelta qui sotto"),
@@ -258,7 +274,7 @@ class GP2M_TimelineSettings(bpy.types.PropertyGroup):
 
     enabled: BoolProperty(name="Mostra suono nella Timeline", default=True,
                           update=_timeline_changed)
-    source: EnumProperty(name="Sorgente", items=TIMELINE_SOURCES, default="ACTIVE",
+    source: EnumProperty(name="Sorgente", items=TIMELINE_SOURCES, default="EVERYTHING",
                          update=_timeline_changed)
     composition: PointerProperty(name="Composizione", type=bpy.types.Object,
                                  poll=_composition_poll, update=_timeline_changed)
@@ -273,7 +289,12 @@ class GP2M_TimelineSettings(bpy.types.PropertyGroup):
                           update=_timeline_changed)
     opacity: FloatProperty(name="Opacità", default=0.8, min=0.05, max=1.0, subtype="FACTOR",
                            update=_timeline_changed)
-    wave_color: FloatVectorProperty(name="Colore onda", subtype="COLOR", size=3, min=0.0,
+    audio_color: FloatVectorProperty(name="Colore audio", subtype="COLOR", size=3, min=0.0,
+                                     max=1.0, default=(1.0, 0.72, 0.38),
+                                     update=_timeline_changed,
+                                     description="Forma d'onda dell'audio che non è una "
+                                     "composizione (Sequencer, Speaker)")
+    wave_color: FloatVectorProperty(name="Colore composizioni", subtype="COLOR", size=3, min=0.0,
                                     max=1.0, default=(0.85, 0.9, 1.0),
                                     update=_timeline_changed)
 

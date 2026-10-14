@@ -3,6 +3,7 @@
 effects, mixer, midi)."""
 
 import struct
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -597,3 +598,102 @@ def test_gesture_mode_follows_the_drawing_speed():
     flat.times = np.zeros(n)
     assert interpret.interpret_stroke(flat, spec, mapping, "GESTURE").notes == \
         interpret.interpret_stroke(flat, spec, mapping, "QUANTIZED").notes
+
+
+# --- 0.0.6: five readings, legato across strokes, robust rendering ---------------------
+
+def test_optical_legato_reads_each_stroke_like_optical():
+    line = stroke((1.0, 2.0), (C4_ROW, C4_ROW + 3))
+    optical = interpret.interpret_stroke(line, free_spec(), interpret.Mapping(), "OPTICAL")
+    joined = interpret.interpret_stroke(line, free_spec(), interpret.Mapping(), "OPTICAL_LEGATO")
+    assert len(joined.voices) == 1 and joined.voices[0].glide
+    assert np.allclose(joined.voices[0].pitch, optical.voices[0].pitch)
+
+
+def test_legato_join_glides_through_the_gap():
+    spec, mapping = free_spec(), interpret.Mapping()
+    first = interpret.interpret_stroke(stroke((1.0, 1.5), (C4_ROW, C4_ROW)), spec, mapping,
+                                       "OPTICAL").voices[0]
+    second = interpret.interpret_stroke(stroke((1.8, 2.3), (C4_ROW + 4, C4_ROW + 4)), spec,
+                                        mapping, "OPTICAL").voices[0]
+    far = interpret.interpret_stroke(stroke((5.0, 5.5), (C4_ROW, C4_ROW)), spec, mapping,
+                                     "OPTICAL").voices[0]
+    joined = interpret.legato_join([second, far, first], gap=0.5)
+    assert [sorted(m) for m, _v in joined] == [[0, 2], [1]]  # the far one stays alone
+    voice = joined[0][1]
+    assert voice.start == pytest.approx(1.0) and voice.duration == pytest.approx(1.3, abs=0.01)
+    times = voice.start + np.arange(len(voice.pitch)) / interpret.CONTROL_RATE
+    gap = (times > 1.55) & (times < 1.75)
+    assert voice.pitch[0] == pytest.approx(60, abs=0.05)
+    assert voice.pitch[-1] == pytest.approx(64, abs=0.05)
+    assert np.all(np.diff(voice.pitch[gap]) > 0)  # slides up through the pause
+    assert np.all(voice.amp[gap] > 0)  # and keeps sounding
+    # Different instruments and percussion never join.
+    drum = replace(second, instrument="KICK")
+    melodic = lambda v: not synth.get_instrument(v.instrument).percussive  # noqa: E731
+    assert len(interpret.legato_join([first, drum], 1.0, melodic)) == 2
+    assert len(interpret.legato_join([first, replace(second, instrument="SAW")], 1.0)) == 2
+
+
+def test_legato_layers_join_strokes_in_the_mix():
+    spec = free_spec(length=4.0, bpm=120.0)
+    strokes = [stroke((0.5, 1.0), (C4_ROW, C4_ROW)), stroke((1.2, 1.7), (C4_ROW + 2, C4_ROW + 2))]
+    loose = mixer.render([mixer.LayerInput("L", strokes, mode="OPTICAL")], spec,
+                         interpret.Mapping(), SR)
+    joined = mixer.render([mixer.LayerInput("L", strokes, mode="OPTICAL_LEGATO")], spec,
+                          interpret.Mapping(), SR)
+    apart = mixer.render([mixer.LayerInput("L", strokes, mode="OPTICAL_LEGATO",
+                                           legato_gap=0.2)], spec, interpret.Mapping(), SR)
+    assert loose.voice_count == 2 and joined.voice_count == 1 and apart.voice_count == 2
+    assert len(joined.notes) == len(loose.notes)  # MIDI keeps every note
+    pause = slice(int(1.08 * SR), int(1.12 * SR))  # between the strokes (after the release)
+    assert np.abs(joined.audio[pause]).max() > 5 * max(np.abs(loose.audio[pause]).max(), 1e-4)
+    assert joined.key != loose.key != apart.key
+    quantized = mixer.render([mixer.LayerInput("L", strokes, mode="LEGATO")], spec,
+                             interpret.Mapping(), SR)
+    assert quantized.voice_count == 1
+
+
+def test_plucked_sounds_hold_the_optical_glide():
+    rising = stroke((0.0, 2.0), (C4_ROW, C4_ROW + 12))
+    res = interpret.interpret_stroke(rising, free_spec(), interpret.Mapping(), "OPTICAL")
+    voice = replace(res.voices[0], instrument="PLUCK")
+    _o, held = synth.render_voice(voice, SR)
+    _o, plain = synth.render_voice(replace(voice, glide=False), SR)
+    late = slice(int(1.6 * SR), int(1.9 * SR))
+    assert np.abs(held[late]).max() > 3 * np.abs(plain[late]).max()
+    # The held tone follows the line: an octave higher at the end than at the start.
+    early = held[int(0.2 * SR):int(0.45 * SR), 0]
+    end = held[int(1.6 * SR):int(1.85 * SR), 0]
+    assert dominant_frequency(end) > 1.6 * dominant_frequency(early)
+
+
+def test_one_broken_voice_does_not_silence_the_mix(monkeypatch):
+    mixer.clear_cache()
+    spec = free_spec(length=4.0)
+    good = stroke((0.5, 1.0), (C4_ROW, C4_ROW))
+    bad = stroke((2.0, 2.5), (C4_ROW, C4_ROW), instrument="SAW")
+    real = synth.render_voice
+
+    def flaky(voice, *args):
+        if voice.instrument == "SAW":
+            raise ValueError("broken")
+        return real(voice, *args)
+
+    monkeypatch.setattr(synth, "render_voice", flaky)
+    result = mixer.render([mixer.LayerInput("L", [good, bad])], spec, interpret.Mapping(), SR)
+    assert result.errors == 1 and result.voice_count == 1
+    assert np.abs(result.audio[int(0.6 * SR):int(0.9 * SR)]).max() > 0.01
+    monkeypatch.setattr(synth, "render_voice", real)  # fixed: rendered again, not cached
+    again = mixer.render([mixer.LayerInput("L", [good, bad])], spec, interpret.Mapping(), SR)
+    assert again.errors == 0 and again.voice_count == 2
+
+
+def test_cache_is_limited_in_memory():
+    cache = mixer._LRU(100, max_bytes=1000)
+    for i in range(5):
+        cache.put(i, np.zeros(100, dtype=np.float32))  # 400 bytes each
+    assert len(cache.data) == 2 and cache.bytes == 800
+    assert cache.get(4) is not None and cache.get(0) is None
+    cache.put(4, np.zeros(10, dtype=np.float32))
+    assert cache.bytes == 440

@@ -72,10 +72,14 @@ Nell'header della Timeline / Dope Sheet, accanto agli Overlay, c'è il pulsante 
 
 | Opzione | Scelte |
 |---|---|
-| Sorgente | composizione attiva, tutte le composizioni, una composizione, mix del Sequencer, un canale del Sequencer, Speaker |
+| Sorgente | **tutto** (predefinita: ogni strip audio del Sequencer su qualsiasi canale, gli Speaker e le composizioni con le loro note), composizione attiva, tutte le composizioni, una composizione, mix del Sequencer, un canale del Sequencer, Speaker |
 | Forma d'onda | picchi, piena, contorno, inviluppo RMS, nessuna |
 | Mostra | note (MIDI), flusso ottico (curve dei tratti in lettura ottica) |
-| Aspetto | altezza, opacità, colore |
+| Aspetto | altezza, opacità, **colore audio** (il suono che non è una composizione) e **colore composizioni** |
+
+Con *Tutto* vedi insieme l'audio "normale" (una voce, una base, la musica di un video) e
+le composizioni, ognuno col suo colore: la strip di una composizione non viene contata due
+volte. Si leggono anche i suoni impacchettati nel .blend.
 
 Tutto si controlla dalla barra laterale **N → Musica**:
 
@@ -89,12 +93,21 @@ Tutto si controlla dalla barra laterale **N → Musica**:
 
 ### Come viene letto un tratto
 
-- **Quantizzata**: il tratto cambia nota ogni volta che attraversa una riga.
+Cinque letture per livello, con le stesse lettere della web app (come i metodi di
+fusione di Procreate):
+
+- **Q · Quantizzata**: il tratto cambia nota ogni volta che attraversa una riga.
   Le note vengono agganciate alla scala scelta e alla griglia ritmica (con swing).
-- **Ottica (libera)**: alla McLaren, l'altezza segue la linea in modo continuo, con glissandi.
-- **Legato (morphing)**: le note sono quelle della scala, ma il tratto è un'unica voce che
-  scivola da una nota all'altra senza riattaccare (tempo di legato regolabile).
-- **Gesto (tempo del disegno)**: il ritmo è quello della mano. Il tratto parte dove inizia
+- **QL · Quantizzata legata**: le note sono quelle della scala, ma il tratto è un'unica voce
+  che scivola da una nota all'altra senza riattaccare (tempo di legato regolabile); anche
+  i tratti vicini dello stesso strumento si legano tra loro.
+- **O · Ottica**: alla McLaren, l'altezza segue la linea in modo continuo, con glissandi.
+  Chitarra e campana tengono il suono (un tono morbido sotto il pizzico) e scivolano con
+  la linea; le percussioni restano colpi.
+- **OL · Ottica legata**: come Ottica, ma i tratti dello stesso strumento più vicini di
+  *Unisci tratti entro* (1 battito di default) diventano una sola voce, che scivola
+  nella pausa invece di riattaccare. Il MIDI conserva le note di ogni tratto.
+- **G · Gesto (tempo del disegno)**: il ritmo è quello della mano. Il tratto parte dove inizia
   e dura quanto hai impiegato a disegnarlo: una linea verticale tracciata in fretta è una
   scala rapida, una lenta è un arpeggio lento. I tratti senza tempo di disegno (import MIDI,
   registrati) vengono letti come *Quantizzata*.
