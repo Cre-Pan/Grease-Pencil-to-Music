@@ -18,7 +18,7 @@
   --fg: #1c1c1e;
   --fg-2: rgba(60, 60, 67, 0.62);
   --sep: rgba(60, 60, 67, 0.16);
-  --blue: #007aff;
+  --blue: #007aff; --orange: #ff9500;
   --red: #ff3b30;
   --green: #34c759;
   --on-tint: #ffffff;
@@ -47,7 +47,7 @@
     --pill: #636366; --fill: rgba(120, 120, 128, 0.24); --fill-2: rgba(120, 120, 128, 0.36);
     --glass: rgba(36, 36, 38, 0.7); --glass-edge: rgba(255, 255, 255, 0.1);
     --fg: #ffffff; --fg-2: rgba(235, 235, 245, 0.6); --sep: rgba(84, 84, 88, 0.55);
-    --blue: #0a84ff; --red: #ff453a; --green: #30d158;
+    --blue: #0a84ff; --red: #ff453a; --green: #30d158; --orange: #ff9f0a;
     --row-black: rgba(255, 255, 255, 0.035); --grid-beat: rgba(255, 255, 255, 0.06);
     --grid-bar: rgba(255, 255, 255, 0.18); --grid-c: rgba(255, 255, 255, 0.12);
     --key-white: #2c2c2e; --key-black: #0c0c0e; --key-edge: rgba(255, 255, 255, 0.06);
@@ -63,7 +63,7 @@
   --pill: #636366; --fill: rgba(120, 120, 128, 0.24); --fill-2: rgba(120, 120, 128, 0.36);
   --glass: rgba(36, 36, 38, 0.7); --glass-edge: rgba(255, 255, 255, 0.1);
   --fg: #ffffff; --fg-2: rgba(235, 235, 245, 0.6); --sep: rgba(84, 84, 88, 0.55);
-  --blue: #0a84ff; --red: #ff453a; --green: #30d158;
+  --blue: #0a84ff; --red: #ff453a; --green: #30d158; --orange: #ff9f0a;
   --row-black: rgba(255, 255, 255, 0.035); --grid-beat: rgba(255, 255, 255, 0.06);
   --grid-bar: rgba(255, 255, 255, 0.18); --grid-c: rgba(255, 255, 255, 0.12);
   --key-white: #2c2c2e; --key-black: #0c0c0e; --key-edge: rgba(255, 255, 255, 0.06);
@@ -364,6 +364,17 @@ label.btn input { position: absolute; width: 1px; height: 1px; opacity: 0; point
 .beat-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 6px 18px; align-items: center; }
 .ctl { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; font-size: 14px; min-width: 0; }
 .ctl .v { color: var(--fg-2); font-variant-numeric: tabular-nums; font-size: 13px; min-width: 38px; text-align: right; }
+.pattern-row { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; font-size: 14px; }
+.pattern-row > span { color: var(--fg-2); font-weight: 600; }
+.chain { display: flex; gap: 6px; flex-wrap: wrap; flex: 1 1 260px; }
+.slot {
+  width: 34px; height: 34px; border-radius: 10px; font: 700 14px var(--font-round); background: var(--fill); color: var(--fg-2);
+  transition: transform 0.2s var(--spring), background 0.2s, box-shadow 0.2s;
+}
+.slot[data-p="A"] { background: color-mix(in srgb, var(--blue) 18%, transparent); color: var(--blue); }
+.slot[data-p="B"] { background: color-mix(in srgb, var(--orange) 22%, transparent); color: var(--orange); }
+.slot.now { box-shadow: inset 0 0 0 2px currentColor; transform: scale(1.08); }
+.slot:active { transform: scale(0.92); }
 .ctl-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; }
 .beat-grid { padding: 14px; overflow-x: auto; }
 .beat-inner { display: grid; gap: 8px; min-width: max-content; }
@@ -528,11 +539,18 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
             <div class="ctl-row"><span>Passi</span><div class="seg" id="segSteps" style="width:150px"><button data-v="16">16</button><button data-v="32">32</button></div></div>
             <div class="ctl-row"><label for="beatOn">Beat attivo</label><input class="switch" type="checkbox" id="beatOn"></div>
           </div>
+          <div class="pattern-row">
+            <span>Pattern</span>
+            <div class="seg" id="segPat" style="width:110px"><button data-v="A">A</button><button data-v="B">B</button></div>
+            <button class="chip" id="patCopy"></button>
+            <span>Sequenza</span>
+            <div class="chain" id="chain" aria-label="Sequenza dei pattern: tocca per cambiare A, B o pausa"></div>
+          </div>
         </div>
         <div class="card beat-grid"><div class="beat-inner" id="beatGrid"></div></div>
         <div class="beat-foot">
           <span class="legend"><i></i>spento</span><span class="legend"><i class="on"></i>colpo</span><span class="legend"><i class="acc"></i>accento</span>
-          <span>Tocca un pad per cambiarlo, trascina per dipingere più passi. Tocca il nome per sentire il suono, tienilo premuto per volume e intonazione.</span>
+          <span>Tocca un pad per cambiarlo, trascina per dipingere più passi. Tocca il nome per sentire il suono, tienilo premuto per volume e intonazione. A e B sono due pattern: la sequenza decide quale suona in ogni battuta (– = pausa).</span>
           <button class="chip" id="beatClear">Svuota</button>
         </div>
       </div>
@@ -862,9 +880,15 @@ let uid = 1;
 const newId = p => p + (uid++).toString(36) + Math.random().toString(36).slice(2, 6);
 const newLayer = (name, mode = "QUANTIZED", extra = {}) => ({ id: newId("l"), name, mode, visible: true, muted: false, volume: 0.85, pan: 0, reverb: 0.25, ...extra });
 
+/* Two patterns per track: p is A, pB is B. The chain says which one plays in each
+   pattern slot (one slot = one pattern length): "A", "B" or "-" for a rest. */
 function blankBeat() {
-  return { on: true, steps: 16, swing: 0, volume: 0.8, preset: "EMPTY", tracks: Object.fromEntries(BEAT_TRACKS.map(id => [id, { mute: false, p: new Array(32).fill(0) }])) };
+  return { on: true, steps: 16, swing: 0, volume: 0.8, preset: "EMPTY", edit: "A", chain: new Array(32).fill("A"),
+    tracks: Object.fromEntries(BEAT_TRACKS.map(id => [id, { mute: false, p: new Array(32).fill(0), pB: new Array(32).fill(0) }])) };
 }
+const patOf = (tr, which) => which === "B" ? tr.pB : tr.p;
+/* B for a preset: the same groove with a fill in the last beat of every bar. */
+const FILL = { SNARE: [1, 0, 1, 2], TOM: [0, 1, 1, 0], KICK: [1, 0, 0, 0], CLAP: [0, 0, 0, 2] };
 function applyPreset(beat, key) {
   const pr = PRESETS[key];
   beat.preset = key; beat.swing = pr.swing;
@@ -872,8 +896,16 @@ function applyPreset(beat, key) {
     const row = pr.rows[id] || "";
     const p = new Array(32).fill(0);
     for (let i = 0; i < 32; i++) { const ch = row[i % 16] || "."; p[i] = ch === "X" ? 2 : ch === "x" ? 1 : 0; }
-    beat.tracks[id] = { ...beat.tracks[id], mute: false, p };
+    const pB = p.slice();
+    if (key !== "EMPTY") for (let i = 0; i < 32; i++) if (i % 16 >= 12) {
+      const f = FILL[id];
+      if (f) pB[i] = Math.max(id === "KICK" ? 0 : p[i], f[i % 4]);
+      else if (id === "OHAT") pB[i] = i % 16 === 15 ? 2 : 0;
+    }
+    beat.tracks[id] = { ...beat.tracks[id], mute: false, p, pB };
   }
+  beat.edit = "A";
+  beat.chain = Array.from({ length: 32 }, (_, i) => key !== "EMPTY" && i % 4 === 3 ? "B" : "A");
 }
 
 function blankState() {
@@ -946,12 +978,13 @@ function sanitize(s) {
   const beat = blankBeat();
   if (s.beat && s.beat.tracks) {
     for (const k of ["on", "swing", "volume", "preset", "steps"]) if (k in s.beat) beat[k] = s.beat[k];
+    const clean = a => { const p = a.slice(0, 32).map(v => clamp(v | 0, 0, 2)); while (p.length < 32) p.push(0); return p; };
     for (const id of BEAT_TRACKS) if (s.beat.tracks[id] && Array.isArray(s.beat.tracks[id].p)) {
-      const p = s.beat.tracks[id].p.slice(0, 32).map(v => clamp(v | 0, 0, 2));
-      while (p.length < 32) p.push(0);
-      const t = s.beat.tracks[id];
-      beat.tracks[id] = { mute: !!t.mute, p, vol: clamp(t.vol ?? 1, 0, 1.5), tune: clamp(Math.round(t.tune || 0), -12, 12) };
+      const t = s.beat.tracks[id], p = clean(t.p);
+      beat.tracks[id] = { mute: !!t.mute, p, pB: Array.isArray(t.pB) ? clean(t.pB) : p.slice(), vol: clamp(t.vol ?? 1, 0, 1.5), tune: clamp(Math.round(t.tune || 0), -12, 12) };
     }
+    if (Array.isArray(s.beat.chain)) beat.chain = Array.from({ length: 32 }, (_, i) => ["A", "B", "-"].includes(s.beat.chain[i]) ? s.beat.chain[i] : "A");
+    beat.edit = s.beat.edit === "B" ? "B" : "A";
   }
   beat.steps = beat.steps === 32 ? 32 : 16;
   out.beat = beat;
@@ -1242,9 +1275,10 @@ function beatHits(force) {
   if (!b.on && !force) return [];
   const hits = [], k = spb(), total = loopBeats() * 4;
   for (let s = 0; s < total; s++) {
-    const i = s % b.steps;
+    const i = s % b.steps, which = b.chain[Math.floor(s / b.steps) % 32] || "A";
+    if (which === "-") continue;
     for (const id of BEAT_TRACKS) {
-      const tr = b.tracks[id], v = tr.p[i];
+      const tr = b.tracks[id], v = patOf(tr, which)[i];
       if (!v || tr.mute) continue;
       const beats = s * 0.25 + (s % 2 ? b.swing * 0.125 : 0);
       hits.push({ id, t: beats * k, vel: (v === 2 ? 1 : 0.7) * (tr.vol ?? 1), tune: tr.tune || 0 });
@@ -2857,7 +2891,7 @@ function buildBeatGrid() {
       pad.dataset.i = i; pad.dataset.track = id;
       pad.style.setProperty("--c", colorOf(id));
       pad.setAttribute("aria-label", `${INST[id].name}, passo ${i + 1}`);
-      paintPad(pad, tr.p[i]);
+      paintPad(pad, patOf(tr, b.edit)[i]);
       pads.append(pad);
       (padEls[i] = padEls[i] || []).push(pad);
     }
@@ -2868,9 +2902,9 @@ function buildBeatGrid() {
 }
 function paintPad(pad, v) { pad.classList.toggle("on", v === 1); pad.classList.toggle("acc", v === 2); pad.setAttribute("aria-pressed", String(v > 0)); }
 function setPad(pad, v) {
-  const b = state.beat, tr = b.tracks[pad.dataset.track], i = +pad.dataset.i;
-  tr.p[i] = v;
-  if (b.steps === 16) tr.p[i + 16] = v;
+  const b = state.beat, tr = b.tracks[pad.dataset.track], i = +pad.dataset.i, arr = patOf(tr, b.edit);
+  arr[i] = v;
+  if (b.steps === 16) arr[i + 16] = v;
   paintPad(pad, v);
   if (v) previewNote(pad.dataset.track, 60, v === 2 ? 1 : 0.7, 1);
   if (b.preset !== "CUSTOM") { b.preset = "CUSTOM"; for (const chip of document.querySelectorAll("#presets .chip")) chip.setAttribute("aria-pressed", "false"); }
@@ -2881,7 +2915,7 @@ $("#beatGrid").addEventListener("pointerdown", e => {
   e.preventDefault();
   const tr = state.beat.tracks[pad.dataset.track];
   remember();
-  const v = (tr.p[+pad.dataset.i] + 1) % 3;
+  const v = (patOf(tr, state.beat.edit)[+pad.dataset.i] + 1) % 3;
   painting = { value: v, track: pad.dataset.track, touched: new Set([pad]) };
   setPad(pad, v);
 });
@@ -2925,8 +2959,18 @@ for (const [btnId, step] of [["#tuneDown", -1], ["#tuneUp", 1]]) $(btnId).onclic
   previewDrum(trackOpen); changed();
 };
 
+let lastSlot = -1;
 function markStep() {
-  const step = ui.playing ? Math.floor(fraction() * loopBeats() * 4) % state.beat.steps : -1;
+  const b = state.beat, abs = ui.playing ? Math.floor(fraction() * loopBeats() * 4) : -1;
+  const slot = abs < 0 ? -1 : Math.floor(abs / b.steps);
+  // the pads follow the playhead only while the pattern being edited is the one playing
+  const step = abs >= 0 && b.chain[slot % 32] === b.edit ? abs % b.steps : -1;
+  if (slot !== lastSlot) {
+    const chips = $("#chain").children;
+    if (chips[lastSlot]) chips[lastSlot].classList.remove("now");
+    if (chips[slot]) chips[slot].classList.add("now");
+    lastSlot = slot;
+  }
   if (step === lastStep) return;
   if (lastStep >= 0 && padEls[lastStep]) for (const p of padEls[lastStep]) p.classList.remove("now");
   if (step >= 0 && padEls[step]) for (const p of padEls[step]) p.classList.add("now");
@@ -2953,9 +2997,33 @@ function syncBeatControls() {
   seg($("#segSteps"), b.steps, v => {
     remember();
     const steps = +v;
-    if (steps === 32 && b.steps === 16) for (const id of BEAT_TRACKS) for (let i = 0; i < 16; i++) b.tracks[id].p[i + 16] = b.tracks[id].p[i];
-    b.steps = steps; buildBeatGrid(); changed();
+    if (steps === 32 && b.steps === 16) for (const id of BEAT_TRACKS) for (const arr of [b.tracks[id].p, b.tracks[id].pB]) for (let i = 0; i < 16; i++) arr[i + 16] = arr[i];
+    b.steps = steps; buildBeatGrid(); syncBeatControls(); changed();
   });
+  seg($("#segPat"), b.edit, v => { b.edit = v; buildBeatGrid(); syncBeatControls(); saveSoon(); });
+  const other = b.edit === "A" ? "B" : "A";
+  $("#patCopy").textContent = `Copia ${b.edit} in ${other}`;
+  $("#patCopy").onclick = () => {
+    remember();
+    for (const id of BEAT_TRACKS) { const tr = b.tracks[id]; patOf(tr, other).splice(0, 32, ...patOf(tr, b.edit)); }
+    b.edit = other; buildBeatGrid(); syncBeatControls(); changed(); toast(`Copiato: ora modifichi ${other}`);
+  };
+  const chain = $("#chain"), slots = Math.max(1, Math.ceil(loopBeats() * 4 / b.steps));
+  chain.textContent = ""; lastSlot = -1;
+  for (let i = 0; i < Math.min(slots, 32); i++) {
+    const chip = document.createElement("button");
+    chip.className = "slot"; chip.dataset.p = b.chain[i]; chip.textContent = b.chain[i] === "-" ? "–" : b.chain[i];
+    chip.title = (b.steps === 16 ? "Battuta " : "Battute ") + (b.steps === 16 ? i + 1 : `${i * 2 + 1}-${i * 2 + 2}`);
+    chip.setAttribute("aria-label", chip.title + ": " + (b.chain[i] === "-" ? "pausa" : "pattern " + b.chain[i]));
+    chip.onclick = () => {
+      remember();
+      b.chain[i] = { A: "B", B: "-", "-": "A" }[b.chain[i]];
+      chip.dataset.p = b.chain[i]; chip.textContent = b.chain[i] === "-" ? "–" : b.chain[i];
+      chip.setAttribute("aria-label", chip.title + ": " + (b.chain[i] === "-" ? "pausa" : "pattern " + b.chain[i]));
+      changed();
+    };
+    chain.append(chip);
+  }
   $("#beatSub").textContent = `${state.bars} battute · ${state.bpm} BPM`;
 }
 $("#inSwing").addEventListener("input", e => { state.beat.swing = +e.target.value; fillRange(e.target); $("#valSwing").textContent = Math.round(state.beat.swing * 100) + "%"; });
@@ -2963,7 +3031,14 @@ $("#inSwing").addEventListener("change", () => changed());
 $("#inBeatVol").addEventListener("input", e => { state.beat.volume = +e.target.value; fillRange(e.target); $("#valBeatVol").textContent = Math.round(state.beat.volume * 100) + "%"; });
 $("#inBeatVol").addEventListener("change", () => changed());
 $("#beatOn").addEventListener("change", e => { state.beat.on = e.target.checked; changed(); });
-$("#beatClear").onclick = () => { remember(); applyPreset(state.beat, "EMPTY"); buildBeatGrid(); syncBeatControls(); changed(); };
+/* Svuota clears the pattern being edited; with both empty the beat is back to "Vuoto". */
+$("#beatClear").onclick = () => {
+  remember();
+  const b = state.beat;
+  for (const id of BEAT_TRACKS) patOf(b.tracks[id], b.edit).fill(0);
+  b.preset = BEAT_TRACKS.some(id => b.tracks[id].p.some(Boolean) || b.tracks[id].pB.some(Boolean)) ? "CUSTOM" : "EMPTY";
+  buildBeatGrid(); syncBeatControls(); changed();
+};
 
 /* ---------- MIDI view ---------- */
 
