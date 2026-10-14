@@ -528,6 +528,8 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
 .stat span { font-size: 12.5px; color: var(--fg-2); }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .note-line { font-size: 13px; color: var(--fg-2); }
+.progress { height: 8px; border-radius: 4px; background: var(--fill-2); overflow: hidden; margin-top: 4px; }
+.progress i { display: block; height: 100%; width: 0; background: var(--blue); border-radius: 4px; transition: width 0.2s linear; }
 
 .toast {
   position: absolute; z-index: 12; left: 50%; bottom: 84px; transform: translateX(-50%); padding: 11px 18px; border-radius: 999px;
@@ -772,10 +774,29 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
           <p class="note-line">In GarageBand per iPad: salva in File, poi nel Browser dei loop apri la scheda File e trascina il WAV o il MIDI su una traccia.</p>
         </div>
         <div class="card ex-card">
-          <h3>Immagine e progetto</h3>
-          <p>La tavola disegnata come PNG, oppure il progetto (.json) da riaprire qui su un altro dispositivo.</p>
+          <h3>Video</h3>
+          <p>La tavola con la linea del tempo che scorre sopra il disegno, e la musica. Dura quanto le ripetizioni del loop; si registra in tempo reale.</p>
+          <div class="group">
+            <div class="item col"><span>Risoluzione</span><div class="seg" id="segVidRes"><button data-v="720">720p</button><button data-v="1080">1080p</button></div></div>
+            <div class="item"><label for="exVidBg">Includi lo sfondo della tavola</label><input class="switch" type="checkbox" id="exVidBg" checked></div>
+          </div>
+          <button class="btn primary" id="exVideo">Registra il video</button>
+        </div>
+        <div class="card ex-card">
+          <h3>Immagine</h3>
+          <p>La tavola come PNG. Trasparente: solo i tratti, da mettere sopra altro; Livelli separati: un PNG per livello in un .zip.</p>
+          <div class="group">
+            <div class="item col"><span>Sfondo</span><div class="seg" id="segPngBg"><button data-v="board">Tavola</button><button data-v="clear">Trasparente</button></div></div>
+            <div class="item col"><span>Livelli</span><div class="seg" id="segPngLayers"><button data-v="one">Insieme</button><button data-v="each">Separati</button></div></div>
+            <div class="item col"><span>Risoluzione</span><div class="seg" id="segPngScale"><button data-v="1">1×</button><button data-v="2">2×</button><button data-v="3">3×</button></div></div>
+            <div class="item"><label for="exPngBg">Includi lo sfondo della tavola</label><input class="switch" type="checkbox" id="exPngBg"></div>
+          </div>
+          <button class="btn primary" id="exPng">Salva PNG</button>
+        </div>
+        <div class="card ex-card">
+          <h3>Progetto</h3>
+          <p>Il progetto (.json) da riaprire qui su un altro dispositivo, con i tuoi suoni.</p>
           <div class="btn-row">
-            <button class="btn" id="exPng">Salva PNG</button>
             <button class="btn" id="exJson">Salva progetto</button>
             <label class="btn" for="fileJson">Apri progetto<input type="file" id="fileJson" accept=".json,application/json"></label>
           </div>
@@ -868,16 +889,14 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   </div>
 
   <div class="bubble" id="bubble" hidden></div>
-  <div class="video-win" id="videoWin" hidden>
-    <div class="video-bar" id="videoBar">
-      <span id="videoName" data-notr>Video</span>
-      <button id="videoSound" title="Audio del video" aria-label="Audio del video" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg></button>
-      <button id="videoPip" title="Picture in picture di sistema" aria-label="Picture in picture" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><rect x="12" y="12" width="7" height="5" rx="1.2" fill="currentColor"/></svg></button>
-      <button id="videoClose" title="Chiudi il video" aria-label="Chiudi il video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <div class="help" id="vidProgress" hidden>
+    <div class="help-card" style="width:min(420px,100%)">
+      <div class="sheet-top"><h3>Registro il video…</h3><button class="chip danger" id="vidCancel">Annulla</button></div>
+      <div class="progress"><i id="vidBar"></i></div>
+      <p class="set-help" id="vidInfo"></p>
     </div>
-    <video id="videoEl" playsinline muted preload="auto"></video>
-    <div class="video-resize" id="videoResize"></div>
   </div>
+  <div id="mediaLayer"></div>
   <div class="cap update-bar glass" id="updateBar" hidden>
     <span>Nuova versione pronta</span>
     <button class="chip primary" id="updateNow">Aggiorna</button>
@@ -898,7 +917,8 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
       <button class="item item-btn danger" id="actNewConfirm" hidden><span>Conferma: cancella tutto</span><small>annullabile</small></button>
       <button class="item item-btn" id="actSave"><span>Salva composizione</span><small>file .json</small></button>
       <label class="item item-btn" for="fileJson2"><span>Apri composizione…</span><small>file .json</small><input type="file" id="fileJson2" accept=".json,application/json" hidden></label>
-      <label class="item item-btn" for="fileVideo"><span>Importa un video…</span><small>in una finestra mobile</small><input type="file" id="fileVideo" accept="video/*" hidden></label>
+      <label class="item item-btn" for="fileMedia"><span>Importa immagine o video…</span><small>in una finestra mobile</small><input type="file" id="fileMedia" accept="image/*,video/*" multiple hidden></label>
+      <label class="item item-btn" for="fileBg"><span>Sfondo della tavola…</span><small>immagine o video da ricalcare</small><input type="file" id="fileBg" accept="image/*,video/*" hidden></label>
     </div>
     <div class="label">Esempi</div>
     <div class="group">
@@ -937,6 +957,15 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
           <div class="item"><span>Scala</span><span style="display:flex;gap:6px"><select id="inRoot" aria-label="Tonica"></select><select id="inScale" aria-label="Scala"></select></span></div>
           <div class="item"><span>Nota più bassa</span><select id="inLow" aria-label="Nota più bassa"></select></div>
           <div class="item col"><span>Ottave</span><div class="seg" id="segOct"><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="4">4</button><button data-v="5">5</button></div></div>
+        </div>
+        <div class="label">Sfondo</div>
+        <div class="group" id="bgNone"><label class="item item-btn" for="fileBg2"><span>Scegli un'immagine o un video…</span><small>da disegnarci sopra</small><input type="file" id="fileBg2" accept="image/*,video/*" hidden></label></div>
+        <div class="group" id="bgSet" hidden>
+          <div class="item"><span>File</span><span class="v" id="bgName" data-notr></span></div>
+          <div class="item col"><div class="item" style="padding:0;min-height:0"><label for="inBgOp">Opacità dello sfondo</label><span class="v" id="valBgOp"></span></div><input id="inBgOp" type="range" min="0.05" max="1" step="0.01"></div>
+          <div class="item col"><span>Adattamento</span><div class="seg" id="segBgFit"><button data-v="cover">Riempi</button><button data-v="contain">Intero</button><button data-v="stretch">Allunga</button></div></div>
+          <button class="item item-btn" id="bgToWin"><span>Riporta in una finestra</span></button>
+          <button class="item item-btn danger" id="bgRemove"><span>Rimuovi lo sfondo</span></button>
         </div>
         <p class="set-help">La scala sceglie su quali righe cadono le note nelle letture Quantizzata e Legato; l'Ottica le ignora e segue la linea.</p>
       </div>
@@ -1366,7 +1395,7 @@ function makeStroke(layer, inst, path, w, op, bpm) {
 
 function save() {
   try {
-    localStorage.setItem(STORE_KEY, JSON.stringify({ state, ui: { lang: ui.lang, videoName: ui.videoName, videoRect: ui.videoRect, beatMode: ui.beatMode, master: ui.master, metroVol: ui.metroVol, drawSound: ui.drawSound, countIn: ui.countIn, pencilMode: ui.pencilMode, tabsMode: ui.tabsMode, eraser: ui.eraser, eraserSize: ui.eraserSize, minWidth: ui.minWidth, pressCurve: ui.pressCurve, brush: ui.brush, rough: ui.rough, inst: ui.inst, size: ui.size, opacity: ui.opacity, naming: ui.naming, stabilize: ui.stabilize, kbBase: ui.kbBase, view: ui.view } }));
+    localStorage.setItem(STORE_KEY, JSON.stringify({ state, ui: { lang: ui.lang, pngBg: ui.pngBg, pngLayers: ui.pngLayers, pngScale: ui.pngScale, vidRes: ui.vidRes, media: ui.media, bgMedia: ui.bgMedia, bgOpacity: ui.bgOpacity, bgFit: ui.bgFit, videoName: ui.videoName, videoRect: ui.videoRect, beatMode: ui.beatMode, master: ui.master, metroVol: ui.metroVol, drawSound: ui.drawSound, countIn: ui.countIn, pencilMode: ui.pencilMode, tabsMode: ui.tabsMode, eraser: ui.eraser, eraserSize: ui.eraserSize, minWidth: ui.minWidth, pressCurve: ui.pressCurve, brush: ui.brush, rough: ui.rough, inst: ui.inst, size: ui.size, opacity: ui.opacity, naming: ui.naming, stabilize: ui.stabilize, kbBase: ui.kbBase, view: ui.view } }));
   } catch (e) { /* storage blocked */ }
 }
 let saveTimer = 0;
@@ -2736,7 +2765,7 @@ function afterBigChange() {
 
 let downloadsCap = null;
 const inArtifact = !!(window.claude && window.claude.use);
-const MIME = { zip: "application/zip", json: "application/json", png: "image/png", wav: "audio/wav", mid: "audio/midi" };
+const MIME = { zip: "application/zip", json: "application/json", png: "image/png", wav: "audio/wav", mid: "audio/midi", mp4: "video/mp4", webm: "video/webm" };
 /* Outside claude.ai (the app on the Home Screen, Safari): the share sheet ("Salva su File"),
    or a plain download where sharing files is not available. */
 async function shareOrDownload(filename, data) {
@@ -3036,14 +3065,14 @@ function paintStroke(c, st, extra) {
   drawStyled(c, st.brush || "smooth", screenPoints(pts), colorOf(st.inst), st.op);
 }
 function clipBoard(c) { roundRect(c, geo.left, geo.top, geo.right - geo.left, geo.bottom - geo.top, [0, 18, 18, 0]); c.clip(); }
-function renderInk() {
+function renderInk(only) {  // only: a Set of layer ids, drawn even when hidden (export)
   if (!geo) return;
   const c = inkCanvas.getContext("2d");
   c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, inkCanvas.width, inkCanvas.height);
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
   c.save(); clipBoard(c);
   for (const layer of state.layers) {
-    if (!layer.visible) continue;
+    if (only ? !only.has(layer.id) : !layer.visible) continue;
     for (const st of state.strokes) if (st.layer === layer.id && !(sel && sel.ids.has(st.id))) paintStroke(c, st);
   }
   c.restore();
@@ -3125,7 +3154,13 @@ function drawBoard() {
   if (!geo) return;
   const c = g2d;
   c.setTransform(1, 0, 0, 1, 0, 0);
-  c.drawImage(boardCanvas, 0, 0); c.drawImage(inkCanvas, 0, 0);
+  c.drawImage(boardCanvas, 0, 0);
+  if (bgMedia()) {
+    c.setTransform(dpr, 0, 0, dpr, 0, 0); c.save(); clipBoard(c);
+    paintBackground(c, xOf(0), yOf(state.low + rowsCount()), xOf(loopBeats()), yOf(state.low));
+    c.restore(); c.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  c.drawImage(inkCanvas, 0, 0);
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
   if (current) { c.save(); clipBoard(c); paintStroke(c, current, current.brush === "dots" ? null : current.pred); c.restore(); }
   if (sel) {
@@ -3564,7 +3599,7 @@ function frame() {
   frameQueued = false;
   if (viewDirty && ui.view === "draw") { viewDirty = false; cacheBoard(); renderInk(); syncZoomPill(); }
   if (liveRec) liveTick();
-  if (!videoWin.hidden) syncVideo(false);
+  for (const m of media.values()) syncMedia(m, false);
   if (ui.view === "draw") drawBoard();
   else if (ui.view === "beat") markStep();
   else if (ui.view === "midi") drawRoll(false);
@@ -4155,86 +4190,308 @@ $("#exStems").addEventListener("change", e => { ui.stems = e.target.checked; });
 $("#exWav").onclick = async () => { const r = await renderAll(ui.exportBeat); saveFile(fileBase() + ".wav", wavBytes(tiled(r.full, r.loop.length, ui.repeats))); };
 $("#exMid").onclick = async () => { const r = await renderAll(ui.exportBeat); saveFile(fileBase() + ".mid", midiBytes(r.notes, ui.repeats)); };
 $("#exZip").onclick = exportZip;
+function syncExportImage() {
+  seg($("#segPngBg"), ui.pngBg || "board", v => { ui.pngBg = v; saveSoon(); });
+  seg($("#segPngLayers"), ui.pngLayers || "one", v => { ui.pngLayers = v; $("#exPng").textContent = v === "each" ? "Salva .zip di PNG" : "Salva PNG"; saveSoon(); });
+  seg($("#segPngScale"), String(ui.pngScale || 2), v => { ui.pngScale = +v; saveSoon(); });
+  seg($("#segVidRes"), String(ui.vidRes || 1080), v => { ui.vidRes = +v; saveSoon(); });
+  $("#exPng").textContent = (ui.pngLayers === "each" ? "Salva .zip di PNG" : "Salva PNG");
+  const hasBg = !!bgMedia();
+  $("#exPngBg").closest(".item").hidden = !hasBg; $("#exVidBg").closest(".item").hidden = !hasBg;
+}
 $("#exJson").onclick = () => saveFile(fileBase() + ".json", projectJson());
-$("#exPng").onclick = async () => {
-  if (!geo) { toast("Apri prima Disegna."); return; }
-  const out = document.createElement("canvas");
-  out.width = boardCanvas.width; out.height = boardCanvas.height;
-  const c = out.getContext("2d"); c.drawImage(boardCanvas, 0, 0); c.drawImage(inkCanvas, 0, 0);
-  const blob = await new Promise(res => out.toBlob(res, "image/png"));
-  if (blob) saveFile(fileBase() + ".png", blob);
-};
-/* ---------- video in a floating window, in time with the loop ---------- */
-const videoEl = $("#videoEl"), videoWin = $("#videoWin");
-let videoUrl = null;
-function showVideo(blob, name, keep = true) {
-  if (videoUrl) URL.revokeObjectURL(videoUrl);
-  videoUrl = URL.createObjectURL(blob);
-  videoEl.src = videoUrl;
-  $("#videoName").textContent = name || "Video";
-  const r = ui.videoRect || { x: null, y: 140, w: 340 };
-  const app = $("#app").getBoundingClientRect();
-  videoWin.style.width = clamp(r.w, 180, app.width - 24) + "px";
-  videoWin.style.left = clamp(r.x ?? app.width - r.w - 24, 8, app.width - 180) + "px";
-  videoWin.style.top = clamp(r.y, 8, app.height - 120) + "px";
-  videoWin.hidden = false;
-  videoEl.onloadedmetadata = () => { fitVideo(); syncVideo(true); };
-  if (keep) { sampleStore.set("video", blob); ui.videoName = name; saveSoon(); }
-  $("#videoPip").hidden = !(document.pictureInPictureEnabled || (videoEl.webkitSupportsPresentationMode && videoEl.webkitSupportsPresentationMode("picture-in-picture")));
-}
-function fitVideo() {
-  const w = videoWin.offsetWidth, ar = videoEl.videoWidth ? videoEl.videoHeight / videoEl.videoWidth : 9 / 16;
-  videoWin.style.height = Math.round(w * ar + $("#videoBar").offsetHeight) + "px";
-}
-function saveVideoRect() { ui.videoRect = { x: videoWin.offsetLeft, y: videoWin.offsetTop, w: videoWin.offsetWidth }; saveSoon(); }
-/* The video follows the playhead: play, stop, seek and every turn of the loop. */
-function syncVideo(force) {
-  if (videoWin.hidden || !videoEl.duration) return;
-  const t = (ui.playing ? fraction() : ui.startFrac) * loopSec(), want = t % videoEl.duration;
-  if (ui.playing) {
-    if (force || Math.abs(videoEl.currentTime - want) > 0.25) videoEl.currentTime = want;
-    if (videoEl.paused) videoEl.play().catch(() => {});
-  } else {
-    if (!videoEl.paused) videoEl.pause();
-    if (force || Math.abs(videoEl.currentTime - want) > 0.05) videoEl.currentTime = want;
+/* ---------- pictures of the board (PNG) and a video with the playhead ---------- */
+/* Draw the whole board (zoom 1) at a given pixel scale into fresh pixels, then run fn
+   with a crop helper; the screen board is put back afterwards. */
+async function withBoard(scale, fn) {
+  if (!geo) { showView("draw", true); await new Promise(r => requestAnimationFrame(r)); }
+  const keep = { dpr, zoom: view.zoom, bx: view.bx, ry: view.ry };
+  const maxScale = Math.sqrt(15e6 / Math.max(1, W * H));  // iPad Safari: canvases up to ~16 MP
+  dpr = Math.min(scale, maxScale);
+  view.zoom = 1; view.bx = 0; view.ry = 0;
+  for (const c of [boardCanvas, inkCanvas]) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
+  try { return await fn(); }
+  finally {
+    dpr = keep.dpr; Object.assign(view, { zoom: keep.zoom, bx: keep.bx, ry: keep.ry });
+    for (const c of [boardCanvas, inkCanvas]) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
+    cacheBoard(); renderInk(); requestFrame();
   }
 }
-$("#fileVideo").addEventListener("change", e => {
-  const f = e.target.files && e.target.files[0];
-  e.target.value = ""; closePopovers();
-  if (!f) return;
-  showVideo(f, f.name.replace(/\.[^.]+$/, ""));
-  toast("Video aperto: segue il play. Trascinalo dalla barra, ridimensionalo dall'angolo.");
-});
-$("#videoClose").onclick = () => { videoEl.pause(); videoWin.hidden = true; videoEl.removeAttribute("src"); sampleStore.del("video"); ui.videoName = null; saveSoon(); };
-$("#videoSound").onclick = () => { videoEl.muted = !videoEl.muted; $("#videoSound").setAttribute("aria-pressed", String(!videoEl.muted)); };
-$("#videoPip").onclick = () => {
-  if (document.pictureInPictureElement) document.exitPictureInPicture();
-  else if (videoEl.requestPictureInPicture) videoEl.requestPictureInPicture().catch(() => toast("Picture in picture non disponibile qui."));
-  else if (videoEl.webkitSetPresentationMode) videoEl.webkitSetPresentationMode("picture-in-picture");
+function boardCrop(transparent) {
+  return transparent ? { x: geo.left, y: geo.top, w: geo.right - geo.left, h: geo.bottom - geo.top }
+    : { x: geo.left - geo.keyW - 2, y: geo.top - 26, w: geo.right - geo.left + geo.keyW + 4, h: geo.bottom - geo.top + 28 };
+}
+/* One frame: grid (or nothing), background picture, ink, and the playhead at frac. */
+function paintFrame(c, crop, k, { transparent, bg, frac }) {
+  const d = dpr, sx = x => (x - crop.x) * k, sy = y => (y - crop.y) * k;
+  if (!transparent) { c.fillStyle = colors.ground; c.fillRect(0, 0, crop.w * k, crop.h * k); c.drawImage(boardCanvas, crop.x * d, crop.y * d, crop.w * d, crop.h * d, 0, 0, crop.w * k, crop.h * k); }
+  if (bg && bgMedia()) {
+    c.save(); c.setTransform(k, 0, 0, k, -crop.x * k, -crop.y * k); clipBoard(c);
+    paintBackground(c, xOf(0), yOf(state.low + rowsCount()), xOf(loopBeats()), yOf(state.low)); c.restore();
+  }
+  c.drawImage(inkCanvas, crop.x * d, crop.y * d, crop.w * d, crop.h * d, 0, 0, crop.w * k, crop.h * k);
+  if (frac != null) {
+    const x = sx(xOf(frac * loopBeats()));
+    c.fillStyle = colors.playhead; c.fillRect(Math.round(x - k), sy(geo.top), Math.max(2, Math.round(2 * k)), (geo.bottom - geo.top) * k);
+    c.beginPath(); c.moveTo(x - 6 * k, sy(geo.top - 12)); c.lineTo(x + 6 * k, sy(geo.top - 12)); c.lineTo(x, sy(geo.top - 3)); c.closePath(); c.fill();
+  }
+}
+const pngOf = cv => new Promise(res => cv.toBlob(res, "image/png"));
+$("#exPng").onclick = async () => {
+  const transparent = ui.pngBg === "clear", scale = +(ui.pngScale || 2), each = ui.pngLayers === "each", bg = $("#exPngBg").checked;
+  toast("Preparo il file…");
+  await withBoard(scale, async () => {
+    const shot = async only => {
+      cacheBoard(); renderInk(only);
+      const crop = boardCrop(transparent), out = document.createElement("canvas");
+      out.width = Math.round(crop.w * dpr); out.height = Math.round(crop.h * dpr);
+      paintFrame(out.getContext("2d"), crop, dpr, { transparent, bg, frac: null });
+      return pngOf(out);
+    };
+    if (!each) { const blob = await shot(null); if (blob) await saveFile(fileBase() + ".png", blob); return; }
+    const files = [], used = new Set();
+    for (const [i, layer] of state.layers.entries()) {
+      let name = `${String(i + 1).padStart(2, "0")} ${layer.name}`.replace(/[\\/:*?"<>|]+/g, "-");
+      while (used.has(name)) name += " 2";
+      used.add(name);
+      const blob = await shot(new Set([layer.id]));
+      files.push({ name: `${name}.png`, data: new Uint8Array(await blob.arrayBuffer()) });
+    }
+    await saveFile(fileBase() + " livelli.zip", zipBlob(files));
+  });
 };
-(() => {  // drag by the bar, resize from the corner
+/* Video: the board at 720p or 1080p while the mix plays, recorded in real time. */
+let vidRec = null;
+function videoType() {
+  const types = ["video/mp4;codecs=avc1.42E01E,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
+  return window.MediaRecorder ? types.find(t => MediaRecorder.isTypeSupported(t)) : null;
+}
+$("#exVideo").onclick = async () => {
+  const type = videoType(), cv0 = document.createElement("canvas");
+  if (!type || !cv0.captureStream) { toast("Questo browser non sa registrare video: aggiorna iPadOS o usa Safari."); return; }
+  if (ui.playing) stop();
+  $("#vidProgress").hidden = false; $("#vidBar").style.width = "0%"; $("#vidInfo").textContent = "Preparo il file…";
+  const r = await renderAll(ui.exportBeat), loopN = r.loop.length, reps = ui.repeats;
+  const audioBuf = tiled(r.full, loopN, reps), length = loopN * reps / SR;
+  const height = +(ui.vidRes || 1080);
+  await withBoard(2, async () => {
+    cacheBoard(); renderInk();
+    const crop = boardCrop(false), k = height / crop.h, out = document.createElement("canvas");
+    out.width = Math.round(crop.w * k / 2) * 2; out.height = height;
+    const c = out.getContext("2d"), bg = $("#exVidBg").checked;
+    const ctx = new AudioContext(), dest = ctx.createMediaStreamDestination();
+    const src = ctx.createBufferSource(); src.buffer = audioBuf; src.connect(dest); src.connect(ctx.destination);
+    const stream = new MediaStream([...out.captureStream(30).getVideoTracks(), ...dest.stream.getAudioTracks()]);
+    const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: height >= 1080 ? 8e6 : 4e6 });
+    const chunks = [];
+    rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+    const done = new Promise(res => { rec.onstop = res; });
+    paintFrame(c, crop, k, { transparent: false, bg, frac: 0 });
+    await ctx.resume();
+    rec.start(250);
+    const t0 = ctx.currentTime + 0.05; src.start(t0);
+    vidRec = { cancelled: false, rec, ctx };
+    await new Promise(res => {
+      const tick = () => {
+        const time = ctx.currentTime - t0;
+        if (vidRec.cancelled || time >= length + 0.25) { res(); return; }
+        const frac = Math.max(0, time) / loopSec() % 1;
+        for (const m of media.values()) if (m.el.tagName === "VIDEO" && m.el.duration) {  // the background video follows the export clock
+          const want = Math.max(0, time) % loopSec() % m.el.duration;
+          if (Math.abs(m.el.currentTime - want) > 0.2) m.el.currentTime = want;
+          if (m.el.paused) m.el.play().catch(() => {});
+        }
+        paintFrame(c, crop, k, { transparent: false, bg, frac });
+        $("#vidBar").style.width = Math.min(100, Math.max(0, time) / length * 100) + "%";
+        $("#vidInfo").textContent = `${Math.min(length, Math.max(0, time)).toFixed(1)} / ${length.toFixed(1)} s`;
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    try { src.stop(); } catch (e) { /* ended */ }
+    rec.stop(); await done; ctx.close();
+    for (const m of media.values()) if (m.el.pause) m.el.pause();
+    const cancelled = vidRec.cancelled; vidRec = null;
+    $("#vidProgress").hidden = true;
+    if (cancelled) { toast("Video annullato"); return; }
+    const blob = new Blob(chunks, { type: type.split(";")[0] });
+    await saveFile(fileBase() + (type.startsWith("video/mp4") ? ".mp4" : ".webm"), blob);
+  });
+};
+$("#vidCancel").onclick = () => { if (vidRec) vidRec.cancelled = true; };
+/* ---------- pictures and videos: floating windows, or the background of the board ----------
+   Each one is a record in ui.media (name, kind, place); the file itself stays in IndexedDB.
+   Videos follow the playhead: play, stop, seek and every turn of the loop. */
+const ICO = {
+  bg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 16l5-5 4 4 3-3 6 6"/><circle cx="15.5" cy="8.5" r="1.5"/></svg>',
+  sound: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>',
+  pip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><rect x="12" y="12" width="7" height="5" rx="1.2" fill="currentColor"/></svg>',
+  close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+};
+const media = new Map();  // id -> { rec, el, url, win }
+let mediaTop = 8;
+const pipOK = el => !!(document.pictureInPictureEnabled || (el.webkitSupportsPresentationMode && el.webkitSupportsPresentationMode("picture-in-picture")));
+function mediaRecs() { return ui.media || (ui.media = []); }
+function saveMedia() { ui.media = [...media.values()].map(m => m.rec); saveSoon(); }
+function openMedia(rec, blob) {
+  const kind = rec.kind, el = document.createElement(kind === "video" ? "video" : "img");
+  const url = URL.createObjectURL(blob);
+  if (kind === "video") { el.playsInline = true; el.muted = rec.muted !== false; el.preload = "auto"; el.loop = false; }
+  el.src = url; el.draggable = false;
+  const m = { rec, el, url, win: null };
+  media.set(rec.id, m);
+  if (kind === "video") el.addEventListener("seeked", () => requestFrame());
+  el.addEventListener(kind === "video" ? "loadedmetadata" : "load", () => { if (m.win) fitMedia(m); syncMedia(m, true); requestFrame(); });
+  if (rec.place === "bg") setBackground(rec.id, true); else showWindow(m);
+  return m;
+}
+function showWindow(m) {
+  const { rec, el } = m;
+  const win = document.createElement("div"); win.className = "video-win";
+  const bar = document.createElement("div"); bar.className = "video-bar";
+  const name = document.createElement("span"); name.dataset.notr = ""; name.textContent = rec.name;
+  const btn = (icon, title, fn) => { const b = document.createElement("button"); b.innerHTML = icon; b.title = title; b.setAttribute("aria-label", title); b.onclick = fn; bar.append(b); return b; };
+  bar.append(name);
+  btn(ICO.bg, "Usa come sfondo della tavola", () => setBackground(rec.id));
+  if (rec.kind === "video") {
+    const snd = btn(ICO.sound, "Audio del video", () => { el.muted = !el.muted; rec.muted = el.muted; snd.setAttribute("aria-pressed", String(!el.muted)); saveMedia(); });
+    snd.setAttribute("aria-pressed", String(!el.muted));
+    if (pipOK(el)) btn(ICO.pip, "Picture in picture di sistema", () => {
+      if (document.pictureInPictureElement) document.exitPictureInPicture();
+      else if (el.requestPictureInPicture) el.requestPictureInPicture().catch(() => toast("Picture in picture non disponibile qui."));
+      else el.webkitSetPresentationMode("picture-in-picture");
+    });
+  }
+  btn(ICO.close, "Chiudi", () => removeMedia(rec.id));
+  const grip = document.createElement("div"); grip.className = "video-resize";
+  win.append(bar, el, grip);
+  $("#mediaLayer").append(win);
+  m.win = win;
+  const app = $("#app").getBoundingClientRect(), r = rec.rect || {};
+  const n = [...media.values()].filter(x => x.win).length - 1;
+  win.style.width = clamp(r.w || 340, 160, app.width - 24) + "px";
+  win.style.left = clamp(r.x ?? app.width - (r.w || 340) - 24 - n * 24, 8, app.width - 160) + "px";
+  win.style.top = clamp(r.y ?? 140 + n * 24, 8, app.height - 120) + "px";
+  fitMedia(m);
+  dragWindow(m, bar, grip);
+  win.style.zIndex = ++mediaTop;
+  win.addEventListener("pointerdown", () => { win.style.zIndex = ++mediaTop; });  // the touched window comes to the front
+}
+function fitMedia(m) {
+  const { el, win } = m, w = win.offsetWidth;
+  const iw = el.videoWidth || el.naturalWidth, ih = el.videoHeight || el.naturalHeight;
+  win.style.height = Math.round(w * (iw ? ih / iw : 9 / 16) + win.firstChild.offsetHeight) + "px";
+}
+function dragWindow(m, bar, grip) {
   let g = null;
   const down = (mode, e) => {
     if (e.target.closest("button")) return;
     e.preventDefault(); e.stopPropagation();
-    g = { mode, id: e.pointerId, x: e.clientX, y: e.clientY, l: videoWin.offsetLeft, t: videoWin.offsetTop, w: videoWin.offsetWidth };
+    g = { mode, id: e.pointerId, x: e.clientX, y: e.clientY, l: m.win.offsetLeft, t: m.win.offsetTop, w: m.win.offsetWidth };
     try { e.target.setPointerCapture(e.pointerId); } catch (err) { /* gone */ }
   };
-  $("#videoBar").addEventListener("pointerdown", e => down("move", e));
-  $("#videoResize").addEventListener("pointerdown", e => down("size", e));
-  document.addEventListener("pointermove", e => {
+  bar.addEventListener("pointerdown", e => down("move", e));
+  grip.addEventListener("pointerdown", e => down("size", e));
+  const move = e => {
     if (!g || e.pointerId !== g.id) return;
-    const app = $("#app").getBoundingClientRect(), dx = e.clientX - g.x, dy = e.clientY - g.y;
+    const app = $("#app").getBoundingClientRect(), dx = e.clientX - g.x, dy = e.clientY - g.y, win = m.win;
     if (g.mode === "move") {
-      videoWin.style.left = clamp(g.l + dx, 4 - videoWin.offsetWidth / 2, app.width - videoWin.offsetWidth / 2) + "px";
-      videoWin.style.top = clamp(g.t + dy, 4, app.height - 60) + "px";
-    } else { videoWin.style.width = clamp(g.w + dx, 180, app.width - 16) + "px"; fitVideo(); }
-  });
-  const up = e => { if (g && e.pointerId === g.id) { g = null; saveVideoRect(); } };
-  document.addEventListener("pointerup", up); document.addEventListener("pointercancel", up);
-})();
-sampleStore.get("video").then(b => { if (b instanceof Blob && ui.videoName) showVideo(b, ui.videoName, false); }).catch(() => {});
+      win.style.left = clamp(g.l + dx, 4 - win.offsetWidth / 2, app.width - win.offsetWidth / 2) + "px";
+      win.style.top = clamp(g.t + dy, 4, app.height - 60) + "px";
+    } else { win.style.width = clamp(g.w + dx, 160, app.width - 16) + "px"; fitMedia(m); }
+  };
+  const up = e => { if (g && e.pointerId === g.id) { g = null; m.rec.rect = { x: m.win.offsetLeft, y: m.win.offsetTop, w: m.win.offsetWidth }; saveMedia(); } };
+  bar.addEventListener("pointermove", move); grip.addEventListener("pointermove", move);
+  for (const el of [bar, grip]) { el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up); }
+}
+/* One picture or video at a time sits behind the board; the one there before goes back to a window. */
+function setBackground(id, silent) {
+  const m = media.get(id);
+  if (!m) return;
+  for (const o of media.values()) if (o !== m && o.rec.place === "bg") { o.rec.place = "win"; showWindow(o); }
+  if (m.win) { m.win.remove(); m.win = null; }
+  m.rec.place = "bg"; ui.bgMedia = id;
+  if (m.el.tagName === "VIDEO") m.el.muted = true;
+  saveMedia(); requestFrame(); syncBgControls();
+  if (!silent) toast("Sfondo della tavola: opacità e adattamento in Impostazioni → Tavola");
+}
+function unsetBackground() {
+  const m = media.get(ui.bgMedia);
+  ui.bgMedia = null;
+  if (m) { m.rec.place = "win"; showWindow(m); }
+  saveMedia(); requestFrame(); syncBgControls();
+}
+function removeMedia(id) {
+  const m = media.get(id);
+  if (!m) return;
+  if (m.el.pause) m.el.pause();
+  if (m.win) m.win.remove();
+  URL.revokeObjectURL(m.url);
+  media.delete(id);
+  if (ui.bgMedia === id) ui.bgMedia = null;
+  sampleStore.del("media:" + id);
+  saveMedia(); requestFrame(); syncBgControls();
+}
+const bgMedia = () => { const m = media.get(ui.bgMedia); return m && m.rec.place === "bg" ? m : null; };
+/* Where the background goes: the whole board (every bar, every row), so it zooms and pans with it. */
+function bgRect(m, x0, y0, x1, y1) {
+  const iw = m.el.videoWidth || m.el.naturalWidth, ih = m.el.videoHeight || m.el.naturalHeight;
+  if (!iw || !ih) return null;
+  const w = x1 - x0, h = y1 - y0, fit = ui.bgFit || "cover";
+  if (fit === "stretch") return [x0, y0, w, h];
+  const k = fit === "cover" ? Math.max(w / iw, h / ih) : Math.min(w / iw, h / ih);
+  return [x0 + (w - iw * k) / 2, y0 + (h - ih * k) / 2, iw * k, ih * k];
+}
+function paintBackground(c, x0, y0, x1, y1) {
+  const m = bgMedia();
+  if (!m) return;
+  const r = bgRect(m, x0, y0, x1, y1);
+  if (!r) return;
+  c.save(); c.globalAlpha = ui.bgOpacity ?? 0.5;
+  try { c.drawImage(m.el, ...r); } catch (e) { /* not decoded yet */ }
+  c.restore();
+}
+function syncMedia(m, force) {
+  const el = m.el;
+  if (el.tagName !== "VIDEO" || !el.duration) return;
+  const t = (ui.playing ? fraction() : ui.startFrac) * loopSec(), want = t % el.duration;
+  if (ui.playing) {
+    if (force || Math.abs(el.currentTime - want) > 0.25) el.currentTime = want;
+    if (el.paused) el.play().catch(() => {});
+  } else {
+    if (!el.paused) el.pause();
+    if (force || Math.abs(el.currentTime - want) > 0.05) el.currentTime = want;
+  }
+}
+async function addMediaFile(f, place) {
+  const kind = f.type.startsWith("video") ? "video" : f.type.startsWith("image") ? "image" : null;
+  if (!kind) { toast("Questo file non è un'immagine o un video."); return; }
+  const rec = { id: newId("m"), kind, name: f.name.replace(/\.[^.]+$/, ""), place: place || "win", muted: true };
+  await sampleStore.set("media:" + rec.id, f);
+  openMedia(rec, f);
+  saveMedia();
+  if (place !== "bg") toast(kind === "video" ? "Video aperto: segue il play. Trascinalo dalla barra, ridimensionalo dall'angolo." : "Immagine aperta: trascinala dalla barra, ridimensionala dall'angolo.");
+}
+$("#fileMedia").addEventListener("change", e => { const fs = [...(e.target.files || [])]; e.target.value = ""; closePopovers(); fs.forEach(f => addMediaFile(f)); });
+$("#fileBg2").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; closePopovers(); if (f) addMediaFile(f, "bg"); });
+$("#fileBg").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; closePopovers(); if (f) addMediaFile(f, "bg"); });
+async function restoreMedia() {  // windows and background from the last time (and the single video of older versions)
+  let recs = mediaRecs().filter(r => r && r.id);
+  if (ui.videoName) { const b = await sampleStore.get("video").catch(() => null); if (b instanceof Blob) { const rec = { id: newId("m"), kind: "video", name: ui.videoName, place: "win", rect: ui.videoRect }; await sampleStore.set("media:" + rec.id, b); recs = recs.concat(rec); } sampleStore.del("video"); ui.videoName = null; }
+  for (const rec of recs) { const b = await sampleStore.get("media:" + rec.id).catch(() => null); if (b instanceof Blob) openMedia(rec, b); }
+  saveMedia(); syncBgControls();
+}
+function syncBgControls() {
+  const m = bgMedia();
+  $("#bgNone").hidden = !!m; $("#bgSet").hidden = !m;
+  if (!m) return;
+  $("#bgName").textContent = m.rec.name;
+  setRange($("#inBgOp"), ui.bgOpacity ?? 0.5); $("#valBgOp").textContent = Math.round((ui.bgOpacity ?? 0.5) * 100) + "%";
+  seg($("#segBgFit"), ui.bgFit || "cover", v => { ui.bgFit = v; saveSoon(); requestFrame(); });
+}
+$("#inBgOp").addEventListener("input", e => { ui.bgOpacity = +e.target.value; fillRange(e.target); $("#valBgOp").textContent = Math.round(ui.bgOpacity * 100) + "%"; saveSoon(); requestFrame(); });
+$("#bgToWin").onclick = () => unsetBackground();
+$("#bgRemove").onclick = () => { if (ui.bgMedia) removeMedia(ui.bgMedia); };
 
 $("#actSave").onclick = () => { closePopovers(); saveFile(fileBase() + ".json", projectJson()); };
 $("#fileJson2").addEventListener("change", e => { closePopovers(); openProject(e); });
@@ -4280,7 +4537,7 @@ function showView(view, instant) {
   if (view === "draw") layoutDraw();
   if (view === "beat") { buildBeatGrid(); syncBeatControls(); setBeatMode(ui.beatMode || "grid"); }
   if (view === "midi") { buildKeys(); syncMidiChip(); connectMidi(); drawRoll(true); if (loop.dirty || !loop.buffer) ensureLoop(); }
-  if (view === "export") { drawWave(); if (loop.dirty || !loop.buffer) ensureLoop(); }
+  if (view === "export") { drawWave(); syncExportImage(); if (loop.dirty || !loop.buffer) ensureLoop(); }
   if (view === "wave") renderWaveView();
   requestFrame(); saveSoon();
 }
@@ -4441,7 +4698,7 @@ function openPopover(btnId, popId = POPS[btnId]) {
   const pop = $("#" + popId), btn = $("#" + btnId), app = $("#app").getBoundingClientRect(), r = btn.getBoundingClientRect();
   if (popId === "popLayers") { ui.layerOpen = null; ui.layerMenu = null; ui.swipeOpen = null; ui.picked = new Set(); renderLayers(); }
   if (popId === "popBoard") {  // Impostazioni: a sheet in the middle, not a bubble
-    syncBoardForm(); pop.hidden = false; $("#scrim").hidden = false;
+    syncBoardForm(); syncBgControls(); pop.hidden = false; $("#scrim").hidden = false;
     btn.setAttribute("aria-expanded", "true"); ui.open = popId; ui.openBtn = btnId;
     return;
   }
@@ -5564,6 +5821,7 @@ document.addEventListener("keyup", e => { if (e.code in KEYMAP) noteOff("k" + e.
 
 load();
 if (ui.lang !== LANG) setDict(ui.lang);
+restoreMedia();
 {
   const t = themeChoice();
   if (t !== "system") document.documentElement.dataset.theme = t;
@@ -5604,5 +5862,5 @@ if (!inArtifact && "serviceWorker" in navigator && (location.protocol === "https
 // No page zoom from pinches on the interface (Safari).
 document.addEventListener("gesturestart", e => e.preventDefault());
 
-window.__gp2m = { showVideo, restartAudio, waveData, screenOf: (b, p) => [xOf(b), yOf(p)], geoTop: () => geo.top, state: () => state, ui, renderAll, reviewAudio, detectPitch, sampleBuffers, deleteLayers, collectParts, tiled, allNotes, midiBytes, wavBytes, zipBlob, parseMidi, importMidi, beatHits, showView, loop, ensureLoop };
+window.__gp2m = { addMediaFile, media, restartAudio, waveData, screenOf: (b, p) => [xOf(b), yOf(p)], geoTop: () => geo.top, state: () => state, ui, renderAll, reviewAudio, detectPitch, sampleBuffers, deleteLayers, collectParts, tiled, allNotes, midiBytes, wavBytes, zipBlob, parseMidi, importMidi, beatHits, showView, loop, ensureLoop };
 </script>
