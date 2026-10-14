@@ -167,6 +167,13 @@ ognuno con i propri disegni sul proprio dispositivo.
 Il sorgente è `web/app.html`; `python tools/build_web.py` rigenera `docs/app/` (pagina,
 manifest, icone e service worker).
 
+**Lingue**: italiano, inglese, francese, spagnolo, cinese (semplificato) e russo, da
+*Impostazioni → Interfaccia → Lingua*. Al primo avvio l'app sceglie la lingua dell'iPad. Le
+frasi sono scritte in italiano nel sorgente: `python tools/i18n_extract.py` le raccoglie in
+`web/i18n/source.json`, le traduzioni stanno in `web/i18n/<lingua>.json` e
+`python tools/build_i18n.py` le inserisce in `web/app.html` (poi `tools/build_web.py`).
+Per aggiungere una lingua basta un nuovo file `.json` con le stesse chiavi.
+
 **Icona personalizzata**: `web/icon-template.png` (e `.svg`) è una griglia di costruzione a
 sezione aurea, nello stile della griglia delle icone Apple, con in rosso la maschera
 arrotondata che applica iPadOS. Disegna il logo su una tela quadrata 1024 o 2048 px con il

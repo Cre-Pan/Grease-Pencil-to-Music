@@ -68,6 +68,9 @@
   Solo Pencil le dita scorrono la griglia.
 - MIDI: selezione e spostamento delle note, Registra e Ricarica in alto, Livelli e strumento.
 - **Video** in una finestra mobile sincronizzata con il play.
+- **Lingue**: italiano, inglese, francese, spagnolo, cinese e russo (Impostazioni →
+  Interfaccia → Lingua); al primo avvio segue la lingua del dispositivo. I nomi che scrivi
+  (livelli, composizione, suoni, onde) non vengono tradotti.
 
 ## 0.0.5
 
