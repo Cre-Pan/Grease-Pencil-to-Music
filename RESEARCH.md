@@ -22,6 +22,21 @@ fonte.
   [img2sound](https://github.com/xirtus/img2sound),
   [spectrographic](https://pypi.org/project/spectrographic/0.9.1).
 
+## Pennelli e onde disegnate (web app)
+
+- **perfect-freehand** (MIT): tratti a spessore variabile dalla pressione. La forma dei tratti
+  della web app segue la stessa idea (contorno costruito dai punti con raggio), scritta da zero.
+  [repository](https://github.com/steveruizok/perfect-freehand).
+- **Blender Grease Pencil, Ink Rough / Randomize**: rumore su posizione, spessore e forza
+  lungo il tratto. Da qui il pennello *Inchiostro ruvido* e la sua Ruvidezza.
+  [BrushGpencilSettings](https://docs.blender.org/api/current/bpy.types.BrushGpencilSettings.html).
+- **MyPaint brushes**: libreria di pennelli con licenza CC0, utile per pennelli futuri.
+  [mypaint-brushes](https://github.com/mypaint/mypaint-brushes).
+- **Norman McLaren**, suono disegnato sulla colonna ottica: la sezione *Onda* disegna il bordo
+  della forma come onda sonora (sopra = sinistra, sotto = destra).
+  [Synchromy (NFB)](https://www.nfb.ca/film/synchromy/),
+  [Pen Point Percussion (NFB)](https://www.nfb.ca/film/pen_point_percussion/).
+
 ## Strumenti per disegnare o sonificare
 
 - **play_music_theory**: la tavola a righe, una per semitono, con tastiera verticale.

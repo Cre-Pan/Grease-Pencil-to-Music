@@ -143,14 +143,15 @@ l'irregolarità veloce (per esempio il jitter del pennello Ink) diventa vibrato.
 ## Web app per iPad (senza App Store)
 
 La stessa idea gira anche nel browser, pensata per iPad e Apple Pencil: sezioni **Disegna**,
-**Beat** (step sequencer), **MIDI** (piano roll, tastiera sul vetro, import .mid) ed
-**Esporta** (WAV + MIDI in .zip, PNG, progetto .json).
+**Beat** (step sequencer con pattern A e B), **MIDI** (piano roll, tastiera sul vetro, import
+.mid), **Onda** (disegni la forma d'onda di uno strumento) ed **Esporta** (WAV + MIDI in .zip,
+PNG, progetto .json).
 
 Per installarla come app sulla schermata Home, che funziona anche offline:
 
 1. Su GitHub: *Settings → Pages → Build and deployment → Deploy from a branch*, scegli il
-   branch con questa cartella `docs/` (per esempio `main` dopo il merge) e la cartella
-   **/docs**, poi *Save*.
+   branch con questa cartella `docs/` (oggi `claude/v0.0.1-prototype`, `main` dopo il merge)
+   e la cartella **/docs**, poi *Save*.
 2. Dopo un minuto apri in **Safari** sull'iPad
    `https://cre-pan.github.io/Grease-Pencil-to-Music/app/`.
 3. *Condividi → Aggiungi alla schermata Home* (anche da Chrome per iPad: Condividi nella barra
@@ -168,6 +169,35 @@ template come livello in alto, esporta un PNG quadrato senza angoli arrotondati 
 `web/icon.png` e rilancia `tools/build_web.py`. I template ufficiali sono negli
 [Apple Design Resources](https://developer.apple.com/design/resources/).
 
+### Pennelli
+
+Tocca il pennello (in alto a destra) quando è già attivo per aprire la libreria. Ogni pennello
+cambia anche il suono.
+
+| Pennello | Aspetto | Suono |
+|---|---|---|
+| Liscio | segue la pressione | lo spessore è il volume |
+| Inchiostro ruvido | rumore su posizione e spessore, come *Ink Rough* di Blender (slider Ruvidezza) | vibrato e tremolo irregolari |
+| Matita | grana di grafite, sottile | più scuro |
+| Pennarello | spessore costante, punta piatta | volume fermo |
+| Aerografo | bordi sfumati | attacco lento |
+| Puntini | un punto a ogni passo della griglia | arpeggio di note brevi |
+| Pieno | chiude la forma da solo e la riempie | cluster: tutte le note coperte |
+
+**Lazo** (icona tratteggiata, tasto S): cerchia i tratti del livello attivo, trascinali (si
+agganciano alla griglia e ai semitoni), poi Duplica, Strumento attuale, Elimina o Fine.
+
+**Beat A/B**: ogni traccia ha due pattern. *Pattern A | B* sceglie quale modifichi, *Copia A in
+B* parte da una copia, la *Sequenza* dice quale suona in ogni battuta (tocca: A → B → pausa).
+I preset mettono in B una variazione con un fill e suonano A A A B.
+
+**Onda**: disegni un ciclo del suono, come la colonna sonora ottica di Norman McLaren. Il
+bordo sopra della forma è il canale sinistro, quello sotto il destro; il riempimento tra i
+due è il suono. *Tratto* disegna un bordo (sopra o sotto, l'altro è lo specchio), *Pieno* una
+forma chiusa che dà entrambi i bordi; *Simmetrico* fa sentire lo stesso suono nelle due
+orecchie. *Disegna con questa onda* la usa come strumento; le onde sono anche in *Strumento →
+Onde disegnate* ed entrano nel progetto .json.
+
 ### Gesti della web app
 
 | Gesto | Azione |
@@ -180,6 +210,8 @@ template come livello in alto, esporta un PNG quadrato senza angoli arrotondati 
 | Livello: tieni premuto e trascina | cambia l'ordine |
 | Occhio o altoparlante tenuti premuti | solo quel livello visibile / udibile |
 | Nome di una traccia del beat tenuto premuto | volume e intonazione |
+| Pennello già attivo, tocco | libreria dei pennelli |
+| Lazo: cerchia, poi trascina | sposta i tratti scelti |
 
 ## Limiti noti (0.0.x)
 

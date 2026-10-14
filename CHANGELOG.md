@@ -29,6 +29,16 @@
   play; durante il play salta lì.
 - Livelli: tieni premuto e trascina per cambiarne l'ordine.
 - Beat: tieni premuto il nome di una traccia per volume e intonazione.
+- Pennelli: Liscio, Inchiostro ruvido (rumore su posizione e spessore, come Ink Rough di
+  Blender), Matita, Pennarello, Aerografo, Puntini, Pieno. Ogni pennello cambia anche il suono
+  (vibrato, timbro più scuro, volume fermo, attacco lento, arpeggio, cluster).
+- Lazo: seleziona i tratti del livello attivo, spostali con aggancio a griglia e semitoni,
+  duplica, elimina o cambia strumento.
+- Beat: pattern A e B per traccia, sequenza per battuta (A, B o pausa); i preset hanno un fill
+  in B.
+- Nuova sezione **Onda**: disegna un ciclo della forma d'onda (bordo sopra = sinistra, bordo
+  sotto = destra, Tratto o Pieno, Simmetrico) e usala come strumento.
+- Il disegno si salva subito quando l'app va in secondo piano.
 
 ## 0.0.5
 

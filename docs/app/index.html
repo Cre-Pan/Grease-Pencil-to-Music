@@ -40,7 +40,7 @@ img { max-width: 100%; }
   --fg: #1c1c1e;
   --fg-2: rgba(60, 60, 67, 0.62);
   --sep: rgba(60, 60, 67, 0.16);
-  --blue: #007aff;
+  --blue: #007aff; --orange: #ff9500;
   --red: #ff3b30;
   --green: #34c759;
   --on-tint: #ffffff;
@@ -69,7 +69,7 @@ img { max-width: 100%; }
     --pill: #636366; --fill: rgba(120, 120, 128, 0.24); --fill-2: rgba(120, 120, 128, 0.36);
     --glass: rgba(36, 36, 38, 0.7); --glass-edge: rgba(255, 255, 255, 0.1);
     --fg: #ffffff; --fg-2: rgba(235, 235, 245, 0.6); --sep: rgba(84, 84, 88, 0.55);
-    --blue: #0a84ff; --red: #ff453a; --green: #30d158;
+    --blue: #0a84ff; --red: #ff453a; --green: #30d158; --orange: #ff9f0a;
     --row-black: rgba(255, 255, 255, 0.035); --grid-beat: rgba(255, 255, 255, 0.06);
     --grid-bar: rgba(255, 255, 255, 0.18); --grid-c: rgba(255, 255, 255, 0.12);
     --key-white: #2c2c2e; --key-black: #0c0c0e; --key-edge: rgba(255, 255, 255, 0.06);
@@ -85,7 +85,7 @@ img { max-width: 100%; }
   --pill: #636366; --fill: rgba(120, 120, 128, 0.24); --fill-2: rgba(120, 120, 128, 0.36);
   --glass: rgba(36, 36, 38, 0.7); --glass-edge: rgba(255, 255, 255, 0.1);
   --fg: #ffffff; --fg-2: rgba(235, 235, 245, 0.6); --sep: rgba(84, 84, 88, 0.55);
-  --blue: #0a84ff; --red: #ff453a; --green: #30d158;
+  --blue: #0a84ff; --red: #ff453a; --green: #30d158; --orange: #ff9f0a;
   --row-black: rgba(255, 255, 255, 0.035); --grid-beat: rgba(255, 255, 255, 0.06);
   --grid-bar: rgba(255, 255, 255, 0.18); --grid-c: rgba(255, 255, 255, 0.12);
   --key-white: #2c2c2e; --key-black: #0c0c0e; --key-edge: rgba(255, 255, 255, 0.06);
@@ -386,6 +386,36 @@ label.btn input { position: absolute; width: 1px; height: 1px; opacity: 0; point
 .beat-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 6px 18px; align-items: center; }
 .ctl { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; font-size: 14px; min-width: 0; }
 .ctl .v { color: var(--fg-2); font-variant-numeric: tabular-nums; font-size: 13px; min-width: 38px; text-align: right; }
+.wave-head { padding: 16px 18px; display: grid; gap: 12px; }
+.wave-head h2 { font-size: 28px; font-weight: 700; letter-spacing: -0.025em; }
+.wave-head h2 small { font-size: 15px; color: var(--fg-2); font-weight: 500; letter-spacing: -0.01em; margin-left: 8px; }
+.wave-list { display: flex; gap: 8px; flex-wrap: wrap; }
+.wave-chip { display: inline-flex; align-items: center; gap: 8px; }
+.wave-chip i { width: 12px; height: 12px; border-radius: 4px; }
+.wave-editor { padding: 14px; display: grid; gap: 12px; }
+.wave-tools { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; font-size: 14px; }
+.wave-tools .title-input { flex: 1 1 160px; min-width: 0; font-size: 20px; }
+.wave-stage { position: relative; }
+#waveCanvas { display: block; width: 100%; height: min(40vh, 400px); border-radius: 18px; background: var(--fill); touch-action: none; cursor: crosshair; }
+#waveScope { display: block; width: 100%; height: 96px; border-radius: 14px; background: var(--fill); }
+.wave-side { position: absolute; left: 14px; font-size: 12px; font-weight: 650; letter-spacing: 0.02em; pointer-events: none; }
+.wave-side.l { top: 10px; color: var(--blue); }
+.wave-side.r { bottom: 10px; color: var(--orange); }
+.wave-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+.wave-foot .spacer { flex: 1; }
+.wave-foot > span { color: var(--fg-2); font-weight: 600; margin-right: 2px; }
+.chip.primary { background: var(--blue); color: var(--on-tint); }
+.pattern-row { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; font-size: 14px; }
+.pattern-row > span { color: var(--fg-2); font-weight: 600; }
+.chain { display: flex; gap: 6px; flex-wrap: wrap; flex: 1 1 260px; }
+.slot {
+  width: 34px; height: 34px; border-radius: 10px; font: 700 14px var(--font-round); background: var(--fill); color: var(--fg-2);
+  transition: transform 0.2s var(--spring), background 0.2s, box-shadow 0.2s;
+}
+.slot[data-p="A"] { background: color-mix(in srgb, var(--blue) 18%, transparent); color: var(--blue); }
+.slot[data-p="B"] { background: color-mix(in srgb, var(--orange) 22%, transparent); color: var(--orange); }
+.slot.now { box-shadow: inset 0 0 0 2px currentColor; transform: scale(1.08); }
+.slot:active { transform: scale(0.92); }
 .ctl-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; }
 .beat-grid { padding: 14px; overflow-x: auto; }
 .beat-inner { display: grid; gap: 8px; min-width: max-content; }
@@ -464,6 +494,16 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   background: var(--fg); color: var(--paper); animation: toast-in 0.34s var(--spring) both;
 }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 10px) scale(0.94); } to { opacity: 1; transform: translate(-50%, 0); } }
+.brush-list { display: grid; gap: 4px; }
+.brush { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; align-items: center; padding: 8px; border-radius: 14px; text-align: left; transition: background 0.2s, transform 0.2s var(--spring); }
+.brush:active { transform: scale(0.98); }
+.brush[aria-pressed="true"] { background: var(--fill); box-shadow: inset 0 0 0 2px var(--blue); }
+.brush canvas { width: 112px; height: 40px; }
+.brush b { display: block; font-size: 15px; font-weight: 600; }
+.brush small { display: block; font-size: 12.5px; color: var(--fg-2); line-height: 1.35; }
+.sel-bar { top: 74px; left: 50%; transform: translateX(-50%); padding: 6px; gap: 6px; animation: pop-in 0.3s var(--spring) both; }
+.sel-count { padding: 0 8px 0 12px; font-size: 14px; font-weight: 600; color: var(--fg-2); white-space: nowrap; }
+.chip.danger { color: var(--red); }
 .zoom-pill {
   position: absolute; z-index: 4; padding: 7px 13px; border-radius: 999px; font-size: 13px; font-weight: 650;
   font-family: var(--font-round); font-variant-numeric: tabular-nums; animation: pop-in 0.3s var(--spring) both;
@@ -497,6 +537,13 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   .keys-card { height: 140px; }
   .tempo span { min-width: 54px; }
   .clock { min-width: 52px; }
+  .sel-bar { top: auto; bottom: 136px; max-width: calc(100% - 24px); }
+  .wave-head h2 small { display: block; margin: 4px 0 0; }
+}
+@media (max-width: 440px) {
+  .tab { padding: 8px 6px; font-size: 12.5px; }
+  .cap-left .ib { width: 40px; }
+  .sel-count { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -538,13 +585,59 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
             <div class="ctl-row"><span>Passi</span><div class="seg" id="segSteps" style="width:150px"><button data-v="16">16</button><button data-v="32">32</button></div></div>
             <div class="ctl-row"><label for="beatOn">Beat attivo</label><input class="switch" type="checkbox" id="beatOn"></div>
           </div>
+          <div class="pattern-row">
+            <span>Pattern</span>
+            <div class="seg" id="segPat" style="width:110px"><button data-v="A">A</button><button data-v="B">B</button></div>
+            <button class="chip" id="patCopy"></button>
+            <span>Sequenza</span>
+            <div class="chain" id="chain" aria-label="Sequenza dei pattern: tocca per cambiare A, B o pausa"></div>
+          </div>
         </div>
         <div class="card beat-grid"><div class="beat-inner" id="beatGrid"></div></div>
         <div class="beat-foot">
           <span class="legend"><i></i>spento</span><span class="legend"><i class="on"></i>colpo</span><span class="legend"><i class="acc"></i>accento</span>
-          <span>Tocca un pad per cambiarlo, trascina per dipingere più passi. Tocca il nome per sentire il suono, tienilo premuto per volume e intonazione.</span>
+          <span>Tocca un pad per cambiarlo, trascina per dipingere più passi. Tocca il nome per sentire il suono, tienilo premuto per volume e intonazione. A e B sono due pattern: la sequenza decide quale suona in ogni battuta (– = pausa).</span>
           <button class="chip" id="beatClear">Svuota</button>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Onda: draw one cycle of a waveform, the McLaren way -->
+  <section class="view" id="viewWave" aria-label="Onda" hidden>
+    <div class="scroll-view">
+      <div class="wrap">
+        <div class="card wave-head">
+          <h2>Onda <small>Disegna un ciclo del suono: il bordo sopra è il canale sinistro, quello sotto il destro.</small></h2>
+          <div class="wave-list" id="waveList"></div>
+        </div>
+        <div class="card wave-editor">
+          <div class="wave-tools">
+            <input type="text" class="title-input" id="waveName" aria-label="Nome dell'onda">
+            <div class="seg" id="segWaveBrush" style="width:150px"><button data-v="line">Tratto</button><button data-v="fill">Pieno</button></div>
+            <div class="ctl-row" style="gap:8px"><label for="waveSym">Simmetrico</label><input class="switch" type="checkbox" id="waveSym"></div>
+            <button class="chip" id="waveUndo">Annulla</button>
+            <button class="chip" id="waveClear">Svuota</button>
+          </div>
+          <div class="wave-stage">
+            <canvas id="waveCanvas" aria-label="Un ciclo dell'onda: sopra il canale sinistro, sotto il destro"></canvas>
+            <span class="wave-side l">SINISTRA ↑</span><span class="wave-side r">DESTRA ↓</span>
+          </div>
+          <canvas id="waveScope" aria-label="L'onda che si sente: sinistra in blu, destra in arancione"></canvas>
+          <div class="wave-foot">
+            <span>Parti da</span>
+            <button class="chip" data-shape="sine">Sinusoide</button>
+            <button class="chip" data-shape="tri">Triangolo</button>
+            <button class="chip" data-shape="saw">Dente di sega</button>
+            <button class="chip" data-shape="square">Quadra</button>
+            <button class="chip" data-shape="blob">Forma piena</button>
+            <span class="spacer"></span>
+            <button class="chip" id="waveListen">Ascolta</button>
+            <button class="chip primary" id="waveUse">Disegna con questa onda</button>
+            <button class="chip danger" id="waveDelete">Elimina</button>
+          </div>
+        </div>
+        <div class="beat-foot"><span>Come la colonna sonora ottica di Norman McLaren: il riempimento tra i due bordi è il suono. Con il Tratto disegni un bordo (sopra o sotto); con il Pieno disegni una forma chiusa, che dà entrambi i bordi. Un bordo che manca è lo specchio dell'altro. Una linea piatta non suona: il suono è il movimento.</span></div>
       </div>
     </div>
   </section>
@@ -616,6 +709,7 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
       <button class="tab" role="tab" id="tabDraw">Disegna</button>
       <button class="tab" role="tab" id="tabBeat">Beat</button>
       <button class="tab" role="tab" id="tabMidi">MIDI</button>
+      <button class="tab" role="tab" id="tabWave">Onda</button>
       <button class="tab" role="tab" id="tabExport">Esporta</button>
     </div>
   </nav>
@@ -626,6 +720,9 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
     </button>
     <button class="ib" id="btnEraser" title="Gomma (E)" aria-label="Gomma" aria-pressed="false">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"><path d="M14.5 4.5l5 5-9 9H6l-2.5-2.5z"/><path d="M9 10l5 5M10.5 18.5H20"/></svg>
+    </button>
+    <button class="ib" id="btnLasso" title="Lazo: seleziona e sposta (S)" aria-label="Lazo" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><ellipse cx="12" cy="10" rx="8" ry="5.5" stroke-dasharray="3.2 3"/><path d="M8.5 15c-1.2 1.8-.8 4 1.6 5"/></svg>
     </button>
     <button class="ib" id="btnLayers" title="Livelli (L)" aria-label="Livelli" aria-expanded="false" aria-controls="popLayers">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 4l8.5 4.5L12 13 3.5 8.5z"/><path d="M3.5 12.5L12 17l8.5-4.5M3.5 16.5L12 21l8.5-4.5"/></svg>
@@ -650,6 +747,13 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   </div>
 
   <div class="bubble" id="bubble" hidden></div>
+  <div class="cap sel-bar glass" id="selBar" hidden>
+    <span class="sel-count" id="selCount"></span>
+    <button class="chip" id="selDup">Duplica</button>
+    <button class="chip" id="selInst">Strumento attuale</button>
+    <button class="chip danger" id="selDel">Elimina</button>
+    <button class="chip" id="selDone">Fine</button>
+  </div>
 
   <!-- Popovers -->
   <section class="popover" id="popActions" hidden aria-label="Composizione">
@@ -684,6 +788,14 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
     </div>
   </section>
 
+  <section class="popover" id="popBrush" hidden aria-label="Pennelli">
+    <div class="pop-head"><h2>Pennelli</h2></div>
+    <div class="brush-list" id="brushList"></div>
+    <div class="group" id="roughBox" hidden style="margin-top:10px">
+      <div class="item col"><div class="item" style="padding:0;min-height:0"><label for="inRough">Ruvidezza</label><span class="v" id="valRough"></span></div><input id="inRough" type="range" min="0" max="1" step="0.01"></div>
+    </div>
+  </section>
+
   <section class="popover" id="popLayers" hidden aria-label="Livelli">
     <div class="pop-head"><h2>Livelli</h2>
       <button class="plus" id="btnAddLayer" title="Nuovo livello" aria-label="Nuovo livello">
@@ -702,6 +814,8 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
     <div class="inst-grid" id="instDrum"></div>
     <div class="label">I tuoi suoni</div>
     <div class="inst-grid" id="instSmp"></div>
+    <div class="label">Onde disegnate</div>
+    <div class="inst-grid" id="instWave"></div>
   </section>
 
   <section class="popover" id="popTrack" hidden aria-label="Traccia del beat">
@@ -817,13 +931,33 @@ const PRESETS = {
   EMPTY: { name: "Vuoto", swing: 0, rows: {} },
 };
 
+/* Brushes: how a stroke looks and what it does to the sound. */
+const BRUSHES = [
+  { id: "smooth", name: "Liscio", sound: "Lo spessore segue la pressione: è il volume." },
+  { id: "ink", name: "Inchiostro ruvido", sound: "Rumore su altezza e spessore, come Ink Rough di Blender: vibrato e tremolo irregolari." },
+  { id: "pencil", name: "Matita", sound: "Grana di grafite, tratto sottile: suono più scuro." },
+  { id: "marker", name: "Pennarello", sound: "Spessore costante, punta piatta: volume fermo." },
+  { id: "air", name: "Aerografo", sound: "Bordi sfumati: la nota entra piano (attacco lento)." },
+  { id: "dots", name: "Puntini", sound: "Un punto a ogni passo della griglia: il gesto diventa un arpeggio." },
+  { id: "fill", name: "Pieno", sound: "Chiude la forma: suona tutte le note che copre, un cluster." },
+];
+const BRUSH = Object.fromEntries(BRUSHES.map(b => [b.id, b]));
+/* Smooth 1-D value noise in [-1, 1]. */
+function noise1(t, seed) {
+  const h = n => { const x = Math.sin((n + seed * 57.13) * 127.1) * 43758.5453; return x - Math.floor(x); };
+  const i = Math.floor(t), f = t - i, u = f * f * (3 - 2 * f);
+  return (h(i) * (1 - u) + h(i + 1) * u) * 2 - 1;
+}
+
 /* ---------- state ---------- */
+
+const VIEW_IDS = ["draw", "beat", "midi", "wave", "export"];
 
 let state = null;
 const ui = {
-  view: "draw", tool: "brush", inst: "EPIANO", size: 0.5, opacity: 1, naming: "IT", stabilize: 0.3,
+  view: "draw", tool: "brush", brush: "smooth", rough: 0.5, inst: "EPIANO", size: 0.5, opacity: 1, naming: "IT", stabilize: 0.3,
   playing: false, open: null, openBtn: null, metronome: false, recording: false, kbBase: 60, repeats: 1, exportBeat: true,
-  stems: false, picked: new Set(), swipeOpen: null, layerOpen: null, startFrac: 0,
+  stems: false, wave: null, picked: new Set(), swipeOpen: null, layerOpen: null, startFrac: 0,
 };
 /* Tap the bar numbers (or the piano roll): Play starts there; while playing it jumps. */
 function seek(frac) {
@@ -836,9 +970,15 @@ let uid = 1;
 const newId = p => p + (uid++).toString(36) + Math.random().toString(36).slice(2, 6);
 const newLayer = (name, mode = "QUANTIZED", extra = {}) => ({ id: newId("l"), name, mode, visible: true, muted: false, volume: 0.85, pan: 0, reverb: 0.25, ...extra });
 
+/* Two patterns per track: p is A, pB is B. The chain says which one plays in each
+   pattern slot (one slot = one pattern length): "A", "B" or "-" for a rest. */
 function blankBeat() {
-  return { on: true, steps: 16, swing: 0, volume: 0.8, preset: "EMPTY", tracks: Object.fromEntries(BEAT_TRACKS.map(id => [id, { mute: false, p: new Array(32).fill(0) }])) };
+  return { on: true, steps: 16, swing: 0, volume: 0.8, preset: "EMPTY", edit: "A", chain: new Array(32).fill("A"),
+    tracks: Object.fromEntries(BEAT_TRACKS.map(id => [id, { mute: false, p: new Array(32).fill(0), pB: new Array(32).fill(0) }])) };
 }
+const patOf = (tr, which) => which === "B" ? tr.pB : tr.p;
+/* B for a preset: the same groove with a fill in the last beat of every bar. */
+const FILL = { SNARE: [1, 0, 1, 2], TOM: [0, 1, 1, 0], KICK: [1, 0, 0, 0], CLAP: [0, 0, 0, 2] };
 function applyPreset(beat, key) {
   const pr = PRESETS[key];
   beat.preset = key; beat.swing = pr.swing;
@@ -846,14 +986,22 @@ function applyPreset(beat, key) {
     const row = pr.rows[id] || "";
     const p = new Array(32).fill(0);
     for (let i = 0; i < 32; i++) { const ch = row[i % 16] || "."; p[i] = ch === "X" ? 2 : ch === "x" ? 1 : 0; }
-    beat.tracks[id] = { ...beat.tracks[id], mute: false, p };
+    const pB = p.slice();
+    if (key !== "EMPTY") for (let i = 0; i < 32; i++) if (i % 16 >= 12) {
+      const f = FILL[id];
+      if (f) pB[i] = Math.max(id === "KICK" ? 0 : p[i], f[i % 4]);
+      else if (id === "OHAT") pB[i] = i % 16 === 15 ? 2 : 0;
+    }
+    beat.tracks[id] = { ...beat.tracks[id], mute: false, p, pB };
   }
+  beat.edit = "A";
+  beat.chain = Array.from({ length: 32 }, (_, i) => key !== "EMPTY" && i % 4 === 3 ? "B" : "A");
 }
 
 function blankState() {
   const layer = newLayer("Livello 1");
   return { name: "Senza titolo", example: false, bpm: 100, bars: 4, low: 48, octaves: 3, scale: "MAJOR", root: 0, grid: 0.25,
-    layers: [layer], active: layer.id, strokes: [], beat: blankBeat(), samples: [] };
+    layers: [layer], active: layer.id, strokes: [], beat: blankBeat(), samples: [], waves: [] };
 }
 
 function exampleState() {
@@ -861,7 +1009,7 @@ function exampleState() {
   const pad = newLayer("Atmosfera", "OPTICAL", { volume: 0.7, pan: -0.15, reverb: 0.55 });
   const melody = newLayer("Melodia", "QUANTIZED", { volume: 0.85, pan: 0.12, reverb: 0.3 });
   const s = { name: "Prima melodia", example: true, bpm: 92, bars: 4, low: 36, octaves: 4, scale: "MAJOR", root: 0, grid: 0.25,
-    layers: [bass, pad, melody], active: melody.id, strokes: [], beat: blankBeat(), samples: [] };
+    layers: [bass, pad, melody], active: melody.id, strokes: [], beat: blankBeat(), samples: [], waves: [] };
   applyPreset(s.beat, "HIPHOP");
   const add = (layer, inst, path, w, op = 1) => s.strokes.push(makeStroke(layer.id, inst, path, w, op, s.bpm));
   const notes = [[0, 1, 72], [1, 1, 76], [4, 1, 76], [5, 1, 72], [6, 2, 69], [8, 1, 69], [9, 1, 72], [10, 1.5, 77],
@@ -894,11 +1042,14 @@ function makeStroke(layer, inst, path, w, op, bpm) {
 
 function save() {
   try {
-    localStorage.setItem(STORE_KEY, JSON.stringify({ state, ui: { inst: ui.inst, size: ui.size, opacity: ui.opacity, naming: ui.naming, stabilize: ui.stabilize, kbBase: ui.kbBase, view: ui.view } }));
+    localStorage.setItem(STORE_KEY, JSON.stringify({ state, ui: { brush: ui.brush, rough: ui.rough, inst: ui.inst, size: ui.size, opacity: ui.opacity, naming: ui.naming, stabilize: ui.stabilize, kbBase: ui.kbBase, view: ui.view } }));
   } catch (e) { /* storage blocked */ }
 }
 let saveTimer = 0;
 const saveSoon = () => { clearTimeout(saveTimer); saveTimer = setTimeout(save, 500); };
+/* iPad suspends apps sent to the background: save right away. */
+addEventListener("pagehide", () => { clearTimeout(saveTimer); save(); });
+document.addEventListener("visibilitychange", () => { if (document.hidden) { clearTimeout(saveTimer); save(); } });
 
 function sanitize(s) {
   if (!s || !Array.isArray(s.layers) || !s.layers.length) return null;
@@ -906,6 +1057,11 @@ function sanitize(s) {
   out.samples = (Array.isArray(s.samples) ? s.samples : []).filter(m => m && typeof m.id === "string" && m.id.startsWith("SMP:"))
     .map((m, i) => ({ id: m.id, name: String(m.name || "Suono"), root: clamp(Math.round(+m.root || 60), 24, 96), color: SYS[m.color] ? m.color : SAMPLE_COLORS[i % SAMPLE_COLORS.length] }));
   for (const m of out.samples) registerSample(m);
+  out.waves = (Array.isArray(s.waves) ? s.waves : []).filter(w => w && typeof w.id === "string" && w.id.startsWith("WAV:"))
+    .map((w, i) => ({ id: w.id, name: String(w.name || "Onda"), color: SYS[w.color] ? w.color : SAMPLE_COLORS[i % SAMPLE_COLORS.length], sym: !!w.sym,
+      strokes: (Array.isArray(w.strokes) ? w.strokes : []).filter(t => t && Array.isArray(t.pts) && t.pts.length)
+        .map(t => ({ fill: !!t.fill, pts: t.pts.map(q => [clamp(+q[0] || 0, 0, 1), clamp(+q[1] || 0, -1, 1)]) })) }));
+  for (const w of out.waves) registerWave(w);
   // "muted" is the sound, "visible" the drawing; older projects hid both with the eye.
   out.layers = s.layers.map(l => ({ ...newLayer(l.name || "Livello"), ...l, mode: MODE[l.mode] ? l.mode : "QUANTIZED",
     muted: "muted" in l ? !!l.muted : l.visible === false }));
@@ -920,12 +1076,13 @@ function sanitize(s) {
   const beat = blankBeat();
   if (s.beat && s.beat.tracks) {
     for (const k of ["on", "swing", "volume", "preset", "steps"]) if (k in s.beat) beat[k] = s.beat[k];
+    const clean = a => { const p = a.slice(0, 32).map(v => clamp(v | 0, 0, 2)); while (p.length < 32) p.push(0); return p; };
     for (const id of BEAT_TRACKS) if (s.beat.tracks[id] && Array.isArray(s.beat.tracks[id].p)) {
-      const p = s.beat.tracks[id].p.slice(0, 32).map(v => clamp(v | 0, 0, 2));
-      while (p.length < 32) p.push(0);
-      const t = s.beat.tracks[id];
-      beat.tracks[id] = { mute: !!t.mute, p, vol: clamp(t.vol ?? 1, 0, 1.5), tune: clamp(Math.round(t.tune || 0), -12, 12) };
+      const t = s.beat.tracks[id], p = clean(t.p);
+      beat.tracks[id] = { mute: !!t.mute, p, pB: Array.isArray(t.pB) ? clean(t.pB) : p.slice(), vol: clamp(t.vol ?? 1, 0, 1.5), tune: clamp(Math.round(t.tune || 0), -12, 12) };
     }
+    if (Array.isArray(s.beat.chain)) beat.chain = Array.from({ length: 32 }, (_, i) => ["A", "B", "-"].includes(s.beat.chain[i]) ? s.beat.chain[i] : "A");
+    beat.edit = s.beat.edit === "B" ? "B" : "A";
   }
   beat.steps = beat.steps === 32 ? 32 : 16;
   out.beat = beat;
@@ -952,7 +1109,8 @@ function load() {
         state = s;
         Object.assign(ui, data.ui || {});
         if (!INST[ui.inst]) ui.inst = "EPIANO";
-        if (!["draw", "beat", "midi", "export"].includes(ui.view)) ui.view = "draw";
+        if (!BRUSH[ui.brush]) ui.brush = "smooth";
+        if (!VIEW_IDS.includes(ui.view)) ui.view = "draw";
         return;
       }
     }
@@ -964,7 +1122,7 @@ function load() {
 
 /* ---------- history ---------- */
 
-const snapshot = () => JSON.stringify({ layers: state.layers, strokes: state.strokes, active: state.active, beat: state.beat });
+const snapshot = () => JSON.stringify({ layers: state.layers, strokes: state.strokes, active: state.active, beat: state.beat, waves: state.waves });
 function remember() {
   history.push(snapshot());
   if (history.length > 100) history.shift();
@@ -974,6 +1132,7 @@ function remember() {
 function restore(snap) {
   const d = JSON.parse(snap);
   state.layers = d.layers; state.strokes = d.strokes; state.active = d.active; state.beat = d.beat;
+  if (d.waves) { state.waves = d.waves; for (const w of state.waves) registerWave(w); samplesVersion++; }
 }
 function undo() {
   if (!history.length) return;
@@ -984,8 +1143,10 @@ function redo() {
   history.push(snapshot()); restore(future.pop()); afterUndo();
 }
 function afterUndo() {
+  sel = null; $("#selBar").hidden = true;
   changed({ ink: true }); refreshPanels(); updateUndo();
   if (ui.view === "beat") { buildBeatGrid(); syncBeatControls(); }
+  if (ui.view === "wave") renderWaveView();
 }
 function updateUndo() { $("#btnUndo").disabled = !history.length; $("#btnRedo").disabled = !future.length; }
 
@@ -1068,7 +1229,57 @@ function interpretLayer(layer, voices, notes) {
   for (const st of state.strokes) if (st.layer === layer.id && st.pts.length) interpretStroke(st, layer, voices, notes);
 }
 
+/* A filled shape: in every grid column it plays the scale notes it covers (a cluster). */
+function interpretFill(st, layer, voices, notes) {
+  const k = spb(), poly = st.pts, n = poly.length, xs = poly.map(q => q[0]);
+  const b0 = Math.max(0, Math.min(...xs)), b1 = Math.min(loopBeats(), Math.max(...xs));
+  if (b1 - b0 < 0.05) return;
+  const step = state.grid || 0.125, cols = [];
+  for (let c = Math.floor(b0 / step) * step; c < b1; c += step) {
+    const mid = c + step / 2, ys = [];
+    for (let i = 0; i < n; i++) {
+      const [xa, ya] = poly[i], [xb, yb] = poly[(i + 1) % n];
+      if ((xa <= mid && xb > mid) || (xb <= mid && xa > mid)) ys.push(ya + (mid - xa) / (xb - xa) * (yb - ya));
+    }
+    ys.sort((a, b) => a - b);
+    const set = new Set();
+    for (let j = 0; j + 1 < ys.length; j += 2) {
+      for (let m = Math.ceil(ys[j] - 0.5); m <= Math.floor(ys[j + 1] - 0.5); m++) set.add(snapScale(m));
+    }
+    if (!set.size && ys.length) set.add(snapScale(Math.floor((ys[0] + ys[ys.length - 1]) / 2)));
+    let pitches = [...set].sort((a, b) => a - b);
+    if (pitches.length > 12) pitches = pitches.filter((_, i) => i % Math.ceil(pitches.length / 12) === 0);
+    cols.push({ start: Math.max(c, 0), end: Math.min(c + step, loopBeats()), pitches });
+  }
+  const most = Math.max(1, ...cols.map(c => c.pitches.length));
+  const w = st.pts.reduce((a, q) => a + q[2], 0) / n;
+  const amp = clamp(ampOf(w) * 1.15 / Math.sqrt(most), 0.05, 1);
+  const vel = Math.round(clamp(20 + 107 * amp, 1, 127));
+  if (isDrum(st.inst)) {  // a filled drum shape is a roll: one hit per column
+    for (const c of cols) if (c.pitches.length) {
+      const a = clamp(amp * Math.sqrt(c.pitches.length / most) * 1.4, 0.1, 1);
+      voices.push({ inst: st.inst, bright: st.op, layer: layer.id, start: c.start * k, dur: 0.1, midi: 60, amp: Float32Array.of(a, a) });
+      notes.push({ start: c.start * k, end: c.start * k + 0.1, midi: 60, vel, inst: st.inst, layer: layer.id });
+    }
+    return;
+  }
+  const open = new Map();
+  const close = (m, end) => {
+    const start = open.get(m); open.delete(m);
+    voices.push({ inst: st.inst, bright: st.op, layer: layer.id, start: start * k, dur: (end - start) * k, midi: m, amp: Float32Array.of(amp, amp) });
+    notes.push({ start: start * k, end: end * k, midi: m, vel, inst: st.inst, layer: layer.id });
+  };
+  let prevEnd = null;
+  for (const c of cols) {
+    for (const m of [...open.keys()]) if (!c.pitches.includes(m) || prevEnd !== c.start) close(m, prevEnd);
+    for (const m of c.pitches) if (!open.has(m)) open.set(m, c.start);
+    prevEnd = c.end;
+  }
+  for (const m of [...open.keys()]) close(m, prevEnd);
+}
+
 function interpretStroke(st, layer, voices, notes) {
+  if (st.brush === "fill" && st.pts.length >= 3) { interpretFill(st, layer, voices, notes); return; }
   const k = spb();
   let mode = isDrum(st.inst) ? "QUANTIZED" : layer.mode;
   if (layer.mode === "GESTURE") {
@@ -1091,7 +1302,7 @@ function readRun(run, st, layer, mode, step, voices, notes) {
   const t0 = t[0], t1 = t[t.length - 1];
   if (t1 < 0 || t0 >= L) return;
   const snap = x => (step ? Math.round(x / step) * step : x);
-  const base = { inst: st.inst, bright: st.op, layer: layer.id };
+  const base = { inst: st.inst, bright: st.op * (st.brush === "pencil" ? 0.65 : 1), layer: layer.id, soft: st.brush === "air" };
   const mean = a => a.reduce((s, v) => s + v, 0) / a.length;
   const note = (start, end, midi, amp) => notes.push({ start, end, midi: Math.round(midi), vel: Math.round(clamp(20 + 107 * amp, 1, 127)), inst: st.inst, layer: layer.id });
 
@@ -1164,9 +1375,10 @@ function beatHits(force) {
   if (!b.on && !force) return [];
   const hits = [], k = spb(), total = loopBeats() * 4;
   for (let s = 0; s < total; s++) {
-    const i = s % b.steps;
+    const i = s % b.steps, which = b.chain[Math.floor(s / b.steps) % 32] || "A";
+    if (which === "-") continue;
     for (const id of BEAT_TRACKS) {
-      const tr = b.tracks[id], v = tr.p[i];
+      const tr = b.tracks[id], v = patOf(tr, which)[i];
       if (!v || tr.mute) continue;
       const beats = s * 0.25 + (s % 2 ? b.swing * 0.125 : 0);
       hits.push({ id, t: beats * k, vel: (v === 2 ? 1 : 0.7) * (tr.vol ?? 1), tune: tr.tune || 0 });
@@ -1268,7 +1480,11 @@ function scheduleVoice(ctx, dest, v, when, track) {
   const e = s + Math.max(v.dur, 0.02);
   const bright = clamp(v.bright, 0, 1);
   const amp = ctx.createGain(); amp.connect(dest); ampCurve(amp.gain, v, s);
-  const env = ctx.createGain(); env.connect(amp);
+  const env = ctx.createGain();
+  if (v.soft) {  // airbrush: the note fades in
+    const fade = ctx.createGain(); fade.gain.setValueAtTime(0, s); fade.gain.linearRampToValueAtTime(1, s + 0.16);
+    env.connect(fade); fade.connect(amp);
+  } else env.connect(amp);
   const f0 = hz(v.curve ? v.curve[0] : v.midi);
   const nodes = [];
   const osc = (type, map = hz, detune = 0) => {
@@ -1383,6 +1599,15 @@ function scheduleVoice(ctx, dest, v, when, track) {
       stopAt = Math.min(e + 0.3, s + buf.duration / rate0 + 0.02);
       break;
     }
+    case "wave": {
+      const pw = wavePair(ctx, v.inst);
+      if (!pw) { stopAt = e; break; }
+      stopAt = adsr(env.gain, s, e, 0.006, 0.2, 0.85, inst.rel, 0.3);
+      const merge = ctx.createChannelMerger(2);
+      merge.connect(lowpass(700 + bright * 14000, 0.5, env));
+      pw.forEach((wave, ch) => { const o = osc("sine"); o.setPeriodicWave(wave); o.connect(merge, 0, ch); });
+      break;
+    }
     case "bass": {
       stopAt = adsr(env.gain, s, e, 0.004, 0.3, 0.85, inst.rel, 0.3);
       const sh = ctx.createWaveShaper(); sh.curve = driveCurve; sh.connect(env);
@@ -1474,6 +1699,93 @@ const SAMPLE_COLORS = ["pink", "mint", "orange", "purple", "teal", "green", "ind
 const MAX_SAMPLE = 8;  // seconds
 const sampleBuffers = new Map();
 let samplesVersion = 0;
+/* Drawn waves (Onda): one cycle, left and right, turned into periodic waves. */
+function registerWave(w) { INST[w.id] = { id: w.id, name: w.name, c: w.color, kind: "wave", gm: 80, rel: 0.18 }; }
+const WAVE_N = 256, WAVE_H = 64;
+const waveCache = new Map();
+/* Fill the gaps of a contour by going round the cycle: a cycle wraps. */
+function closeGaps(col) {
+  const known = []; for (let i = 0; i < WAVE_N; i++) if (col[i] !== null) known.push(i);
+  if (!known.length) return null;
+  const out = new Float32Array(WAVE_N);
+  for (let k = 0; k < known.length; k++) {
+    const a = known[k], b = known[(k + 1) % known.length], span = ((b - a + WAVE_N - 1) % WAVE_N) + 1;
+    for (let d = 0; d < span; d++) out[(a + d) % WAVE_N] = col[a] + (col[b] - col[a]) * (known.length > 1 ? d / span : 0);
+  }
+  return out;
+}
+/* The two edges of the ink, column by column: the top one is L, the bottom one R. */
+function waveContours(w) {
+  const top = new Array(WAVE_N).fill(null), bot = new Array(WAVE_N).fill(null);
+  const put = (arr, c, y, hi) => { if (c < 0 || c >= WAVE_N) return; if (arr[c] === null || (hi ? y > arr[c] : y < arr[c])) arr[c] = y; };
+  for (const st of w.strokes) {
+    const pts = st.pts;
+    if (st.fill && pts.length > 2) {
+      for (let c = 0; c < WAVE_N; c++) {
+        const x = (c + 0.5) / WAVE_N; let hi = null, lo = null;
+        for (let i = 0; i < pts.length; i++) {
+          const [xa, ya] = pts[i], [xb, yb] = pts[(i + 1) % pts.length];
+          if ((xa <= x && xb > x) || (xb <= x && xa > x)) { const y = ya + (x - xa) / (xb - xa) * (yb - ya); hi = hi === null ? y : Math.max(hi, y); lo = lo === null ? y : Math.min(lo, y); }
+        }
+        if (hi !== null) { put(top, c, hi, true); put(bot, c, lo, false); }
+      }
+      continue;
+    }
+    const upper = pts.reduce((a, q) => a + q[1], 0) / pts.length >= 0 || w.sym;
+    for (let i = 0; i < pts.length; i++) {
+      const [xa, ya] = pts[i], [xb, yb] = pts[Math.min(i + 1, pts.length - 1)];
+      const n = Math.max(1, Math.ceil(Math.abs(xb - xa) * WAVE_N * 2));
+      for (let k = 0; k <= n; k++) {
+        const u = k / n, x = xa + (xb - xa) * u, y = ya + (yb - ya) * u, c = Math.min(WAVE_N - 1, Math.floor(x * WAVE_N));
+        if (upper) put(top, c, y, true); else put(bot, c, y, false);
+      }
+    }
+  }
+  let T = closeGaps(top), B = w.sym ? null : closeGaps(bot);
+  if (!T && B) T = B.map(v => -v);
+  if (T && !B) B = T.map(v => -v);
+  return T ? { top: T, bot: B } : null;
+}
+function waveData(w) {
+  const key = JSON.stringify([w.strokes, w.sym]), hit = waveCache.get(w.id);
+  if (hit && hit.key === key) return hit;
+  const cont = waveContours(w);
+  let L = new Float32Array(WAVE_N), R = new Float32Array(WAVE_N);
+  if (cont) {
+    L = cont.top.slice(); R = cont.bot.map(v => -v);
+    for (const a of [L, R]) {
+      const mean = a.reduce((x, y) => x + y, 0) / WAVE_N;
+      for (let i = 0; i < WAVE_N; i++) a[i] -= mean;
+      for (let pass = 0; pass < 2; pass++) {  // a light smoothing: fewer harsh corners, less aliasing
+        const c = a.slice();
+        for (let i = 0; i < WAVE_N; i++) a[i] = 0.25 * c[(i + WAVE_N - 1) % WAVE_N] + 0.5 * c[i] + 0.25 * c[(i + 1) % WAVE_N];
+      }
+    }
+    const peak = Math.max(...L.map(Math.abs), ...R.map(Math.abs));
+    if (peak > 1e-3) for (const a of [L, R]) for (let i = 0; i < WAVE_N; i++) a[i] /= peak;
+    else { L.fill(0); R.fill(0); }
+  }
+  const fourier = a => {
+    const re = new Float32Array(WAVE_H), im = new Float32Array(WAVE_H);
+    for (let k = 1; k < WAVE_H; k++) {
+      let c = 0, sn = 0;
+      for (let n = 0; n < WAVE_N; n++) { const ph = 2 * Math.PI * k * n / WAVE_N; c += a[n] * Math.cos(ph); sn += a[n] * Math.sin(ph); }
+      re[k] = 2 * c / WAVE_N; im[k] = 2 * sn / WAVE_N;
+    }
+    return [re, im];
+  };
+  const d = { key, L, R, cont, fL: fourier(L), fR: fourier(R), silent: !L.some(v => v) && !R.some(v => v), ctx: new WeakMap() };
+  waveCache.set(w.id, d);
+  return d;
+}
+function wavePair(ctx, id) {
+  const w = state.waves.find(x => x.id === id);
+  if (!w) return null;
+  const d = waveData(w);
+  if (!d.ctx.has(ctx)) d.ctx.set(ctx, [d.fL, d.fR].map(([re, im]) => ctx.createPeriodicWave(re, im, { disableNormalization: true })));
+  return d.ctx.get(ctx);
+}
+
 function registerSample(m) { INST[m.id] = { id: m.id, name: m.name, c: m.color, kind: "sample", gm: 0, rel: 0.12, root: m.root }; }
 
 /* Sample audio lives in IndexedDB (per device); the project keeps name, root and colour. */
@@ -2019,7 +2331,7 @@ function importMidi(bytes, fileName) {
   }
   if (!s.layers.length) s.layers.push(newLayer("Livello 1"));
   s.active = s.layers[s.layers.length - 1].id;
-  s.samples = state.samples;
+  s.samples = state.samples; s.waves = state.waves;
   Object.assign(state, s);
   afterBigChange();
   return every.length;
@@ -2274,12 +2586,65 @@ function screenPoints(pts) {
   }
   return out;
 }
+const grains = new Map();
+function grainPattern(c, color) {  // graphite: specks of the colour with holes
+  if (!grains.has(color)) {
+    const cv = document.createElement("canvas"); cv.width = cv.height = 64;
+    const g = cv.getContext("2d"), img = g.createImageData(64, 64);
+    const rgb = [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16));
+    for (let i = 0; i < 64 * 64; i++) {
+      const a = Math.random();
+      img.data.set([rgb[0], rgb[1], rgb[2], a < 0.25 ? 0 : 120 + a * 135], i * 4);
+    }
+    g.putImageData(img, 0, 0);
+    grains.set(color, cv);
+  }
+  return c.createPattern(grains.get(color), "repeat");
+}
+/* Draw screen points [x, y, radius] in a brush style. */
+function drawStyled(c, brush, sp, color, op) {
+  if (!sp.length) return;
+  c.save();
+  c.globalAlpha = op;
+  switch (brush) {
+    case "marker": {
+      const w = Math.max(2, sp.reduce((a, q) => a + q[2], 0) / sp.length * 2);
+      c.globalAlpha = op * 0.8; c.strokeStyle = color; c.lineWidth = w; c.lineCap = "square"; c.lineJoin = "round";
+      c.beginPath(); c.moveTo(sp[0][0], sp[0][1]);
+      for (const q of sp.slice(1)) c.lineTo(q[0], q[1]);
+      if (sp.length === 1) c.lineTo(sp[0][0] + 0.1, sp[0][1]);
+      c.stroke();
+      break;
+    }
+    case "pencil": c.fillStyle = grainPattern(c, color); strokeShape(c, sp); break;
+    case "air": {
+      const avg = sp.reduce((a, q) => a + q[2], 0) / sp.length;
+      const k = c.getTransform().a || 1;
+      c.shadowColor = color; c.shadowBlur = Math.max(4, avg * 1.4) * k; c.shadowOffsetX = 10000 * k;
+      c.translate(-10000, 0); c.globalAlpha = op * 0.95; c.fillStyle = color;
+      strokeShape(c, sp.map(q => [q[0], q[1], q[2] * 0.75]));
+      break;
+    }
+    case "dots":
+      c.fillStyle = color;
+      for (const q of sp) { c.beginPath(); c.arc(q[0], q[1], Math.max(1.5, q[2]), 0, Math.PI * 2); c.fill(); }
+      break;
+    case "fill":
+      c.beginPath(); c.moveTo(sp[0][0], sp[0][1]);
+      for (const q of sp.slice(1)) c.lineTo(q[0], q[1]);
+      c.closePath();
+      c.globalAlpha = op * 0.42; c.fillStyle = color; c.fill();
+      c.globalAlpha = op; c.strokeStyle = color; c.lineWidth = 2; c.lineJoin = "round"; c.stroke();
+      break;
+    default: c.fillStyle = color; strokeShape(c, sp);
+  }
+  c.restore();
+}
 function paintStroke(c, st, extra) {
   const pts = extra ? st.pts.concat(extra) : st.pts;
   if (!pts.length) return;
-  c.globalAlpha = st.op; c.fillStyle = colorOf(st.inst);
-  strokeShape(c, screenPoints(pts));
-  c.globalAlpha = 1;
+  if (st.brush === "dots" && st.dots) { drawStyled(c, "dots", screenPoints(st.dots), colorOf(st.inst), st.op); return; }
+  drawStyled(c, st.brush || "smooth", screenPoints(pts), colorOf(st.inst), st.op);
 }
 function clipBoard(c) { roundRect(c, geo.left, geo.top, geo.right - geo.left, geo.bottom - geo.top, [0, 18, 18, 0]); c.clip(); }
 function renderInk() {
@@ -2290,10 +2655,77 @@ function renderInk() {
   c.save(); clipBoard(c);
   for (const layer of state.layers) {
     if (!layer.visible) continue;
-    for (const st of state.strokes) if (st.layer === layer.id) paintStroke(c, st);
+    for (const st of state.strokes) if (st.layer === layer.id && !(sel && sel.ids.has(st.id))) paintStroke(c, st);
   }
   c.restore();
 }
+
+/* ---------- lasso: select, move (snapped to the grid and to semitones), duplicate ---------- */
+let sel = null, lasso = null, drag = null;
+const beatPx = () => (geo.right - geo.left) / visBeats();
+function selectedStrokes() { return sel ? state.strokes.filter(st => sel.ids.has(st.id)) : []; }
+function inPolygon(x, y, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function selectionBox() {
+  const pts = selectedStrokes().flatMap(st => st.pts);
+  if (!pts.length) return null;
+  const xs = pts.map(q => xOf(q[0] + sel.db)), ys = pts.map(q => yOf(q[1] + sel.dp));
+  return { x0: Math.min(...xs) - 10, x1: Math.max(...xs) + 10, y0: Math.min(...ys) - 10, y1: Math.max(...ys) + 10 };
+}
+function selectInPolygon(poly) {
+  const layer = activeLayer();
+  const ids = new Set(state.strokes.filter(st => st.layer === layer.id && layer.visible)
+    .filter(st => st.pts.filter(q => inPolygon(xOf(q[0]), yOf(q[1]), poly)).length >= st.pts.length / 2).map(st => st.id));
+  if (!ids.size) { toast("Nessun tratto qui: cerchia i tratti del livello attivo."); clearSelection(); return; }
+  sel = { ids, db: 0, dp: 0 };
+  syncSelBar(); renderInk(); requestFrame();
+}
+function clearSelection() {
+  if (!sel && !lasso) return;
+  sel = null; lasso = null; drag = null;
+  $("#selBar").hidden = true;
+  renderInk(); requestFrame();
+}
+function syncSelBar() {
+  $("#selBar").hidden = !sel;
+  if (sel) $("#selCount").textContent = sel.ids.size === 1 ? "1 tratto" : `${sel.ids.size} tratti`;
+}
+function applyMove() {
+  if (!sel || (!sel.db && !sel.dp)) return;
+  remember();
+  for (const st of selectedStrokes()) {
+    st.pts = st.pts.map(q => [+(q[0] + sel.db).toFixed(4), +(q[1] + sel.dp).toFixed(4), q[2], q[3]]);
+    if (st.dots) delete st.dots;
+  }
+  sel.db = 0; sel.dp = 0;
+  changed(); renderInk();
+}
+$("#selDup").onclick = () => {
+  remember();
+  const copies = selectedStrokes().map(st => ({ ...JSON.parse(JSON.stringify(st)), id: newId("s") }));
+  state.strokes.push(...copies);
+  sel = { ids: new Set(copies.map(c => c.id)), db: 0, dp: 0 };
+  syncSelBar(); changed({ ink: true }); toast("Duplicato: trascinalo dove vuoi");
+};
+$("#selInst").onclick = () => {
+  remember();
+  for (const st of selectedStrokes()) st.inst = ui.inst;
+  changed({ ink: true }); requestFrame(); toast("Ora suonano: " + INST[ui.inst].name);
+};
+$("#selDel").onclick = () => {
+  remember();
+  const ids = sel.ids;
+  state.strokes = state.strokes.filter(st => !ids.has(st.id));
+  sel = null; $("#selBar").hidden = true;
+  changed({ ink: true }); refreshPanels(); toast("Eliminato · due dita per annullare");
+};
+$("#selDone").onclick = () => clearSelection();
 
 let hover = null, current = null;
 function drawBoard() {
@@ -2302,7 +2734,23 @@ function drawBoard() {
   c.setTransform(1, 0, 0, 1, 0, 0);
   c.drawImage(boardCanvas, 0, 0); c.drawImage(inkCanvas, 0, 0);
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
-  if (current) { c.save(); clipBoard(c); paintStroke(c, current, current.pred); c.restore(); }
+  if (current) { c.save(); clipBoard(c); paintStroke(c, current, current.brush === "dots" ? null : current.pred); c.restore(); }
+  if (sel) {
+    c.save(); clipBoard(c);
+    for (const st of selectedStrokes()) paintStroke(c, { ...st, dots: null, pts: st.pts.map(q => [q[0] + sel.db, q[1] + sel.dp, q[2], q[3]]) });
+    c.restore();
+    const bx = selectionBox();
+    if (bx) {
+      c.save(); c.strokeStyle = SYS.blue[darkMode ? 1 : 0]; c.lineWidth = 1.5; c.setLineDash([6, 5]);
+      roundRect(c, bx.x0, bx.y0, bx.x1 - bx.x0, bx.y1 - bx.y0, 10); c.stroke(); c.restore();
+    }
+  }
+  if (lasso && lasso.pts.length > 1) {
+    c.save(); c.strokeStyle = colors.fg; c.globalAlpha = 0.7; c.lineWidth = 1.5; c.setLineDash([5, 5]);
+    c.beginPath(); c.moveTo(lasso.pts[0][0], lasso.pts[0][1]);
+    for (const q of lasso.pts) c.lineTo(q[0], q[1]);
+    c.stroke(); c.restore();
+  }
   const head = xOf((ui.playing ? fraction() : ui.startFrac) * loopBeats());
   if (head >= geo.left - 1 && head <= geo.right + 1) {
     if (ui.playing) {
@@ -2356,9 +2804,9 @@ function eyedrop(cur) {
   const hit = strokeAt(cur.x0, cur.y0);
   if (!hit) return;
   current = null; thereminStop();
-  ui.inst = hit.inst; ui.opacity = hit.op;
+  ui.inst = hit.inst; ui.opacity = hit.op; ui.brush = hit.brush || "smooth";
   paintOpSlider(); syncChrome(); syncMidiChip(); saveSoon();
-  toast(`Strumento: ${INST[hit.inst].name} · opacità ${Math.round(hit.op * 100)}%`);
+  toast(`${INST[hit.inst].name} · ${BRUSH[ui.brush].name} · opacità ${Math.round(hit.op * 100)}%`);
   previewNote(hit.inst, snapScale(Math.floor(hit.pts[0][1])), 0.7, hit.op);
   requestFrame();
 }
@@ -2403,7 +2851,33 @@ function toPoint(e, stabilized, fallback) {
   return [+bOf(x).toFixed(4), +pOf(y).toFixed(4), +widthFor(e, fallback).toFixed(3), Math.round(e.timeStamp - strokeStart)];
 }
 
+/* Every new point goes through the brush: noise, fixed width, dots on the grid. */
+function addPoint(cur, q) {
+  const last = cur.pts[cur.pts.length - 1];
+  if (last) cur.len += Math.hypot((q[0] - last[0]) * beatPx(), (q[1] - last[1]) * rowPx());
+  switch (cur.brush) {
+    case "marker": q[2] = +(ui.size * 0.8).toFixed(3); break;
+    case "pencil": q[2] = +(q[2] * 0.55 * (1 + 0.18 * noise1(cur.len / 5, cur.seed))).toFixed(3); break;
+    case "air": q[2] = +(q[2] * 1.35).toFixed(3); break;
+    case "ink": {
+      const r = ui.rough;
+      q[1] = +(q[1] + r * 0.55 * noise1(cur.len / 26, cur.seed)).toFixed(4);
+      q[0] = +(q[0] + r * 0.04 * noise1(cur.len / 33, cur.seed + 7)).toFixed(4);
+      q[2] = +Math.max(0.03, q[2] * (1 + r * 0.75 * noise1(cur.len / 11, cur.seed + 3))).toFixed(3);
+      break;
+    }
+  }
+  cur.pts.push(q);
+  if (cur.brush === "dots") {
+    const cell = Math.floor(q[0] / (state.grid || 0.25));
+    if (cur.cell !== cell) {
+      cur.cell = cell; cur.dots.push(q.slice());
+      previewNote(cur.inst, snapScale(Math.floor(q[1])), ampOf(q[2]), cur.op);
+    }
+  }
+}
 function soundWhileDrawing(e, first) {
+  if (current.brush === "dots" || current.brush === "fill") return;
   const p = pOf(pointerXY(e).y), w = widthFor(e), layer = activeLayer();
   if (isDrum(current.inst)) { if (first) previewNote(current.inst, 60, ampOf(w), ui.opacity); return; }
   if (layer.mode === "OPTICAL") { if (first) thereminStart(current.inst, p - 0.5, ampOf(w)); else thereminMove(p - 0.5, ampOf(w)); return; }
@@ -2438,8 +2912,18 @@ canvas.addEventListener("pointerdown", e => {
   if (!layer.visible) { toast("«" + layer.name + "» è nascosto: rendilo visibile per disegnare."); return; }
   try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* pointer already gone */ }
   if (ui.tool === "eraser") { remember(); erasing = true; eraseAt(x, y); return; }
+  if (ui.tool === "lasso") {
+    const bx = sel && selectionBox();
+    if (bx && x >= bx.x0 && x <= bx.x1 && y >= bx.y0 && y <= bx.y1) { drag = { x, y, pointer: e.pointerId }; return; }
+    if (sel) clearSelection();
+    lasso = { pts: [[x, y]], pointer: e.pointerId };
+    requestFrame();
+    return;
+  }
   strokeStart = e.timeStamp; smooth = null;
-  current = { id: newId("s"), layer: layer.id, inst: ui.inst, op: +ui.opacity.toFixed(3), pts: [toPoint(e, true)], pointer: e.pointerId, pred: null, finger: !isPen(e) && e.pointerType === "touch", x0: x, y0: y, heard: false };
+  current = { id: newId("s"), layer: layer.id, inst: ui.inst, op: +ui.opacity.toFixed(3), brush: ui.brush, pts: [], len: 0, seed: Math.random() * 1000, dots: [],
+    pointer: e.pointerId, pred: null, finger: !isPen(e) && e.pointerType === "touch", x0: x, y0: y, heard: false };
+  addPoint(current, toPoint(e, true));
   if (!current.finger) { soundWhileDrawing(e, true); current.heard = true; }
   const cur = current;
   cur.hold = setTimeout(() => eyedrop(cur), 520);
@@ -2456,10 +2940,21 @@ canvas.addEventListener("pointermove", e => {
   }
   hover = e.pointerType === "touch" ? null : pos;
   if (erasing) { eraseAt(pos.x, pos.y); return; }
+  if (lasso && lasso.pointer === e.pointerId) { lasso.pts.push([pos.x, pos.y]); requestFrame(); return; }
+  if (drag && drag.pointer === e.pointerId) {
+    const step = state.grid || 0;
+    let db = (pos.x - drag.x) / beatPx();
+    if (step) db = Math.round(db / step) * step;
+    sel.db = db; sel.dp = Math.round((drag.y - pos.y) / rowPx());
+    const h = $("#hint"); clearTimeout(hintTimer);
+    h.textContent = `Sposta: ${sel.dp > 0 ? "+" : ""}${sel.dp} semitoni · ${db > 0 ? "+" : ""}${+db.toFixed(2)} battiti`;
+    requestFrame();
+    return;
+  }
   if (!current || current.pointer !== e.pointerId) { if (hover) requestFrame(); return; }
   if (current.hold && Math.hypot(pos.x - current.x0, pos.y - current.y0) > 6) { clearTimeout(current.hold); current.hold = 0; }
   const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
-  for (const ce of (events.length ? events : [e])) current.pts.push(toPoint(ce, true, e.pressure));
+  for (const ce of (events.length ? events : [e])) addPoint(current, toPoint(ce, true, e.pressure));
   const preds = e.getPredictedEvents ? e.getPredictedEvents() : [];
   current.pred = preds.length ? preds.slice(0, 3).map(pe => toPoint(pe, false, e.pressure)) : null;
   if (!current.heard && Math.hypot(pos.x - current.x0, pos.y - current.y0) > 6) { soundWhileDrawing(e, true); current.heard = true; }
@@ -2481,15 +2976,22 @@ function finish(e) {
     }
   }
   if (erasing) { erasing = false; if (history.length && history[history.length - 1] === snapshot()) { history.pop(); updateUndo(); } return; }
+  if (lasso && lasso.pointer === e.pointerId) {
+    const poly = lasso.pts; lasso = null;
+    if (poly.length > 4 && e.type === "pointerup") selectInPolygon(poly); else requestFrame();
+    return;
+  }
+  if (drag && drag.pointer === e.pointerId) { drag = null; applyMove(); $("#hint").textContent = HINT; return; }
   if (!current || current.pointer !== e.pointerId) return;
   thereminStop();
   const st = current;
   current = null;
   clearTimeout(st.hold); delete st.hold;
   if (e.type === "pointercancel") { requestFrame(); return; }
-  smooth = null; st.pts.push(toPoint(e, false));
+  smooth = null;
+  if (st.brush !== "dots") addPoint(st, toPoint(e, false));
   const tap = st.finger && !st.heard && e.timeStamp - strokeStart < 250;
-  delete st.pointer; delete st.pred; delete st.finger; delete st.x0; delete st.y0; delete st.heard;
+  for (const k of ["pointer", "pred", "finger", "x0", "y0", "heard", "len", "seed", "cell"]) delete st[k];
   if (tap) {  // wait a moment: a second finger turns it into an undo gesture
     const commit = () => { commitStroke(st); previewNote(st.inst, snapScale(Math.floor(st.pts[0][1])), 0.7, st.op); };
     pendingTap = { time: e.timeStamp, commit, timer: setTimeout(() => { pendingTap = null; commit(); }, 90) };
@@ -2499,9 +3001,15 @@ function finish(e) {
   commitStroke(st);
 }
 function commitStroke(st) {
-  remember(); state.strokes.push(st);
+  let made = [st];
+  if (st.brush === "dots") {  // every dot is its own short note
+    made = (st.dots.length ? st.dots : st.pts.slice(0, 1)).map(q => ({ id: newId("s"), layer: st.layer, inst: st.inst, op: st.op, brush: "dots", pts: [q] }));
+  } else if (st.brush === "fill" && st.pts.length < 4) st.brush = "smooth";
+  delete st.dots;
+  if (st.brush === "smooth") delete st.brush;
+  remember(); state.strokes.push(...made);
   const c = inkCanvas.getContext("2d");
-  c.save(); c.setTransform(dpr, 0, 0, dpr, 0, 0); clipBoard(c); paintStroke(c, st); c.restore();
+  c.save(); c.setTransform(dpr, 0, 0, dpr, 0, 0); clipBoard(c); for (const m of made) paintStroke(c, m); c.restore();
   changed(); refreshPanels();
 }
 canvas.addEventListener("pointerup", finish);
@@ -2579,7 +3087,7 @@ function buildBeatGrid() {
       pad.dataset.i = i; pad.dataset.track = id;
       pad.style.setProperty("--c", colorOf(id));
       pad.setAttribute("aria-label", `${INST[id].name}, passo ${i + 1}`);
-      paintPad(pad, tr.p[i]);
+      paintPad(pad, patOf(tr, b.edit)[i]);
       pads.append(pad);
       (padEls[i] = padEls[i] || []).push(pad);
     }
@@ -2590,9 +3098,9 @@ function buildBeatGrid() {
 }
 function paintPad(pad, v) { pad.classList.toggle("on", v === 1); pad.classList.toggle("acc", v === 2); pad.setAttribute("aria-pressed", String(v > 0)); }
 function setPad(pad, v) {
-  const b = state.beat, tr = b.tracks[pad.dataset.track], i = +pad.dataset.i;
-  tr.p[i] = v;
-  if (b.steps === 16) tr.p[i + 16] = v;
+  const b = state.beat, tr = b.tracks[pad.dataset.track], i = +pad.dataset.i, arr = patOf(tr, b.edit);
+  arr[i] = v;
+  if (b.steps === 16) arr[i + 16] = v;
   paintPad(pad, v);
   if (v) previewNote(pad.dataset.track, 60, v === 2 ? 1 : 0.7, 1);
   if (b.preset !== "CUSTOM") { b.preset = "CUSTOM"; for (const chip of document.querySelectorAll("#presets .chip")) chip.setAttribute("aria-pressed", "false"); }
@@ -2603,7 +3111,7 @@ $("#beatGrid").addEventListener("pointerdown", e => {
   e.preventDefault();
   const tr = state.beat.tracks[pad.dataset.track];
   remember();
-  const v = (tr.p[+pad.dataset.i] + 1) % 3;
+  const v = (patOf(tr, state.beat.edit)[+pad.dataset.i] + 1) % 3;
   painting = { value: v, track: pad.dataset.track, touched: new Set([pad]) };
   setPad(pad, v);
 });
@@ -2647,8 +3155,18 @@ for (const [btnId, step] of [["#tuneDown", -1], ["#tuneUp", 1]]) $(btnId).onclic
   previewDrum(trackOpen); changed();
 };
 
+let lastSlot = -1;
 function markStep() {
-  const step = ui.playing ? Math.floor(fraction() * loopBeats() * 4) % state.beat.steps : -1;
+  const b = state.beat, abs = ui.playing ? Math.floor(fraction() * loopBeats() * 4) : -1;
+  const slot = abs < 0 ? -1 : Math.floor(abs / b.steps);
+  // the pads follow the playhead only while the pattern being edited is the one playing
+  const step = abs >= 0 && b.chain[slot % 32] === b.edit ? abs % b.steps : -1;
+  if (slot !== lastSlot) {
+    const chips = $("#chain").children;
+    if (chips[lastSlot]) chips[lastSlot].classList.remove("now");
+    if (chips[slot]) chips[slot].classList.add("now");
+    lastSlot = slot;
+  }
   if (step === lastStep) return;
   if (lastStep >= 0 && padEls[lastStep]) for (const p of padEls[lastStep]) p.classList.remove("now");
   if (step >= 0 && padEls[step]) for (const p of padEls[step]) p.classList.add("now");
@@ -2675,9 +3193,33 @@ function syncBeatControls() {
   seg($("#segSteps"), b.steps, v => {
     remember();
     const steps = +v;
-    if (steps === 32 && b.steps === 16) for (const id of BEAT_TRACKS) for (let i = 0; i < 16; i++) b.tracks[id].p[i + 16] = b.tracks[id].p[i];
-    b.steps = steps; buildBeatGrid(); changed();
+    if (steps === 32 && b.steps === 16) for (const id of BEAT_TRACKS) for (const arr of [b.tracks[id].p, b.tracks[id].pB]) for (let i = 0; i < 16; i++) arr[i + 16] = arr[i];
+    b.steps = steps; buildBeatGrid(); syncBeatControls(); changed();
   });
+  seg($("#segPat"), b.edit, v => { b.edit = v; buildBeatGrid(); syncBeatControls(); saveSoon(); });
+  const other = b.edit === "A" ? "B" : "A";
+  $("#patCopy").textContent = `Copia ${b.edit} in ${other}`;
+  $("#patCopy").onclick = () => {
+    remember();
+    for (const id of BEAT_TRACKS) { const tr = b.tracks[id]; patOf(tr, other).splice(0, 32, ...patOf(tr, b.edit)); }
+    b.edit = other; buildBeatGrid(); syncBeatControls(); changed(); toast(`Copiato: ora modifichi ${other}`);
+  };
+  const chain = $("#chain"), slots = Math.max(1, Math.ceil(loopBeats() * 4 / b.steps));
+  chain.textContent = ""; lastSlot = -1;
+  for (let i = 0; i < Math.min(slots, 32); i++) {
+    const chip = document.createElement("button");
+    chip.className = "slot"; chip.dataset.p = b.chain[i]; chip.textContent = b.chain[i] === "-" ? "–" : b.chain[i];
+    chip.title = (b.steps === 16 ? "Battuta " : "Battute ") + (b.steps === 16 ? i + 1 : `${i * 2 + 1}-${i * 2 + 2}`);
+    chip.setAttribute("aria-label", chip.title + ": " + (b.chain[i] === "-" ? "pausa" : "pattern " + b.chain[i]));
+    chip.onclick = () => {
+      remember();
+      b.chain[i] = { A: "B", B: "-", "-": "A" }[b.chain[i]];
+      chip.dataset.p = b.chain[i]; chip.textContent = b.chain[i] === "-" ? "–" : b.chain[i];
+      chip.setAttribute("aria-label", chip.title + ": " + (b.chain[i] === "-" ? "pausa" : "pattern " + b.chain[i]));
+      changed();
+    };
+    chain.append(chip);
+  }
   $("#beatSub").textContent = `${state.bars} battute · ${state.bpm} BPM`;
 }
 $("#inSwing").addEventListener("input", e => { state.beat.swing = +e.target.value; fillRange(e.target); $("#valSwing").textContent = Math.round(state.beat.swing * 100) + "%"; });
@@ -2685,7 +3227,14 @@ $("#inSwing").addEventListener("change", () => changed());
 $("#inBeatVol").addEventListener("input", e => { state.beat.volume = +e.target.value; fillRange(e.target); $("#valBeatVol").textContent = Math.round(state.beat.volume * 100) + "%"; });
 $("#inBeatVol").addEventListener("change", () => changed());
 $("#beatOn").addEventListener("change", e => { state.beat.on = e.target.checked; changed(); });
-$("#beatClear").onclick = () => { remember(); applyPreset(state.beat, "EMPTY"); buildBeatGrid(); syncBeatControls(); changed(); };
+/* Svuota clears the pattern being edited; with both empty the beat is back to "Vuoto". */
+$("#beatClear").onclick = () => {
+  remember();
+  const b = state.beat;
+  for (const id of BEAT_TRACKS) patOf(b.tracks[id], b.edit).fill(0);
+  b.preset = BEAT_TRACKS.some(id => b.tracks[id].p.some(Boolean) || b.tracks[id].pB.some(Boolean)) ? "CUSTOM" : "EMPTY";
+  buildBeatGrid(); syncBeatControls(); changed();
+};
 
 /* ---------- MIDI view ---------- */
 
@@ -2948,10 +3497,11 @@ $("#fileJson").addEventListener("change", async e => {
 
 /* ---------- chrome: sections, popovers, panels ---------- */
 
-const VIEWS = { draw: "#viewDraw", beat: "#viewBeat", midi: "#viewMidi", export: "#viewExport" };
-const TAB = { draw: "#tabDraw", beat: "#tabBeat", midi: "#tabMidi", export: "#tabExport" };
+const VIEWS = { draw: "#viewDraw", beat: "#viewBeat", midi: "#viewMidi", wave: "#viewWave", export: "#viewExport" };
+const TAB = { draw: "#tabDraw", beat: "#tabBeat", midi: "#tabMidi", wave: "#tabWave", export: "#tabExport" };
 function showView(view, instant) {
   closePopovers();
+  if (ui.view === "wave" && view !== "wave") pruneWaves();
   ui.view = view;
   for (const [k, sel] of Object.entries(VIEWS)) {
     const el = $(sel), on = k === view;
@@ -2960,11 +3510,13 @@ function showView(view, instant) {
     $(TAB[k]).setAttribute("aria-selected", String(on));
   }
   $("#tools").hidden = view !== "draw";
+  if (view !== "draw") clearSelection();
   movePill();
   if (view === "draw") layoutDraw();
   if (view === "beat") { buildBeatGrid(); syncBeatControls(); }
   if (view === "midi") { buildKeys(); syncMidiChip(); connectMidi(); drawRoll(true); if (loop.dirty || !loop.buffer) ensureLoop(); }
   if (view === "export") { drawWave(); if (loop.dirty || !loop.buffer) ensureLoop(); }
+  if (view === "wave") renderWaveView();
   requestFrame(); saveSoon();
 }
 function movePill() {
@@ -3011,6 +3563,7 @@ function openPopover(btnId, popId = POPS[btnId]) {
   if (popId === "popBoard") syncBoardForm();
   if (popId === "popActions") $("#actNewConfirm").hidden = true;
   if (popId === "popInst") renderInstruments();
+  if (popId === "popBrush") renderBrushes();
   pop.hidden = false;
   const pw = pop.offsetWidth, leftSide = r.left + r.width / 2 < app.left + app.width / 2;
   const fromBottom = r.top - app.top > app.height * 0.55;
@@ -3024,6 +3577,7 @@ function openPopover(btnId, popId = POPS[btnId]) {
 function closePopovers() {
   if (rec) stopRecording();
   $("#popRec").hidden = true;
+  $("#popBrush").hidden = true; $("#btnBrush").setAttribute("aria-expanded", "false");
   if (!$("#popTrack").hidden) { $("#popTrack").hidden = true; if (ui.view === "beat") buildBeatGrid(); }
   for (const popId of Object.values(POPS)) $("#" + popId).hidden = true;
   for (const btnId of Object.keys(POPS).concat(["midiInst"])) $("#" + btnId).setAttribute("aria-expanded", "false");
@@ -3329,7 +3883,23 @@ function renderInstruments() {
     }
   }
   renderSamples();
+  const box = $("#instWave"); box.textContent = "";
+  for (const w of state.waves) {
+    const b = document.createElement("button");
+    b.className = "inst"; b.setAttribute("aria-pressed", String(w.id === ui.inst));
+    const sw = document.createElement("span"); sw.className = "swatch sample"; sw.style.background = colorOf(w.id); sw.innerHTML = ICON_SINE;
+    const nm = document.createElement("span"); nm.textContent = w.name;
+    b.append(sw, nm);
+    pressable(b, () => { ui.inst = w.id; setTool("brush"); renderInstruments(); syncChrome(); syncMidiChip(); saveSoon(); previewNote(w.id, 60, 0.8, 1); },
+      () => { ui.wave = w.id; showView("wave"); });
+    box.append(b);
+  }
+  const add = document.createElement("button");
+  add.className = "inst"; add.innerHTML = `<span class="swatch tool">${ICON_SINE}</span><span>Disegna un'onda</span>`;
+  add.onclick = () => { ui.wave = null; showView("wave"); };
+  box.append(add);
 }
+const ICON_SINE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2.5 12c2.4-7 4.8-7 7.2 0s4.8 7 7.2 0 3.6-5.3 4.6-3.5"/></svg>';
 const ICON_WAVE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 7v10M21 12h0"/></svg>';
 const ICON_IMPORT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/></svg>';
 function renderSamples() {
@@ -3520,6 +4090,201 @@ $("#smpDelete").onclick = async () => {
   toast(`Eliminato «${m.name}»` + (moved ? ` · ${moved} tratti ora suonano Piano elettrico` : ""));
 };
 
+/* ---------- Onda view ---------- */
+
+const waveCv = $("#waveCanvas"), scopeCv = $("#waveScope");
+let waveDraw = null, waveBrush = "line";
+const currentWave = () => state.waves.find(w => w.id === ui.wave);
+function newWave() {
+  const used = new Set(state.waves.map(w => w.color));
+  const w = { id: "WAV:" + newId("w"), name: "Onda " + (state.waves.length + 1), color: SAMPLE_COLORS.find(c => !used.has(c)) || SAMPLE_COLORS[state.waves.length % SAMPLE_COLORS.length], sym: false, strokes: [] };
+  state.waves.push(w); registerWave(w);
+  return w;
+}
+/* Leaving the view drops empty waves nobody draws with. */
+function pruneWaves() {
+  const used = new Set(state.strokes.map(st => st.inst));
+  const keep = state.waves.filter(w => w.strokes.length || used.has(w.id) || ui.inst === w.id);
+  if (keep.length !== state.waves.length) { state.waves = keep; saveSoon(); }
+}
+function waveChanged() {
+  const w = currentWave();
+  if (w) INST[w.id].name = w.name;
+  samplesVersion++;
+  changed(); drawWaveEditor(); drawScope();
+}
+function renderWaveView() {
+  if (!currentWave()) ui.wave = (state.waves[state.waves.length - 1] || newWave()).id;
+  const w = currentWave(), list = $("#waveList");
+  list.textContent = "";
+  for (const x of state.waves) {
+    const b = document.createElement("button");
+    b.className = "chip wave-chip"; b.setAttribute("aria-pressed", String(x.id === w.id));
+    const dot = document.createElement("i"); dot.style.background = colorOf(x.id);
+    b.append(dot, document.createTextNode(x.name));
+    b.onclick = () => { ui.wave = x.id; renderWaveView(); };
+    list.append(b);
+  }
+  const add = document.createElement("button");
+  add.className = "chip"; add.textContent = "+ Nuova onda";
+  add.onclick = () => { remember(); ui.wave = newWave().id; renderWaveView(); };
+  list.append(add);
+  $("#waveName").value = w.name;
+  $("#waveSym").checked = w.sym;
+  seg($("#segWaveBrush"), waveBrush, v => { waveBrush = v; });
+  drawWaveEditor(); drawScope();
+}
+function sizeCanvas(cv) {
+  const r = cv.getBoundingClientRect(), d = Math.min(devicePixelRatio || 1, 2);
+  if (cv.width !== Math.round(r.width * d) || cv.height !== Math.round(r.height * d)) { cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d); }
+  const c = cv.getContext("2d"); c.setTransform(d, 0, 0, d, 0, 0);
+  return { c, w: r.width, h: r.height };
+}
+function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function drawWaveEditor() {
+  const w = currentWave();
+  if (!w || !waveCv.getBoundingClientRect().width) return;
+  const { c, w: W, h: H } = sizeCanvas(waveCv), pad = 26;
+  const X = x => x * W, Y = y => H / 2 - y * (H / 2 - pad);
+  c.clearRect(0, 0, W, H);
+  c.strokeStyle = colors.fg; c.globalAlpha = 0.08; c.lineWidth = 1;
+  for (let i = 1; i < 8; i++) { c.beginPath(); c.moveTo(X(i / 8), 0); c.lineTo(X(i / 8), H); c.stroke(); }
+  for (const y of [0.5, -0.5, 1, -1]) { c.beginPath(); c.moveTo(0, Y(y)); c.lineTo(W, Y(y)); c.stroke(); }
+  c.globalAlpha = 0.3; c.beginPath(); c.moveTo(0, Y(0)); c.lineTo(W, Y(0)); c.stroke();
+  c.globalAlpha = 1;
+  const color = colorOf(w.id), d = waveData(w);
+  if (d.cont) {  // the sound: everything between the two edges
+    c.beginPath();
+    for (let i = 0; i <= WAVE_N; i++) c.lineTo(X(i / WAVE_N), Y(d.cont.top[i % WAVE_N]));
+    for (let i = WAVE_N; i >= 0; i--) c.lineTo(X(i / WAVE_N), Y(d.cont.bot[i % WAVE_N]));
+    c.closePath(); c.globalAlpha = 0.16; c.fillStyle = color; c.fill();
+    c.globalAlpha = 0.55; c.lineWidth = 1.5; c.setLineDash([4, 4]);
+    for (const [arr, col] of [[d.cont.top, cssVar("--blue")], [d.cont.bot, cssVar("--orange")]]) {
+      c.strokeStyle = col; c.beginPath();
+      for (let i = 0; i <= WAVE_N; i++) c.lineTo(X(i / WAVE_N), Y(arr[i % WAVE_N]));
+      c.stroke();
+    }
+    c.setLineDash([]);
+  }
+  c.globalAlpha = 1;
+  const strokes = waveDraw ? w.strokes.concat([waveDraw]) : w.strokes;
+  for (const st of strokes) {
+    c.beginPath();
+    st.pts.forEach((q, i) => i ? c.lineTo(X(q[0]), Y(q[1])) : c.moveTo(X(q[0]), Y(q[1])));
+    if (st.fill) { c.closePath(); c.globalAlpha = 0.4; c.fillStyle = color; c.fill(); c.globalAlpha = 1; c.lineWidth = 2; }
+    else c.lineWidth = 3.5;
+    c.strokeStyle = color; c.lineJoin = c.lineCap = "round"; c.stroke();
+    if (w.sym && !st.fill) {
+      c.globalAlpha = 0.35; c.beginPath();
+      st.pts.forEach((q, i) => i ? c.lineTo(X(q[0]), Y(-q[1])) : c.moveTo(X(q[0]), Y(-q[1])));
+      c.stroke(); c.globalAlpha = 1;
+    }
+  }
+}
+function drawScope() {
+  const w = currentWave();
+  if (!w || !scopeCv.getBoundingClientRect().width) return;
+  const { c, w: W, h: H } = sizeCanvas(scopeCv), d = waveData(w), cycles = 3;
+  c.clearRect(0, 0, W, H);
+  c.strokeStyle = colors.fg; c.globalAlpha = 0.15; c.lineWidth = 1;
+  c.beginPath(); c.moveTo(0, H / 2); c.lineTo(W, H / 2); c.stroke();
+  c.globalAlpha = 1; c.lineWidth = 2; c.lineJoin = "round";
+  for (const [arr, col, off] of [[d.L, cssVar("--blue"), 0], [d.R, cssVar("--orange"), 0]]) {
+    c.strokeStyle = col; c.beginPath();
+    for (let i = 0; i <= W; i++) { const u = i / W * cycles, k = Math.floor((u % 1) * WAVE_N); c.lineTo(i, H / 2 - arr[k] * (H / 2 - 8) + off); }
+    c.stroke();
+  }
+  if (d.silent) {
+    c.fillStyle = colors.fg; c.globalAlpha = 0.5; c.font = "600 13px -apple-system, system-ui, sans-serif"; c.textAlign = "center";
+    c.fillText(w.strokes.length ? "Silenzio: una linea piatta non suona. Fai salire e scendere il tratto." : "Disegna sopra la linea per il canale sinistro, sotto per il destro.", W / 2, H / 2 - 10);
+    c.globalAlpha = 1;
+  }
+}
+function wavePoint(e) {
+  const r = waveCv.getBoundingClientRect(), pad = 26;
+  return [+clamp((e.clientX - r.left) / r.width, 0, 1).toFixed(4), +clamp((r.height / 2 - (e.clientY - r.top)) / (r.height / 2 - pad), -1, 1).toFixed(4)];
+}
+waveCv.addEventListener("pointerdown", e => {
+  if (!currentWave() || (waveDraw && waveDraw.pointer !== e.pointerId)) return;
+  try { waveCv.setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointer */ }
+  waveDraw = { fill: waveBrush === "fill", pts: [wavePoint(e)], pointer: e.pointerId };
+  drawWaveEditor();
+});
+waveCv.addEventListener("pointermove", e => {
+  if (!waveDraw || waveDraw.pointer !== e.pointerId) return;
+  const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+  for (const ce of (evs.length ? evs : [e])) waveDraw.pts.push(wavePoint(ce));
+  drawWaveEditor();
+});
+const endWaveDraw = e => {
+  if (!waveDraw || waveDraw.pointer !== e.pointerId) return;
+  const st = waveDraw; waveDraw = null;
+  delete st.pointer;
+  if (st.pts.length < 2 || (st.fill && st.pts.length < 4)) { drawWaveEditor(); return; }
+  remember();
+  currentWave().strokes.push(st);
+  waveChanged();
+  previewNote(ui.wave, 60, 0.8, 1);
+};
+waveCv.addEventListener("pointerup", endWaveDraw);
+waveCv.addEventListener("pointercancel", endWaveDraw);
+$("#waveName").addEventListener("change", e => {
+  const w = currentWave(); if (!w) return;
+  w.name = e.target.value.trim().slice(0, 40) || w.name; e.target.value = w.name;
+  waveChanged(); renderWaveView(); syncChrome(); syncMidiChip();
+});
+$("#waveSym").addEventListener("change", e => { remember(); currentWave().sym = e.target.checked; waveChanged(); });
+$("#waveUndo").onclick = () => undo();
+$("#waveClear").onclick = () => { remember(); currentWave().strokes = []; waveChanged(); };
+const SHAPES = {
+  sine: u => Math.sin(2 * Math.PI * u),
+  tri: u => 1 - 4 * Math.abs(((u + 0.25) % 1) - 0.5),
+  saw: u => 1 - 2 * u,
+  square: u => (u < 0.5 ? 1 : -1),
+};
+for (const b of document.querySelectorAll("[data-shape]")) b.onclick = () => {
+  const w = currentWave(); if (!w) return;
+  remember();
+  const k = b.dataset.shape;
+  if (k === "blob") {  // a closed shape: different top and bottom edges, so L and R differ
+    const pts = [];
+    for (let i = 0; i < 64; i++) { const u = i / 63; pts.push([u, 0.15 + 0.6 * Math.sin(Math.PI * u) * (0.8 + 0.2 * Math.sin(6 * Math.PI * u))]); }
+    for (let i = 63; i >= 0; i--) { const u = i / 63; pts.push([u, -0.1 - 0.7 * Math.sin(Math.PI * u) * Math.abs(Math.cos(3 * Math.PI * u))]); }
+    w.strokes = [{ fill: true, pts: pts.map(q => [+q[0].toFixed(4), +q[1].toFixed(4)]) }]; w.sym = false;
+  } else {
+    const f = SHAPES[k], pts = [];
+    if (k === "square") pts.push([0, 0.8], [0.5, 0.8], [0.5, -0.8], [1, -0.8]);
+    else if (k === "saw") pts.push([0, 0.8], [1, -0.8]);
+    else for (let i = 0; i <= 96; i++) pts.push([+(i / 96).toFixed(4), +(0.8 * f(i / 96)).toFixed(4)]);
+    w.strokes = [{ fill: false, pts }]; w.sym = true;  // a single edge, mirrored: the same wave in both ears
+  }
+  waveChanged(); renderWaveView();
+  previewNote(w.id, 60, 0.8, 1);
+};
+$("#waveListen").onclick = () => {
+  const w = currentWave(); if (!w) return;
+  const ctx = audio(), now = ctx.currentTime + 0.02;
+  const g = ctx.createGain(); g.connect(liveOut); g.connect(liveSend);
+  [60, 64, 67, 72, 67, 64, 60].forEach((m, i) => scheduleVoice(ctx, g, { inst: w.id, start: i * 0.2, dur: i === 6 ? 0.8 : 0.18, midi: m, amp: Float32Array.of(0.75, 0.75), bright: 1 }, now));
+};
+$("#waveUse").onclick = () => {
+  const w = currentWave(); if (!w) return;
+  ui.inst = w.id; setTool("brush"); syncChrome(); syncMidiChip(); saveSoon();
+  showView("draw"); toast(`Disegni con «${w.name}»`);
+};
+$("#waveDelete").onclick = () => {
+  const w = currentWave(); if (!w) return;
+  remember();
+  let moved = 0;
+  for (const st of state.strokes) if (st.inst === w.id) { st.inst = "EPIANO"; moved++; }
+  state.waves = state.waves.filter(x => x.id !== w.id);
+  if (ui.inst === w.id) { ui.inst = "EPIANO"; syncChrome(); syncMidiChip(); }
+  ui.wave = null; samplesVersion++;
+  changed({ ink: true }); renderWaveView();
+  toast(`Eliminata «${w.name}»` + (moved ? ` · ${moved} tratti ora suonano Piano elettrico` : ""));
+};
+addEventListener("resize", () => { if (ui.view === "wave") { drawWaveEditor(); drawScope(); } });
+
 function syncMidiChip() {
   const chip = $("#midiInst");
   chip.querySelector("i").style.background = colorOf(ui.inst);
@@ -3528,12 +4293,58 @@ function syncMidiChip() {
 
 function setTool(tool) {
   ui.tool = tool;
+  if (tool !== "lasso") clearSelection();
   $("#btnBrush").setAttribute("aria-pressed", String(tool === "brush"));
   $("#btnEraser").setAttribute("aria-pressed", String(tool === "eraser"));
+  $("#btnLasso").setAttribute("aria-pressed", String(tool === "lasso"));
   requestFrame();
 }
-$("#btnBrush").onclick = () => { closePopovers(); setTool("brush"); };
+/* Brush: the first tap picks the brush tool, the next one opens the brush library. */
+$("#btnBrush").onclick = e => {
+  e.stopPropagation();
+  if (ui.tool === "brush") openPopover("btnBrush", "popBrush");
+  else { closePopovers(); setTool("brush"); }
+};
 $("#btnEraser").onclick = () => { closePopovers(); setTool("eraser"); };
+$("#btnLasso").onclick = () => { closePopovers(); setTool(ui.tool === "lasso" ? "brush" : "lasso"); if (ui.tool === "lasso") toast("Cerchia i tratti del livello attivo, poi trascinali"); };
+function brushPreview(cv, id) {
+  const d = Math.min(devicePixelRatio || 1, 2), w = 112, h = 40;
+  cv.width = w * d; cv.height = h * d;
+  const c = cv.getContext("2d"); c.scale(d, d);
+  const color = colorOf(ui.inst), seed = 3, sp = [];
+  if (id === "fill") {
+    for (let i = 0; i < 40; i++) { const a = i / 40 * Math.PI * 2; sp.push([56 + Math.cos(a) * 40, 20 + Math.sin(a) * 13 + Math.sin(a * 3) * 3, 2]); }
+  } else if (id === "dots") {
+    for (let i = 0; i < 9; i++) sp.push([10 + i * 11.5, 20 - Math.sin(i / 8 * Math.PI * 1.6) * 11, 2.6 + (i % 3) * 0.5]);
+  } else {
+    for (let i = 0; i <= 60; i++) {
+      const u = i / 60, pr = Math.sin(Math.PI * u);
+      let y = 20 - Math.sin(u * Math.PI * 2) * 9, r = id === "marker" ? 4 : (id === "pencil" ? 1.6 : 1 + 4.5 * pr) * (id === "air" ? 1.4 : 1);
+      if (id === "ink") { y += noise1(u * 9, seed) * 3; r *= 1 + 0.7 * noise1(u * 16, seed + 3); }
+      if (id === "pencil") r *= 1 + 0.2 * noise1(u * 30, seed);
+      sp.push([8 + u * 96, y, Math.max(0.6, r)]);
+    }
+  }
+  drawStyled(c, id, sp, color, 1);
+}
+function renderBrushes() {
+  const list = $("#brushList");
+  list.textContent = "";
+  for (const b of BRUSHES) {
+    const btn = document.createElement("button");
+    btn.className = "brush"; btn.setAttribute("aria-pressed", String(ui.brush === b.id));
+    const cv = document.createElement("canvas"); brushPreview(cv, b.id);
+    const txt = document.createElement("span");
+    const nm = document.createElement("b"); nm.textContent = b.name;
+    const sm = document.createElement("small"); sm.textContent = b.sound;
+    txt.append(nm, sm); btn.append(cv, txt);
+    btn.onclick = () => { ui.brush = b.id; saveSoon(); renderBrushes(); };
+    list.append(btn);
+  }
+  $("#roughBox").hidden = ui.brush !== "ink";
+  setRange($("#inRough"), ui.rough); $("#valRough").textContent = Math.round(ui.rough * 100) + "%";
+}
+$("#inRough").addEventListener("input", e => { ui.rough = +e.target.value; fillRange(e.target); $("#valRough").textContent = Math.round(ui.rough * 100) + "%"; saveSoon(); });
 $("#btnUndo").onclick = undo;
 $("#btnRedo").onclick = redo;
 $("#btnPlay").onclick = () => (ui.playing ? stop() : play());
@@ -3603,10 +4414,10 @@ $("#actNew").onclick = () => { $("#actNewConfirm").hidden = false; };
 $("#actNewConfirm").onclick = () => {
   remember();
   const keep = { bpm: state.bpm, bars: state.bars, low: state.low, octaves: state.octaves, scale: state.scale, root: state.root, grid: state.grid };
-  Object.assign(state, blankState(), keep, { samples: state.samples });
+  Object.assign(state, blankState(), keep, { samples: state.samples, waves: state.waves });
   closePopovers(); afterBigChange(); toast("Tela nuova · tocca con due dita per annullare");
 };
-$("#actExample").onclick = () => { remember(); Object.assign(state, exampleState(), { samples: state.samples }); closePopovers(); afterBigChange(); toast("Esempio caricato"); };
+$("#actExample").onclick = () => { remember(); Object.assign(state, exampleState(), { samples: state.samples, waves: state.waves }); closePopovers(); afterBigChange(); toast("Esempio caricato"); };
 
 function themeChoice() { try { return localStorage.getItem(THEME_KEY) || "system"; } catch (e) { return "system"; } }
 function applyTheme(choice) {
@@ -3645,9 +4456,11 @@ document.addEventListener("keydown", e => {
   if (e.key === "1") showView("draw");
   else if (e.key === "2") showView("beat");
   else if (e.key === "3") showView("midi");
-  else if (e.key === "4") showView("export");
+  else if (e.key === "4") showView("wave");
+  else if (e.key === "5") showView("export");
   else if (e.key === "b" && ui.view === "draw") setTool("brush");
   else if (e.key === "e" && ui.view === "draw") setTool("eraser");
+  else if (e.key === "s" && ui.view === "draw") setTool("lasso");
   else if (e.key === "l" && ui.view === "draw") openPopover("btnLayers");
   else if (e.key === "Escape") closePopovers();
 });
@@ -3688,7 +4501,7 @@ if (!inArtifact && "serviceWorker" in navigator && (location.protocol === "https
 // No page zoom from pinches on the interface (Safari).
 document.addEventListener("gesturestart", e => e.preventDefault());
 
-window.__gp2m = { screenOf: (b, p) => [xOf(b), yOf(p)], geoTop: () => geo.top, state: () => state, ui, renderAll, reviewAudio, detectPitch, sampleBuffers, deleteLayers, collectParts, tiled, allNotes, midiBytes, wavBytes, zipBlob, parseMidi, importMidi, beatHits, showView, loop, ensureLoop };
+window.__gp2m = { waveData, screenOf: (b, p) => [xOf(b), yOf(p)], geoTop: () => geo.top, state: () => state, ui, renderAll, reviewAudio, detectPitch, sampleBuffers, deleteLayers, collectParts, tiled, allNotes, midiBytes, wavBytes, zipBlob, parseMidi, importMidi, beatHits, showView, loop, ensureLoop };
 </script>
 
 </body>

@@ -102,4 +102,13 @@ Note tecniche su Blender 5.2 emerse durante lo sviluppo:
 - Marker della Timeline come cambi di BPM o di scala.
 - Altre piattaforme (Linux, macOS).
 
+### Web app
+
+- ~~Pennelli con effetto sul suono, lazo, beat A/B, sezione Onda~~.
+- **Video in picture-in-picture**: importare un video e tenerlo in una finestra mobile sopra
+  la tavola, per disegnare la musica mentre lo si guarda (sincronizzato col play, esportato
+  con l'audio). Da valutare: peso dei video nell'app offline e supporto PiP di Safari.
+- Onda che cambia nel tempo (più cicli disegnati, interpolati lungo la nota).
+- Pennelli importati da librerie libere (MyPaint, CC0).
+
 Le fonti delle ricerche sono in [RESEARCH.md](RESEARCH.md).
