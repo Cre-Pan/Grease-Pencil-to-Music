@@ -39,6 +39,24 @@
 - Nuova sezione **Onda**: disegna un ciclo della forma d'onda (bordo sopra = sinistra, bordo
   sotto = destra, Tratto o Pieno, Simmetrico) e usala come strumento.
 - Il disegno si salva subito quando l'app va in secondo piano.
+- Avviso *Nuova versione pronta* quando l'app installata si aggiorna.
+- Strumenti e livelli in due isole separate; le sezioni in alto diventano icone mentre disegni.
+- Spessore più sensibile alla pressione (curva e spessore minimo regolabili); il cursore
+  dello spessore resta dentro la barra; i pulsanti tondi non diventano ovali.
+- Tratti senza buchi nelle curve strette (anche con l'Inchiostro ruvido, ora senza rumore
+  all'indietro nel tempo).
+- Gomma con tre modi: Tratto intero, Punti, Fino agli incroci.
+- Lazo: prende ogni tratto con almeno un punto nel giro.
+- Livelli: menu a pressione lunga (Duplica, Unisci sotto, Cancella, Elimina livello), via Su e
+  Giù; con un solo livello Elimina diventa Cancella.
+- Lettura Ottica: piano, marimba, campana e chitarra tengono il suono e scivolano.
+- Beat: interruttore accanto al titolo, template nel menu ≡, pattern A/B attivabili, pallino
+  sul pattern che suona; Svuota in rosso.
+- Solo Pencil (automatico, sempre, mai): con la Pencil le dita scorrono e fanno i gesti.
+- Onda: Tratto/Pieno cambia il disegno già fatto, gesti a due e tre dita, *Come funziona?*.
+- Impostazioni in un pannello grande con categorie (Tavola, Pennello e Pencil, Audio,
+  Interfaccia, Info).
+- Registrazione **Live**: il tempo scorre da solo, la Pencil dà altezza e intensità.
 
 ## 0.0.5
 

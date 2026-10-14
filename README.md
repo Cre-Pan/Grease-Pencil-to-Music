@@ -159,6 +159,11 @@ Per installarla come app sulla schermata Home, che funziona anche offline:
    senza connessione; i disegni restano salvati nell'app. Per esportare usa il foglio di
    condivisione → *Salva su File*.
 
+**Aggiornamenti**: quando il branch di GitHub Pages cambia, l'app installata scarica la nuova
+versione la prima volta che la apri con la connessione e mostra *Nuova versione pronta →
+Aggiorna*. I disegni restano. Il link di GitHub Pages è pubblico: chi lo ha può usare l'app,
+ognuno con i propri disegni sul proprio dispositivo.
+
 Il sorgente è `web/app.html`; `python tools/build_web.py` rigenera `docs/app/` (pagina,
 manifest, icone e service worker).
 
@@ -184,18 +189,41 @@ cambia anche il suono.
 | Puntini | un punto a ogni passo della griglia | arpeggio di note brevi |
 | Pieno | chiude la forma da solo e la riempie | cluster: tutte le note coperte |
 
-**Lazo** (icona tratteggiata, tasto S): cerchia i tratti del livello attivo, trascinali (si
-agganciano alla griglia e ai semitoni), poi Duplica, Strumento attuale, Elimina o Fine.
+**Gomma**: tocca la gomma già attiva per scegliere *Tratto intero*, *Punti* (cancella solo dove
+passi e divide il tratto) o *Fino agli incroci* (toglie il pezzo tra i due incroci più vicini
+con altri tratti, come in Blender), e la dimensione.
 
-**Beat A/B**: ogni traccia ha due pattern. *Pattern A | B* sceglie quale modifichi, *Copia A in
-B* parte da una copia, la *Sequenza* dice quale suona in ogni battuta (tocca: A → B → pausa).
-I preset mettono in B una variazione con un fill e suonano A A A B.
+**Lazo** (icona tratteggiata, tasto S): disegna un giro sopra i tratti del livello attivo: viene
+preso ogni tratto che ha almeno un punto dentro. Trascinali (si agganciano alla griglia e ai
+semitoni), poi Duplica, Strumento attuale, Elimina o Fine.
+
+**Live** (icona registra, tasto R): appoggia la Pencil sulla tavola e il tempo scorre da solo
+con il play; muovi la Pencil solo in alto e in basso per la nota, premi di più per suonare più
+forte, alzala per una pausa. Ogni giro del loop diventa un nuovo tratto.
+
+**Livelli**: sono nella loro isola, a destra degli strumenti. Tieni premuto un livello per
+*Duplica*, *Unisci sotto*, *Cancella* (toglie i tratti, il livello resta) ed *Elimina livello*;
+tienilo e trascinalo per spostarlo. Con un solo livello, scorrere a sinistra lo cancella.
+
+**Impostazioni** (icona con i cursori): un pannello grande con le categorie Tavola, Pennello e
+Pencil (sensibilità della pressione con la curva, spessore minimo, *Solo Pencil*), Audio,
+Interfaccia (tema, nomi delle note, sezioni come icone) e Info con le scorciatoie.
+
+**Solo Pencil**: in automatico, appena usi la Pencil le dita non disegnano più: scorrono il
+Beat, ingrandiscono la tavola e fanno i gesti.
+
+**Beat**: l'interruttore accanto al titolo accende o spegne il beat; i template sono nel menu
+≡ a destra. Con *Pattern A e B* acceso ogni traccia ha due pattern: *Modifica A | B* sceglie
+quale modifichi (il pallino verde dice quale sta suonando), *Copia A in B* parte da una copia,
+la *Sequenza* dice quale suona in ogni battuta (tocca: A → B → pausa). I template mettono in
+B una variazione con un fill e suonano A A A B.
 
 **Onda**: disegni un ciclo del suono, come la colonna sonora ottica di Norman McLaren. Il
 bordo sopra della forma è il canale sinistro, quello sotto il destro; il riempimento tra i
-due è il suono. *Tratto* disegna un bordo (sopra o sotto, l'altro è lo specchio), *Pieno* una
-forma chiusa che dà entrambi i bordi; *Simmetrico* fa sentire lo stesso suono nelle due
-orecchie. *Disegna con questa onda* la usa come strumento; le onde sono anche in *Strumento →
+due è il suono. *Tratto* disegna un bordo (sopra o sotto, l'altro è lo specchio), *Pieno*
+chiude ogni linea in una forma che dà entrambi i bordi; passando dall'uno all'altro il disegno
+resta. *Simmetrico* fa sentire lo stesso suono nelle due orecchie. *Come funziona?* spiega i
+passi; due dita annullano, tre ripetono. *Disegna con questa onda* la usa come strumento; le onde sono anche in *Strumento →
 Onde disegnate* ed entrano nel progetto .json.
 
 ### Gesti della web app
@@ -210,7 +238,8 @@ Onde disegnate* ed entrano nel progetto .json.
 | Livello: tieni premuto e trascina | cambia l'ordine |
 | Occhio o altoparlante tenuti premuti | solo quel livello visibile / udibile |
 | Nome di una traccia del beat tenuto premuto | volume e intonazione |
-| Pennello già attivo, tocco | libreria dei pennelli |
+| Pennello o gomma già attivi, tocco | libreria dei pennelli / modi della gomma |
+| Livello tenuto premuto | Duplica, Unisci sotto, Cancella, Elimina |
 | Lazo: cerchia, poi trascina | sposta i tratti scelti |
 
 ## Limiti noti (0.0.x)

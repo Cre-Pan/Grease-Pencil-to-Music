@@ -105,15 +105,19 @@ canvas { display: block; }
 .cap { position: absolute; z-index: 6; display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 999px; }
 .cap-left { top: 12px; left: max(16px, env(safe-area-inset-left, 0px)); max-width: calc(50% - 190px); }
 .cap-sections { top: 12px; left: 50%; transform: translateX(-50%); }
-.cap-tools { top: 12px; right: max(16px, env(safe-area-inset-right, 0px)); }
+.cap-tools { top: 12px; right: calc(max(16px, env(safe-area-inset-right, 0px)) + 64px); }
+.cap-layers { top: 12px; right: max(16px, env(safe-area-inset-right, 0px)); }
 .cap-transport { bottom: 14px; left: 50%; transform: translateX(-50%); padding: 6px; gap: 4px; }
 .ib {
-  width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; color: var(--fg);
+  flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; color: var(--fg);
   transition: background 0.2s var(--ease), transform 0.2s var(--spring), color 0.2s;
 }
 @media (hover: hover) { .ib:hover, .sbtn:hover, .inst:hover { background: var(--fill); } }
 .ib:active { transform: scale(0.9); }
 .ib[aria-pressed="true"] { color: var(--blue); background: var(--fill); }
+#btnLive[aria-pressed="true"] { color: var(--red); }
+#btnLive.rec svg circle:last-child { animation: rec-blink 1s steps(2) infinite; }
+@keyframes rec-blink { 50% { opacity: 0.25; } }
 .ib[aria-expanded="true"] { background: var(--fill); }
 .ib svg { width: 22px; height: 22px; }
 .doc-name {
@@ -131,9 +135,14 @@ canvas { display: block; }
 /* Section tabs: segmented control with a sliding pill */
 .tabs { position: relative; display: flex; }
 .tab {
-  position: relative; z-index: 1; padding: 11px 18px; border-radius: 999px; font-size: 14px; font-weight: 600;
-  color: var(--fg-2); transition: color 0.25s; white-space: nowrap;
+  position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 7px; padding: 11px 16px 11px 13px; border-radius: 999px;
+  font-size: 14px; font-weight: 600; color: var(--fg-2); transition: color 0.25s, padding 0.35s var(--spring); white-space: nowrap;
 }
+.tab svg { width: 19px; height: 19px; flex: 0 0 auto; }
+.tab .tl { display: inline-block; max-width: 90px; overflow: hidden; transition: max-width 0.35s var(--spring), opacity 0.25s; }
+/* While drawing the sections shrink to icons; a tap on them brings the names back. */
+.tabs.compact .tab { padding: 11px 12px; gap: 0; }
+.tabs.compact .tl { max-width: 0; opacity: 0; }
 .tab[aria-selected="true"] { color: var(--fg); }
 .tab-pill {
   position: absolute; z-index: 0; top: 0; bottom: 0; left: 0; width: 0; border-radius: 999px;
@@ -163,7 +172,7 @@ canvas { display: block; }
   transform: translateY(-48%); width: 48px; padding: 12px 0; border-radius: 24px;
   display: flex; flex-direction: column; align-items: center; gap: 10px;
 }
-.vslider { position: relative; width: 30px; height: min(140px, 17vh); touch-action: none; cursor: ns-resize; }
+.vslider { position: relative; flex: 0 0 auto; margin: 10px 0; width: 30px; height: min(140px, 17vh); touch-action: none; cursor: ns-resize; }
 .vslider::before {
   content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 6px; transform: translateX(-50%);
   border-radius: 3px; background: var(--fill-2);
@@ -191,6 +200,7 @@ canvas { display: block; }
   overflow-y: auto; padding: 16px; border-radius: 26px; background: var(--pop); color: var(--fg);
   box-shadow: var(--shadow-lg); border: 0.5px solid var(--glass-edge); transform-origin: var(--origin, top center);
 }
+[hidden] { display: none !important; }
 .popover:not([hidden]) { animation: pop-in 0.36s var(--spring) both; }
 @keyframes pop-in { from { opacity: 0; transform: scale(0.9) translateY(-6px); } to { opacity: 1; transform: none; } }
 .pop-head { display: flex; align-items: center; justify-content: space-between; margin: 2px 4px 12px; }
@@ -237,7 +247,7 @@ input[type="range"]::-moz-range-thumb {
 }
 .switch:checked { background: var(--green); }
 .switch:checked::before { transform: translateX(20px); }
-.plus { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: var(--blue); background: var(--fill); }
+.plus { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: var(--blue); background: var(--fill); }
 .plus svg { width: 18px; height: 18px; }
 
 /* Layers */
@@ -271,6 +281,13 @@ input[type="range"]::-moz-range-thumb {
 .lbtn:active { transform: scale(0.86); }
 .lbtn svg { width: 21px; height: 21px; }
 .lbtn[aria-pressed="false"] { opacity: 0.45; }
+.layer-menu { margin: 4px 6px 8px; padding: 4px; border-radius: 16px; background: var(--fill); display: grid; animation: pop-in 0.28s var(--spring) both; }
+.menu-item { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 11px 12px; border-radius: 12px; font-size: 15px; font-weight: 600; text-align: left; }
+.menu-item + .menu-item { border-top: 0.5px solid var(--sep); border-radius: 0; }
+.menu-item small { font-size: 12.5px; font-weight: 500; color: var(--fg-2); }
+.menu-item.danger { color: var(--red); }
+.menu-item:disabled { opacity: 0.38; }
+.menu-item:active:not(:disabled) { background: var(--fill-2); }
 .layer-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .mini-btn { padding: 10px 4px; border-radius: 12px; background: var(--fill); font-size: 13px; font-weight: 600; transition: transform 0.2s var(--spring); }
 .mini-btn:active { transform: scale(0.94); }
@@ -299,7 +316,7 @@ input[type="range"]::-moz-range-thumb {
 .inst { display: grid; justify-items: center; gap: 7px; padding: 10px 2px 9px; border-radius: 16px; font-size: 12.5px; transition: background 0.2s, transform 0.2s var(--spring); }
 .inst:active { transform: scale(0.94); }
 .inst[aria-pressed="true"] { background: var(--fill); box-shadow: inset 0 0 0 2px var(--blue); }
-.swatch { width: 38px; height: 38px; border-radius: 50%; box-shadow: inset 0 -6px 12px rgba(0, 0, 0, 0.12); }
+.swatch { flex: 0 0 auto; width: 38px; height: 38px; border-radius: 50%; box-shadow: inset 0 -6px 12px rgba(0, 0, 0, 0.12); }
 .swatch.drum { border-radius: 11px; }
 .swatch.tool { background: var(--fill); display: grid; place-items: center; color: var(--blue); box-shadow: none; }
 .swatch.tool svg { width: 20px; height: 20px; }
@@ -353,6 +370,11 @@ label.btn input { position: absolute; width: 1px; height: 1px; opacity: 0; point
 .beat-head { padding: 16px 18px; display: grid; gap: 14px; }
 .beat-head-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .beat-head h2 { font-size: 28px; font-weight: 700; letter-spacing: -0.025em; }
+.beat-title { display: flex; align-items: center; gap: 12px; }
+.beat-title label { cursor: pointer; }
+.seg button.playing::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: var(--green); vertical-align: middle; }
+.pad.now.ghost { transform: scale(1.03); }
+.pad.now.ghost:not(.on):not(.acc) { background: var(--pad-beat); }
 .beat-head h2 small { font-size: 15px; color: var(--fg-2); font-weight: 500; letter-spacing: -0.01em; margin-left: 8px; }
 .presets { display: flex; gap: 8px; flex-wrap: wrap; }
 .chip {
@@ -374,6 +396,8 @@ label.btn input { position: absolute; width: 1px; height: 1px; opacity: 0; point
 .wave-tools { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; font-size: 14px; }
 .wave-tools .title-input { flex: 1 1 160px; min-width: 0; font-size: 20px; }
 .wave-stage { position: relative; }
+.wave-help { margin: 0; padding: 12px 16px 12px 34px; border-radius: 16px; background: var(--fill); display: grid; gap: 8px; font-size: 14px; line-height: 1.45; color: var(--fg-2); }
+.wave-help b { color: var(--fg); }
 #waveCanvas { display: block; width: 100%; height: min(40vh, 400px); border-radius: 18px; background: var(--fill); touch-action: none; cursor: crosshair; }
 #waveScope { display: block; width: 100%; height: 96px; border-radius: 14px; background: var(--fill); }
 .wave-side { position: absolute; left: 14px; font-size: 12px; font-weight: 650; letter-spacing: 0.02em; pointer-events: none; }
@@ -479,6 +503,36 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
 .brush canvas { width: 112px; height: 40px; }
 .brush b { display: block; font-size: 15px; font-weight: 600; }
 .brush small { display: block; font-size: 12.5px; color: var(--fg-2); line-height: 1.35; }
+.scrim { position: absolute; inset: 0; z-index: 19; background: rgba(0, 0, 0, 0.28); animation: fade-in 0.25s both; }
+@keyframes fade-in { from { opacity: 0; } }
+.popover.sheet {
+  z-index: 20; inset: max(20px, 4vh) max(20px, 5vw) !important; width: auto; max-height: none; padding: 0;
+  display: grid; grid-template-columns: 240px minmax(0, 1fr); overflow: hidden; transform-origin: center;
+}
+.sheet-nav { padding: 20px 12px; background: var(--fill); display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+.sheet-nav h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; padding: 4px 10px 14px; }
+.sheet-nav button { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 12px; font-size: 15px; font-weight: 600; text-align: left; }
+.sheet-nav button i { width: 26px; height: 26px; border-radius: 8px; flex: 0 0 auto; }
+.sheet-nav button[aria-pressed="true"] { background: var(--pop); box-shadow: var(--shadow); }
+.sheet-body { overflow-y: auto; padding: 20px 24px 28px; }
+.sheet-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.sheet-top h3 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+.sheet-body input[type="range"] { width: 100%; }
+.sheet-body .seg { width: 100%; max-width: 460px; }
+.set-help { font-size: 13px; color: var(--fg-2); line-height: 1.45; margin: 8px 4px 0; }
+.press-item { gap: 16px; align-items: center; }
+#pressCurve { width: 120px; height: 120px; flex: 0 0 auto; border-radius: 14px; background: var(--fill); }
+.press-ctl { flex: 1; min-width: 0; display: grid; }
+.shortcuts .item small { color: var(--fg-2); font-size: 13px; text-align: right; }
+@media (max-width: 760px) {
+  .popover.sheet { inset: 10px !important; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .sheet-nav { flex-direction: row; overflow-x: auto; padding: 10px; }
+  .sheet-nav h2 { display: none; }
+  .sheet-nav button { white-space: nowrap; }
+  .press-item { flex-direction: column; align-items: stretch; }
+  #pressCurve { width: 100%; height: 110px; }
+}
+.update-bar { top: 74px; left: 50%; transform: translateX(-50%); padding: 6px 6px 6px 16px; gap: 12px; font-size: 14px; font-weight: 600; z-index: 13; animation: pop-in 0.3s var(--spring) both; }
 .sel-bar { top: 74px; left: 50%; transform: translateX(-50%); padding: 6px; gap: 6px; animation: pop-in 0.3s var(--spring) both; }
 .sel-count { padding: 0 8px 0 12px; font-size: 14px; font-weight: 600; color: var(--fg-2); white-space: nowrap; }
 .chip.danger { color: var(--red); }
@@ -506,8 +560,10 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   .cap-left { max-width: none; }
   .doc-name, .hint { display: none; }
   .cap-sections { left: auto; right: max(16px, env(safe-area-inset-right, 0px)); transform: none; }
-  .tab { padding: 8px 11px; font-size: 13px; }
-  .cap-tools { top: 66px; flex-direction: column; border-radius: 26px; }
+  .tab { padding: 8px 10px; font-size: 13px; gap: 5px; }
+  .tab svg { width: 17px; height: 17px; }
+  .cap-tools { top: 66px; right: max(16px, env(safe-area-inset-right, 0px)); flex-direction: column; border-radius: 26px; }
+  .cap-layers { top: auto; bottom: 84px; }
   .export-grid { grid-template-columns: minmax(0, 1fr); }
   .beat-row { grid-template-columns: 96px 32px auto; }
   .beat-name { font-size: 13px; padding: 7px 6px; }
@@ -519,7 +575,10 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   .wave-head h2 small { display: block; margin: 4px 0 0; }
 }
 @media (max-width: 440px) {
-  .tab { padding: 8px 6px; font-size: 12.5px; }
+  .tab { padding: 8px 8px; font-size: 12.5px; gap: 0; }
+  .tab .tl { max-width: 0; opacity: 0; }
+  .tab[aria-selected="true"] { gap: 5px; }
+  .tab[aria-selected="true"] .tl { max-width: 70px; opacity: 1; }
   .cap-left .ib { width: 40px; }
   .sel-count { display: none; }
 }
@@ -554,17 +613,19 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
       <div class="wrap">
         <div class="card beat-head">
           <div class="beat-head-top">
-            <h2>Beat <small id="beatSub"></small></h2>
-            <div class="presets" id="presets"></div>
+            <h2 class="beat-title"><input class="switch" type="checkbox" id="beatOn" aria-label="Beat attivo"><label for="beatOn">Beat</label> <small id="beatSub"></small></h2>
+            <button class="ib" id="btnPresets" title="Template" aria-label="Template" aria-expanded="false" aria-controls="popPresets">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7h14M5 12h14M5 17h14"/></svg>
+            </button>
           </div>
           <div class="beat-controls">
             <label class="ctl" for="inSwing"><span>Swing</span><input id="inSwing" type="range" min="0" max="1" step="0.01"><span class="v" id="valSwing"></span></label>
             <label class="ctl" for="inBeatVol"><span>Volume</span><input id="inBeatVol" type="range" min="0" max="1" step="0.01"><span class="v" id="valBeatVol"></span></label>
             <div class="ctl-row"><span>Passi</span><div class="seg" id="segSteps" style="width:150px"><button data-v="16">16</button><button data-v="32">32</button></div></div>
-            <div class="ctl-row"><label for="beatOn">Beat attivo</label><input class="switch" type="checkbox" id="beatOn"></div>
+            <div class="ctl-row"><label for="beatAB">Pattern A e B</label><input class="switch" type="checkbox" id="beatAB"></div>
           </div>
-          <div class="pattern-row">
-            <span>Pattern</span>
+          <div class="pattern-row" id="abRow">
+            <span>Modifica</span>
             <div class="seg" id="segPat" style="width:110px"><button data-v="A">A</button><button data-v="B">B</button></div>
             <button class="chip" id="patCopy"></button>
             <span>Sequenza</span>
@@ -575,7 +636,7 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
         <div class="beat-foot">
           <span class="legend"><i></i>spento</span><span class="legend"><i class="on"></i>colpo</span><span class="legend"><i class="acc"></i>accento</span>
           <span>Tocca un pad per cambiarlo, trascina per dipingere più passi. Tocca il nome per sentire il suono, tienilo premuto per volume e intonazione. A e B sono due pattern: la sequenza decide quale suona in ogni battuta (– = pausa).</span>
-          <button class="chip" id="beatClear">Svuota</button>
+          <button class="chip danger" id="beatClear">Svuota</button>
         </div>
       </div>
     </div>
@@ -595,8 +656,15 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
             <div class="seg" id="segWaveBrush" style="width:150px"><button data-v="line">Tratto</button><button data-v="fill">Pieno</button></div>
             <div class="ctl-row" style="gap:8px"><label for="waveSym">Simmetrico</label><input class="switch" type="checkbox" id="waveSym"></div>
             <button class="chip" id="waveUndo">Annulla</button>
-            <button class="chip" id="waveClear">Svuota</button>
+            <button class="chip danger" id="waveClear">Svuota</button>
+            <button class="chip" id="waveHelpBtn" aria-pressed="false">Come funziona?</button>
           </div>
+          <ol class="wave-help" id="waveHelp" hidden>
+            <li><b>Un giro dell'onda.</b> Da sinistra a destra disegni una sola vibrazione: il suono la ripete centinaia di volte al secondo. L'altezza della nota la scegli poi disegnando nella tavola.</li>
+            <li><b>Sopra = orecchio sinistro, sotto = destro.</b> Il bordo alto della forma è il canale sinistro, quello basso il destro; il riempimento colorato tra i due è il suono. Il bordo che manca è lo specchio dell'altro.</li>
+            <li><b>Tratto o Pieno.</b> Con Tratto le linee sono i bordi; con Pieno ogni linea si chiude e diventa una forma. Passa dall'uno all'altro quando vuoi: il disegno resta.</li>
+            <li><b>Il timbro è la forma.</b> Curve morbide (sinusoide) suonano dolci; angoli e scalini (dente di sega, quadra) suonano brillanti. Una linea piatta non suona.</li>
+          </ol>
           <div class="wave-stage">
             <canvas id="waveCanvas" aria-label="Un ciclo dell'onda: sopra il canale sinistro, sotto il destro"></canvas>
             <span class="wave-side l">SINISTRA ↑</span><span class="wave-side r">DESTRA ↓</span>
@@ -615,7 +683,7 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
             <button class="chip danger" id="waveDelete">Elimina</button>
           </div>
         </div>
-        <div class="beat-foot"><span>Come la colonna sonora ottica di Norman McLaren: il riempimento tra i due bordi è il suono. Con il Tratto disegni un bordo (sopra o sotto); con il Pieno disegni una forma chiusa, che dà entrambi i bordi. Un bordo che manca è lo specchio dell'altro. Una linea piatta non suona: il suono è il movimento.</span></div>
+        <div class="beat-foot"><span>Come la colonna sonora ottica di Norman McLaren, che disegnava il suono direttamente sulla pellicola. Due dita annullano, tre ripetono.</span></div>
       </div>
     </div>
   </section>
@@ -675,7 +743,7 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
     <button class="ib" id="btnActions" title="Composizione" aria-label="Composizione" aria-expanded="false" aria-controls="popActions">
       <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="6" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18" cy="12" r="1.8"/></svg>
     </button>
-    <button class="ib" id="btnBoard" title="Tavola: battute, scala, griglia" aria-label="Tavola" aria-expanded="false" aria-controls="popBoard">
+    <button class="ib" id="btnBoard" title="Impostazioni" aria-label="Impostazioni" aria-expanded="false" aria-controls="popBoard">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>
     </button>
     <div class="doc-name" id="docName"></div>
@@ -684,11 +752,11 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   <nav class="cap cap-sections glass" aria-label="Sezioni">
     <div class="tabs" role="tablist" id="tabs">
       <span class="tab-pill" id="tabPill"></span>
-      <button class="tab" role="tab" id="tabDraw">Disegna</button>
-      <button class="tab" role="tab" id="tabBeat">Beat</button>
-      <button class="tab" role="tab" id="tabMidi">MIDI</button>
-      <button class="tab" role="tab" id="tabWave">Onda</button>
-      <button class="tab" role="tab" id="tabExport">Esporta</button>
+      <button class="tab" role="tab" id="tabDraw" aria-label="Disegna"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 4.5l4 4L9 19l-5 1 1-5z"/><path d="M13.5 6.5l4 4"/></svg><span class="tl">Disegna</span></button>
+      <button class="tab" role="tab" id="tabBeat" aria-label="Beat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg><span class="tl">Beat</span></button>
+      <button class="tab" role="tab" id="tabMidi" aria-label="MIDI"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M8 4.5v9M12 4.5v15M16 4.5v9"/></svg><span class="tl">MIDI</span></button>
+      <button class="tab" role="tab" id="tabWave" aria-label="Onda"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12c2.4-7 4.8-7 7.2 0s4.8 7 7.2 0 3.6-5.3 4.6-3.5"/></svg><span class="tl">Onda</span></button>
+      <button class="tab" role="tab" id="tabExport" aria-label="Esporta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3.5M7.5 8L12 3.5 16.5 8"/><path d="M8 11H6.5A2.5 2.5 0 0 0 4 13.5v4A2.5 2.5 0 0 0 6.5 20h11a2.5 2.5 0 0 0 2.5-2.5v-4a2.5 2.5 0 0 0-2.5-2.5H16"/></svg><span class="tl">Esporta</span></button>
     </div>
   </nav>
 
@@ -702,10 +770,15 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
     <button class="ib" id="btnLasso" title="Lazo: seleziona e sposta (S)" aria-label="Lazo" aria-pressed="false">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><ellipse cx="12" cy="10" rx="8" ry="5.5" stroke-dasharray="3.2 3"/><path d="M8.5 15c-1.2 1.8-.8 4 1.6 5"/></svg>
     </button>
+    <button class="ib" id="btnLive" title="Live: il tempo scorre, la Pencil dà la nota (R)" aria-label="Registrazione live" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.6" fill="currentColor" stroke="none"/></svg>
+    </button>
+    <button class="color-dot" id="btnInst" title="Strumento" aria-expanded="false" aria-controls="popInst"></button>
+  </div>
+  <div class="cap cap-layers glass" id="layersCap">
     <button class="ib" id="btnLayers" title="Livelli (L)" aria-label="Livelli" aria-expanded="false" aria-controls="popLayers">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 4l8.5 4.5L12 13 3.5 8.5z"/><path d="M3.5 12.5L12 17l8.5-4.5M3.5 16.5L12 21l8.5-4.5"/></svg>
     </button>
-    <button class="color-dot" id="btnInst" title="Strumento" aria-expanded="false" aria-controls="popInst"></button>
   </div>
 
   <div class="cap cap-transport glass">
@@ -725,6 +798,10 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   </div>
 
   <div class="bubble" id="bubble" hidden></div>
+  <div class="cap update-bar glass" id="updateBar" hidden>
+    <span>Nuova versione pronta</span>
+    <button class="chip primary" id="updateNow">Aggiorna</button>
+  </div>
   <div class="cap sel-bar glass" id="selBar" hidden>
     <span class="sel-count" id="selCount"></span>
     <button class="chip" id="selDup">Duplica</button>
@@ -741,28 +818,85 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
       <button class="item item-btn danger" id="actNewConfirm" hidden><span>Conferma: cancella tutto</span><small>annullabile</small></button>
       <button class="item item-btn" id="actExample"><span>Carica l'esempio</span><small>3 livelli e un beat</small></button>
     </div>
-    <div class="label">Aspetto</div>
-    <div class="group">
-      <div class="item col"><div class="seg" id="segTheme"><button data-v="system">Automatico</button><button data-v="light">Chiaro</button><button data-v="dark">Scuro</button></div></div>
-      <div class="item col"><div class="seg" id="segNaming"><button data-v="IT">Do Re Mi</button><button data-v="EN">C D E</button></div></div>
-    </div>
   </section>
 
-  <section class="popover" id="popBoard" hidden aria-label="Tavola">
-    <div class="pop-head"><h2>Tavola</h2></div>
-    <div class="group">
-      <div class="item col"><div class="item" style="padding:0;min-height:0"><span>Durata</span><span class="v" id="valBars"></span></div><input id="inBars" type="range" min="1" max="32" step="1" aria-label="Battute"></div>
-      <div class="item"><span>Scala</span><span style="display:flex;gap:6px"><select id="inRoot" aria-label="Tonica"></select><select id="inScale" aria-label="Scala"></select></span></div>
-      <div class="item col"><span>Griglia ritmica</span><div class="seg" id="segGrid"><button data-v="0">Libera</button><button data-v="1">1/4</button><button data-v="0.5">1/8</button><button data-v="0.25">1/16</button></div></div>
-    </div>
-    <div class="label">Tastiera</div>
-    <div class="group">
-      <div class="item"><span>Nota più bassa</span><select id="inLow" aria-label="Nota più bassa"></select></div>
-      <div class="item col"><span>Ottave</span><div class="seg" id="segOct"><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="4">4</button><button data-v="5">5</button></div></div>
-    </div>
-    <div class="label">Pennello</div>
-    <div class="group">
-      <div class="item col"><div class="item" style="padding:0;min-height:0"><span>Stabilizzazione</span><span class="v" id="valStab"></span></div><input id="inStab" type="range" min="0" max="0.85" step="0.01" aria-label="Stabilizzazione"></div>
+  <div class="scrim" id="scrim" hidden></div>
+  <section class="popover sheet" id="popBoard" hidden aria-label="Impostazioni">
+    <nav class="sheet-nav" id="setNav" aria-label="Categorie">
+      <h2>Impostazioni</h2>
+      <button data-cat="board" aria-pressed="true"><i style="background:var(--blue)"></i>Tavola</button>
+      <button data-cat="pen"><i style="background:var(--orange)"></i>Pennello e Pencil</button>
+      <button data-cat="audio"><i style="background:var(--green)"></i>Audio</button>
+      <button data-cat="ui"><i style="background:#af52de"></i>Interfaccia</button>
+      <button data-cat="info"><i style="background:#8e8e93"></i>Info e scorciatoie</button>
+    </nav>
+    <div class="sheet-body">
+      <div class="sheet-top"><h3 id="setTitle">Tavola</h3><button class="chip primary" id="setDone">Fine</button></div>
+      <div class="set-cat" data-cat="board">
+        <div class="label" style="margin-top:0">Tempo e durata</div>
+        <div class="group">
+          <div class="item col"><div class="item" style="padding:0;min-height:0"><span>Durata</span><span class="v" id="valBars"></span></div><input id="inBars" type="range" min="1" max="32" step="1" aria-label="Battute"></div>
+          <div class="item col"><div class="item" style="padding:0;min-height:0"><label for="inBpm">Tempo</label><span class="v" id="valBpm"></span></div><input id="inBpm" type="range" min="40" max="220" step="1"></div>
+          <div class="item col"><span>Griglia ritmica</span><div class="seg" id="segGrid"><button data-v="0">Libera</button><button data-v="1">1/4</button><button data-v="0.5">1/8</button><button data-v="0.25">1/16</button></div></div>
+        </div>
+        <div class="label">Note</div>
+        <div class="group">
+          <div class="item"><span>Scala</span><span style="display:flex;gap:6px"><select id="inRoot" aria-label="Tonica"></select><select id="inScale" aria-label="Scala"></select></span></div>
+          <div class="item"><span>Nota più bassa</span><select id="inLow" aria-label="Nota più bassa"></select></div>
+          <div class="item col"><span>Ottave</span><div class="seg" id="segOct"><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="4">4</button><button data-v="5">5</button></div></div>
+        </div>
+        <p class="set-help">La scala sceglie su quali righe cadono le note nelle letture Quantizzata e Legato; l'Ottica le ignora e segue la linea.</p>
+      </div>
+      <div class="set-cat" data-cat="pen" hidden>
+        <div class="label" style="margin-top:0">Pressione della Pencil</div>
+        <div class="group">
+          <div class="item press-item"><canvas id="pressCurve" aria-label="Curva della pressione"></canvas>
+            <div class="press-ctl">
+              <div class="item col"><div class="item" style="padding:0;min-height:0"><label for="inPress">Sensibilità</label><span class="v" id="valPress"></span></div><input id="inPress" type="range" min="0.4" max="2.5" step="0.05"></div>
+              <div class="item col"><div class="item" style="padding:0;min-height:0"><label for="inMinW">Spessore minimo</label><span class="v" id="valMinW"></span></div><input id="inMinW" type="range" min="0" max="0.5" step="0.01"></div>
+            </div>
+          </div>
+        </div>
+        <p class="set-help">Sensibilità alta: serve premere di più per un tratto spesso (e un suono forte). Spessore minimo: quanto resta sottile il tratto appena appoggiato.</p>
+        <div class="label">Dita e Pencil</div>
+        <div class="group">
+          <div class="item col"><span>Solo Pencil</span><div class="seg" id="segPencil"><button data-v="auto">Automatico</button><button data-v="on">Sempre</button><button data-v="off">Mai</button></div></div>
+        </div>
+        <p class="set-help">Con Solo Pencil le dita non disegnano: scorrono, ingrandiscono e fanno i gesti (due dita annulla, tre ripeti, quattro play). Automatico si attiva appena usi la Pencil.</p>
+        <div class="label">Tratto</div>
+        <div class="group">
+          <div class="item col"><div class="item" style="padding:0;min-height:0"><span>Stabilizzazione</span><span class="v" id="valStab"></span></div><input id="inStab" type="range" min="0" max="0.85" step="0.01" aria-label="Stabilizzazione"></div>
+          <div class="item col"><div class="item" style="padding:0;min-height:0"><label for="inRough2">Ruvidezza dell'inchiostro</label><span class="v" id="valRough2"></span></div><input id="inRough2" type="range" min="0" max="1" step="0.01"></div>
+          <div class="item"><label for="swDrawSound">Suona mentre disegni</label><input class="switch" type="checkbox" id="swDrawSound"></div>
+        </div>
+      </div>
+      <div class="set-cat" data-cat="audio" hidden>
+        <div class="group">
+          <div class="item col"><div class="item" style="padding:0;min-height:0"><label for="inMaster">Volume di ascolto</label><span class="v" id="valMaster"></span></div><input id="inMaster" type="range" min="0" max="1.2" step="0.01"></div>
+          <div class="item col"><div class="item" style="padding:0;min-height:0"><label for="inMetroVol">Volume del metronomo</label><span class="v" id="valMetroVol"></span></div><input id="inMetroVol" type="range" min="0" max="1" step="0.01"></div>
+          <div class="item"><label for="swCountIn">Metronomo durante la registrazione live</label><input class="switch" type="checkbox" id="swCountIn"></div>
+        </div>
+        <p class="set-help">Il volume di ascolto non cambia i file esportati, che sono normalizzati. Il volume e il riverbero di ogni livello sono nel pannello Livelli.</p>
+      </div>
+      <div class="set-cat" data-cat="ui" hidden>
+        <div class="group">
+          <div class="item col"><span>Tema</span><div class="seg" id="segTheme"><button data-v="system">Automatico</button><button data-v="light">Chiaro</button><button data-v="dark">Scuro</button></div></div>
+          <div class="item col"><span>Nomi delle note</span><div class="seg" id="segNaming"><button data-v="IT">Do Re Mi</button><button data-v="EN">C D E</button></div></div>
+          <div class="item col"><span>Sezioni in alto</span><div class="seg" id="segTabs"><button data-v="auto">Icone mentre disegni</button><button data-v="always">Solo icone</button><button data-v="never">Con i nomi</button></div></div>
+        </div>
+      </div>
+      <div class="set-cat" data-cat="info" hidden>
+        <div class="group shortcuts">
+          <div class="item"><span>Due / tre / quattro dita</span><small>annulla / ripeti / play</small></div>
+          <div class="item"><span>Pennello o gomma già attivi, tocco</span><small>libreria</small></div>
+          <div class="item"><span>Tieni premuto un tratto</span><small>contagocce</small></div>
+          <div class="item"><span>Tieni premuto un livello</span><small>menu del livello</small></div>
+          <div class="item"><span>Spazio · B · E · S · L</span><small>play · pennello · gomma · lazo · livelli</small></div>
+          <div class="item"><span>1 · 2 · 3 · 4 · 5</span><small>Disegna · Beat · MIDI · Onda · Esporta</small></div>
+          <div class="item"><span>⌘Z · ⇧⌘Z</span><small>annulla · ripeti</small></div>
+        </div>
+        <p class="set-help">Grease Pencil to Music, web app. Si aggiorna da sola quando apri l'app con la connessione; i disegni restano su questo dispositivo.</p>
+      </div>
     </div>
   </section>
 
@@ -774,6 +908,19 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
     </div>
   </section>
 
+  <section class="popover" id="popPresets" hidden aria-label="Template del beat">
+    <div class="pop-head"><h2>Template</h2></div>
+    <div class="layer-menu" id="presets" style="margin:0"></div>
+  </section>
+
+  <section class="popover" id="popEraser" hidden aria-label="Gomma">
+    <div class="pop-head"><h2>Gomma</h2></div>
+    <div class="brush-list" id="eraserList"></div>
+    <div class="group" style="margin-top:10px">
+      <div class="item col"><div class="item" style="padding:0;min-height:0"><label for="inEraser">Dimensione</label><span class="v" id="valEraser"></span></div><input id="inEraser" type="range" min="0" max="1" step="0.01"></div>
+    </div>
+  </section>
+
   <section class="popover" id="popLayers" hidden aria-label="Livelli">
     <div class="pop-head"><h2>Livelli</h2>
       <button class="plus" id="btnAddLayer" title="Nuovo livello" aria-label="Nuovo livello">
@@ -781,7 +928,7 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
       </button>
     </div>
     <div id="layerList"></div>
-    <p class="layer-hint">Tocca un livello per sceglierlo, di nuovo per le impostazioni. Scorri a sinistra per eliminarlo, a destra per selezionarne più di uno. Tieni premuto un livello e trascinalo per spostarlo; tieni premuto l'occhio o l'altoparlante per vedere o sentire solo quel livello.</p>
+    <p class="layer-hint">Tocca un livello per sceglierlo, di nuovo per le impostazioni. Tienilo premuto per Duplica, Unisci sotto, Cancella ed Elimina; tienilo e trascinalo per spostarlo. Scorri a sinistra per eliminarlo, a destra per selezionarne più di uno. Tieni premuto l'occhio o l'altoparlante per vedere o sentire solo quel livello.</p>
   </section>
 
   <section class="popover" id="popInst" hidden aria-label="Strumenti">
@@ -883,7 +1030,7 @@ const BEAT_TRACKS = ["KICK", "SNARE", "CLAP", "HAT", "OHAT", "TOM", "RIM", "SHAK
 
 const MODES = [
   { id: "QUANTIZED", name: "Quantizzata", help: "Cambia nota a ogni riga che attraversa, agganciata alla scala e alla griglia." },
-  { id: "OPTICAL", name: "Ottica", help: "Alla McLaren: l'altezza segue la linea in modo continuo, con glissandi." },
+  { id: "OPTICAL", name: "Ottica", help: "Alla McLaren: l'altezza segue la linea in modo continuo, con glissandi. Anche piano, marimba, campana e chitarra tengono il suono e scivolano; le percussioni restano colpi." },
   { id: "LEGATO", name: "Legato", help: "Note della scala unite da glissandi: una voce che scivola senza riattacco." },
   { id: "GESTURE", name: "Gesto", help: "Il ritmo è quello della mano: il tratto dura quanto hai impiegato a disegnarlo." },
 ];
@@ -909,6 +1056,18 @@ const PRESETS = {
   EMPTY: { name: "Vuoto", swing: 0, rows: {} },
 };
 
+/* "Solo Pencil": with the Pencil, fingers scroll and pan instead of drawing (auto = once a
+   Pencil has been seen, or always / never from Impostazioni). */
+let pencilSeen = false;
+document.addEventListener("pointerdown", e => { if (e.pointerType === "pen") pencilSeen = true; }, true);
+const pencilOnly = () => ui.pencilMode === "on" || (ui.pencilMode === "auto" && pencilSeen);
+let pencilHintAt = 0;
+function pencilHint() {
+  if (performance.now() - pencilHintAt < 6000) return;
+  pencilHintAt = performance.now();
+  toast("Disegna con la Pencil · con le dita scorri");
+}
+
 /* Brushes: how a stroke looks and what it does to the sound. */
 const BRUSHES = [
   { id: "smooth", name: "Liscio", sound: "Lo spessore segue la pressione: è il volume." },
@@ -933,6 +1092,7 @@ const VIEW_IDS = ["draw", "beat", "midi", "wave", "export"];
 
 let state = null;
 const ui = {
+  pencilMode: "auto", minWidth: 0.06, pressCurve: 1.25, master: 1, metroVol: 0.5, drawSound: true, countIn: true, setCat: "board", eraser: "stroke", eraserSize: 0.3, tabsMode: "auto",
   view: "draw", tool: "brush", brush: "smooth", rough: 0.5, inst: "EPIANO", size: 0.5, opacity: 1, naming: "IT", stabilize: 0.3,
   playing: false, open: null, openBtn: null, metronome: false, recording: false, kbBase: 60, repeats: 1, exportBeat: true,
   stems: false, wave: null, picked: new Set(), swipeOpen: null, layerOpen: null, startFrac: 0,
@@ -951,7 +1111,7 @@ const newLayer = (name, mode = "QUANTIZED", extra = {}) => ({ id: newId("l"), na
 /* Two patterns per track: p is A, pB is B. The chain says which one plays in each
    pattern slot (one slot = one pattern length): "A", "B" or "-" for a rest. */
 function blankBeat() {
-  return { on: true, steps: 16, swing: 0, volume: 0.8, preset: "EMPTY", edit: "A", chain: new Array(32).fill("A"),
+  return { on: true, steps: 16, swing: 0, volume: 0.8, preset: "EMPTY", ab: false, edit: "A", chain: new Array(32).fill("A"),
     tracks: Object.fromEntries(BEAT_TRACKS.map(id => [id, { mute: false, p: new Array(32).fill(0), pB: new Array(32).fill(0) }])) };
 }
 const patOf = (tr, which) => which === "B" ? tr.pB : tr.p;
@@ -1020,7 +1180,7 @@ function makeStroke(layer, inst, path, w, op, bpm) {
 
 function save() {
   try {
-    localStorage.setItem(STORE_KEY, JSON.stringify({ state, ui: { brush: ui.brush, rough: ui.rough, inst: ui.inst, size: ui.size, opacity: ui.opacity, naming: ui.naming, stabilize: ui.stabilize, kbBase: ui.kbBase, view: ui.view } }));
+    localStorage.setItem(STORE_KEY, JSON.stringify({ state, ui: { master: ui.master, metroVol: ui.metroVol, drawSound: ui.drawSound, countIn: ui.countIn, pencilMode: ui.pencilMode, tabsMode: ui.tabsMode, eraser: ui.eraser, eraserSize: ui.eraserSize, minWidth: ui.minWidth, pressCurve: ui.pressCurve, brush: ui.brush, rough: ui.rough, inst: ui.inst, size: ui.size, opacity: ui.opacity, naming: ui.naming, stabilize: ui.stabilize, kbBase: ui.kbBase, view: ui.view } }));
   } catch (e) { /* storage blocked */ }
 }
 let saveTimer = 0;
@@ -1037,8 +1197,9 @@ function sanitize(s) {
   for (const m of out.samples) registerSample(m);
   out.waves = (Array.isArray(s.waves) ? s.waves : []).filter(w => w && typeof w.id === "string" && w.id.startsWith("WAV:"))
     .map((w, i) => ({ id: w.id, name: String(w.name || "Onda"), color: SYS[w.color] ? w.color : SAMPLE_COLORS[i % SAMPLE_COLORS.length], sym: !!w.sym,
+      mode: w.mode === "fill" || w.mode === "line" ? w.mode : (Array.isArray(w.strokes) && w.strokes.some(t => t && t.fill) ? "fill" : "line"),
       strokes: (Array.isArray(w.strokes) ? w.strokes : []).filter(t => t && Array.isArray(t.pts) && t.pts.length)
-        .map(t => ({ fill: !!t.fill, pts: t.pts.map(q => [clamp(+q[0] || 0, 0, 1), clamp(+q[1] || 0, -1, 1)]) })) }));
+        .map(t => ({ pts: t.pts.map(q => [clamp(+q[0] || 0, 0, 1), clamp(+q[1] || 0, -1, 1)]) })) }));
   for (const w of out.waves) registerWave(w);
   // "muted" is the sound, "visible" the drawing; older projects hid both with the eye.
   out.layers = s.layers.map(l => ({ ...newLayer(l.name || "Livello"), ...l, mode: MODE[l.mode] ? l.mode : "QUANTIZED",
@@ -1060,7 +1221,8 @@ function sanitize(s) {
       beat.tracks[id] = { mute: !!t.mute, p, pB: Array.isArray(t.pB) ? clean(t.pB) : p.slice(), vol: clamp(t.vol ?? 1, 0, 1.5), tune: clamp(Math.round(t.tune || 0), -12, 12) };
     }
     if (Array.isArray(s.beat.chain)) beat.chain = Array.from({ length: 32 }, (_, i) => ["A", "B", "-"].includes(s.beat.chain[i]) ? s.beat.chain[i] : "A");
-    beat.edit = s.beat.edit === "B" ? "B" : "A";
+    beat.ab = !!s.beat.ab;
+    beat.edit = beat.ab && s.beat.edit === "B" ? "B" : "A";
   }
   beat.steps = beat.steps === 32 ? 32 : 16;
   out.beat = beat;
@@ -1306,7 +1468,7 @@ function readRun(run, st, layer, mode, step, voices, notes) {
   const minLen = Math.max(1, Math.round(MIN_NOTE * CR));
   if (mode === "OPTICAL") {
     const curve = pc.map(v => v - 0.5);
-    voices.push({ ...base, start: a, dur: b - a, curve, amp });
+    voices.push({ ...base, start: a, dur: b - a, curve, amp, glide: true });
     for (const [i0, i1, m] of segments(Array.from(curve, Math.round), minLen)) note(tc[i0], i1 < n ? tc[i1] : b, m, mean(amp.slice(i0, i1)));
     return;
   }
@@ -1353,7 +1515,7 @@ function beatHits(force) {
   if (!b.on && !force) return [];
   const hits = [], k = spb(), total = loopBeats() * 4;
   for (let s = 0; s < total; s++) {
-    const i = s % b.steps, which = b.chain[Math.floor(s / b.steps) % 32] || "A";
+    const i = s % b.steps, which = b.ab ? b.chain[Math.floor(s / b.steps) % 32] || "A" : "A";
     if (which === "-") continue;
     for (const id of BEAT_TRACKS) {
       const tr = b.tracks[id], v = patOf(tr, which)[i];
@@ -1595,9 +1757,19 @@ function scheduleVoice(ctx, dest, v, when, track) {
       break;
     }
   }
+  /* Optical reading: struck and plucked sounds die away before the line has finished
+     moving, so a soft sustained tone carries the glide on after the attack. */
+  if (v.glide && GLIDE_KINDS.has(inst.kind) && v.dur > 0.2) {
+    const hold = ctx.createGain(); hold.connect(amp);
+    hold.gain.setValueAtTime(0, s); hold.gain.linearRampToValueAtTime(0.17, s + 0.14); hold.gain.setTargetAtTime(0, e, 0.08);
+    const lp = lowpass(500 + bright * 2600, 0.7, hold);
+    osc("triangle").connect(lp); osc("sine", m => hz(m) * 2).connect(gain(0.25, lp));
+    stopAt = Math.max(stopAt, e + 0.5);
+  }
   for (const n of nodes) { n.start(s); n.stop(stopAt); }
   if (track) track.push(...nodes);
 }
+const GLIDE_KINDS = new Set(["epiano", "marimba", "bell", "pluck"]);
 
 function scheduleDrum(ctx, dest, id, s, a, track, tune = 0) {
   const out = ctx.createGain(); out.gain.value = a; out.connect(dest);
@@ -1696,9 +1868,10 @@ function closeGaps(col) {
 function waveContours(w) {
   const top = new Array(WAVE_N).fill(null), bot = new Array(WAVE_N).fill(null);
   const put = (arr, c, y, hi) => { if (c < 0 || c >= WAVE_N) return; if (arr[c] === null || (hi ? y > arr[c] : y < arr[c])) arr[c] = y; };
+  const filled = w.mode === "fill";
   for (const st of w.strokes) {
     const pts = st.pts;
-    if (st.fill && pts.length > 2) {
+    if (filled && pts.length > 2) {
       for (let c = 0; c < WAVE_N; c++) {
         const x = (c + 0.5) / WAVE_N; let hi = null, lo = null;
         for (let i = 0; i < pts.length; i++) {
@@ -1725,7 +1898,7 @@ function waveContours(w) {
   return T ? { top: T, bot: B } : null;
 }
 function waveData(w) {
-  const key = JSON.stringify([w.strokes, w.sym]), hit = waveCache.get(w.id);
+  const key = JSON.stringify([w.strokes, w.sym, w.mode]), hit = waveCache.get(w.id);
   if (hit && hit.key === key) return hit;
   const cont = waveContours(w);
   let L = new Float32Array(WAVE_N), R = new Float32Array(WAVE_N);
@@ -1958,10 +2131,10 @@ function audio() {
     const lim = live.createDynamicsCompressor();
     lim.threshold.value = -3; lim.ratio.value = 12; lim.attack.value = 0.003; lim.release.value = 0.1;
     lim.connect(live.destination);
-    liveOut = live.createGain(); liveOut.gain.value = 0.95; liveOut.connect(lim);
+    liveOut = live.createGain(); liveOut.gain.value = 0.95 * ui.master; liveOut.connect(lim);
     const conv = live.createConvolver(); conv.buffer = reverbIR(live.sampleRate);
     liveSend = live.createGain(); liveSend.gain.value = 0.22; liveSend.connect(conv); conv.connect(liveOut);
-    metroGain = live.createGain(); metroGain.gain.value = ui.metronome ? 0.5 : 0; metroGain.connect(liveOut);
+    metroGain = live.createGain(); metroGain.gain.value = metroLevel(); metroGain.connect(liveOut);
   }
   if (live.state === "suspended") live.resume();
   return live;
@@ -1998,6 +2171,8 @@ function metronomeBuffer() {
   return buf;
 }
 
+const metroLevel = () => (ui.metronome || (ui.countIn && ui.tool === "live" && ui.view === "draw") ? ui.metroVol : 0);
+function setMetro() { if (metroGain) metroGain.gain.setTargetAtTime(metroLevel(), live.currentTime, 0.01); }
 function fraction() {
   if (!ui.playing || !player) return 0;
   return (((live.currentTime - player.t0) / player.len) % 1 + 1) % 1;
@@ -2530,7 +2705,29 @@ function cacheBoard() {
 }
 
 /* A smooth filled outline with round caps: the width follows the pen. */
+/* A stroke is one path made of round dabs joined by segments, all wound the same way:
+   filled once with "nonzero" they make a single shape, with no holes where the stroke
+   curves tighter than it is wide. */
 function strokeShape(c, pts) {
+  const n = pts.length;
+  c.beginPath();
+  for (let i = 0; i < n; i++) {
+    const [x, y, r] = pts[i];
+    c.moveTo(x + r, y); c.arc(x, y, r, 0, Math.PI * 2);
+    if (i + 1 < n) {
+      const [x2, y2, r2] = pts[i + 1], d = Math.hypot(x2 - x, y2 - y);
+      if (d < 0.01) continue;
+      const nx = -(y2 - y) / d, ny = (x2 - x) / d;
+      const quad = [[x + nx * r, y + ny * r], [x2 + nx * r2, y2 + ny * r2], [x2 - nx * r2, y2 - ny * r2], [x - nx * r, y - ny * r]];
+      let area = 0;
+      for (let k = 0; k < 4; k++) { const a = quad[k], b = quad[(k + 1) % 4]; area += a[0] * b[1] - b[0] * a[1]; }
+      if (area < 0) quad.reverse();
+      c.moveTo(quad[0][0], quad[0][1]); for (let k = 1; k < 4; k++) c.lineTo(quad[k][0], quad[k][1]); c.closePath();
+    }
+  }
+  c.fill("nonzero");
+}
+function strokeOutline(c, pts) {
   const n = pts.length;
   if (n === 1) { c.beginPath(); c.arc(pts[0][0], pts[0][1], pts[0][2], 0, Math.PI * 2); c.fill(); return; }
   const L = [], R = [], ang = [];
@@ -2659,8 +2856,8 @@ function selectionBox() {
 function selectInPolygon(poly) {
   const layer = activeLayer();
   const ids = new Set(state.strokes.filter(st => st.layer === layer.id && layer.visible)
-    .filter(st => st.pts.filter(q => inPolygon(xOf(q[0]), yOf(q[1]), poly)).length >= st.pts.length / 2).map(st => st.id));
-  if (!ids.size) { toast("Nessun tratto qui: cerchia i tratti del livello attivo."); clearSelection(); return; }
+    .filter(st => st.pts.some(q => inPolygon(xOf(q[0]), yOf(q[1]), poly))).map(st => st.id));
+  if (!ids.size) { toast("Nessun tratto qui: disegna un giro sopra i tratti del livello attivo."); clearSelection(); return; }
   sel = { ids, db: 0, dp: 0 };
   syncSelBar(); renderInk(); requestFrame();
 }
@@ -2704,6 +2901,7 @@ $("#selDel").onclick = () => {
   changed({ ink: true }); refreshPanels(); toast("Eliminato · due dita per annullare");
 };
 $("#selDone").onclick = () => clearSelection();
+$("#updateNow").onclick = () => { save(); location.reload(); };
 
 let hover = null, current = null;
 function drawBoard() {
@@ -2789,7 +2987,7 @@ function eyedrop(cur) {
   requestFrame();
 }
 const touches = new Map();
-const eraserRadius = () => Math.max(12, ui.size * rowPx());
+const eraserRadius = () => 8 + 52 * ui.eraserSize;
 const inBoard = (x, y) => geo && x >= geo.left - 4 && x <= geo.right + 4 && y >= geo.top - 4 && y <= geo.bottom + 4;
 const activeLayer = () => state.layers.find(l => l.id === state.active) || state.layers[0];
 function pointerXY(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
@@ -2810,7 +3008,7 @@ function pressureOf(e, fallback) {
   return clamp(p || 0.5, 0.02, 1);
 }
 function widthFor(e, fallback) {
-  if (isPen(e)) return ui.size * (0.18 + 0.82 * Math.pow(pressureOf(e, fallback), 0.8));
+  if (isPen(e)) return ui.size * (ui.minWidth + (1 - ui.minWidth) * Math.pow(pressureOf(e, fallback), ui.pressCurve));
   return ui.size * 0.85;
 }
 let hintTimer = 0;
@@ -2840,8 +3038,7 @@ function addPoint(cur, q) {
     case "ink": {
       const r = ui.rough;
       q[1] = +(q[1] + r * 0.55 * noise1(cur.len / 26, cur.seed)).toFixed(4);
-      q[0] = +(q[0] + r * 0.04 * noise1(cur.len / 33, cur.seed + 7)).toFixed(4);
-      q[2] = +Math.max(0.03, q[2] * (1 + r * 0.75 * noise1(cur.len / 11, cur.seed + 3))).toFixed(3);
+      q[2] = +Math.max(0.04, q[2] * (1 + r * 0.6 * noise1(cur.len / 18, cur.seed + 3))).toFixed(3);
       break;
     }
   }
@@ -2855,6 +3052,7 @@ function addPoint(cur, q) {
   }
 }
 function soundWhileDrawing(e, first) {
+  if (!ui.drawSound) return;
   if (current.brush === "dots" || current.brush === "fill") return;
   const p = pOf(pointerXY(e).y), w = widthFor(e), layer = activeLayer();
   if (isDrum(current.inst)) { if (first) previewNote(current.inst, 60, ampOf(w), ui.opacity); return; }
@@ -2881,7 +3079,8 @@ canvas.addEventListener("pointerdown", e => {
     }
     if (touches.size >= 2 && current) { clearTimeout(current.hold); current = null; thereminStop(); requestFrame(); }
     if (touches.size === 2 && geo) pinchStart(); else pinch = null;
-    if ((penSeen && !stylusRecent()) || touches.size >= 2) return;  // palm rejection once a pen is used
+    const fingersOff = ui.pencilMode === "on" || (ui.pencilMode === "auto" && penSeen);
+    if ((fingersOff && !stylusRecent()) || touches.size >= 2) return;  // palm rejection once a pen is used
   }
   const { x, y } = pointerXY(e);
   if (geo && y < geo.top && y > geo.top - 32 && x >= geo.left && x <= geo.right) { seek(bOf(x) / loopBeats()); return; }
@@ -2898,7 +3097,9 @@ canvas.addEventListener("pointerdown", e => {
     requestFrame();
     return;
   }
+  if (ui.tool === "live") { startLive(e, layer); return; }
   strokeStart = e.timeStamp; smooth = null;
+  if (ui.tabsMode === "auto") setCompact(true);
   current = { id: newId("s"), layer: layer.id, inst: ui.inst, op: +ui.opacity.toFixed(3), brush: ui.brush, pts: [], len: 0, seed: Math.random() * 1000, dots: [],
     pointer: e.pointerId, pred: null, finger: !isPen(e) && e.pointerType === "touch", x0: x, y0: y, heard: false };
   addPoint(current, toPoint(e, true));
@@ -2929,6 +3130,7 @@ canvas.addEventListener("pointermove", e => {
     requestFrame();
     return;
   }
+  if (current && current.live && current.pointer === e.pointerId) { liveRec.e = e; soundWhileDrawing(e, false); return; }
   if (!current || current.pointer !== e.pointerId) { if (hover) requestFrame(); return; }
   if (current.hold && Math.hypot(pos.x - current.x0, pos.y - current.y0) > 6) { clearTimeout(current.hold); current.hold = 0; }
   const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
@@ -2941,7 +3143,43 @@ canvas.addEventListener("pointermove", e => {
   requestFrame();
 });
 
+/* ---------- Live: time runs on its own, the Pencil only gives the height (and the pressure) ---------- */
+let liveRec = null;
+function liveStroke(layer) {
+  return { id: newId("s"), layer, inst: ui.inst, op: +ui.opacity.toFixed(3), brush: ui.brush === "dots" || ui.brush === "fill" ? "smooth" : ui.brush,
+    pts: [], len: 0, seed: Math.random() * 1000, dots: [], pointer: liveRec.pointer, live: true };
+}
+function startLive(e, layer) {
+  if (ui.tabsMode === "auto") setCompact(true);
+  if (!ui.playing) play();
+  liveRec = { pointer: e.pointerId, e, layer: layer.id, t0: performance.now() };
+  current = liveStroke(layer.id);
+  $("#btnLive").classList.add("rec");
+  soundWhileDrawing(e, true);
+  requestFrame();
+}
+function liveTick() {
+  if (!liveRec || !current || !current.live || !player) return;
+  const beat = fraction() * loopBeats(), last = current.pts[current.pts.length - 1];
+  if (last && beat < last[0] - 0.05) {  // the loop came round: close this stroke, go on with a new one
+    endLiveStroke(current); current = liveStroke(liveRec.layer);
+  } else if (last && beat - last[0] < 0.004) return;
+  const q = toPoint(liveRec.e, false);
+  q[0] = +beat.toFixed(4); q[3] = Math.round(performance.now() - liveRec.t0);
+  addPoint(current, q);
+}
+function endLiveStroke(st) {
+  for (const k of ["pointer", "live", "len", "seed", "cell"]) delete st[k];
+  if (st.pts.length >= 2) commitStroke(st);
+}
 function finish(e) {
+  if (current && current.live && current.pointer === e.pointerId) {
+    liveTick(); thereminStop();
+    const st = current; current = null; liveRec = null;
+    $("#btnLive").classList.remove("rec");
+    endLiveStroke(st); requestFrame();
+    return;
+  }
   if (e.pointerType === "touch") {
     touches.delete(e.pointerId);
     if (touches.size < 2 && pinch) { pinch = null; if (view.zoom < 1.06) { view.zoom = 1; viewChanged(); } }
@@ -3010,12 +3248,96 @@ canvas.addEventListener("wheel", e => {
   viewChanged();
 }, { passive: false });
 
-function eraseAt(x, y) {
-  const r = eraserRadius(), layer = activeLayer(), rh = rowPx(), before = state.strokes.length;
-  state.strokes = state.strokes.filter(st => st.layer !== layer.id || !st.pts.some(q => Math.hypot(xOf(q[0]) - x, yOf(q[1]) - y) < r + q[2] * rh / 2));
-  hover = { x, y };
-  if (state.strokes.length !== before) { changed({ ink: true }); refreshPanels(); } else requestFrame();
+/* Three erasers, as in Blender: the whole stroke, only the points under it, or the piece
+   of stroke between the two nearest crossings with other strokes. */
+const ERASERS = [
+  { id: "stroke", name: "Tratto intero", sound: "Tocca un tratto e sparisce tutto." },
+  { id: "point", name: "Punti", sound: "Cancella solo dove passi: il tratto si divide in pezzi." },
+  { id: "cut", name: "Fino agli incroci", sound: "Toglie il pezzo di tratto tra i due incroci più vicini con altri tratti." },
+];
+const lerpPt = (a, b, u) => [+(a[0] + (b[0] - a[0]) * u).toFixed(4), +(a[1] + (b[1] - a[1]) * u).toFixed(4), +(a[2] + (b[2] - a[2]) * u).toFixed(3), Math.round(a[3] + (b[3] - a[3]) * u)];
+/* Where a stroke crosses others, as positions along it (segment index + fraction). */
+function crossings(st, others) {
+  const out = [], P = st.pts;
+  for (let k = 0; k + 1 < P.length; k++) {
+    const [ax, ay] = P[k], [bx, by] = P[k + 1];
+    for (const o of others) for (let j = 0; j + 1 < o.pts.length; j++) {
+      const [cx, cy] = o.pts[j], [dx, dy] = o.pts[j + 1];
+      const den = (bx - ax) * (dy - cy) - (by - ay) * (dx - cx);
+      if (Math.abs(den) < 1e-12) continue;
+      const u = ((cx - ax) * (dy - cy) - (cy - ay) * (dx - cx)) / den, v = ((cx - ax) * (by - ay) - (cy - ay) * (bx - ax)) / den;
+      if (u >= 0 && u < 1 && v >= 0 && v <= 1) out.push(k + u);
+    }
+  }
+  return out.sort((a, b) => a - b);
 }
+function pieceOf(st, pts, first) {
+  return first ? { ...st, pts } : { ...st, id: newId("s"), pts };
+}
+function eraseAt(x, y) {
+  const r = eraserRadius(), layer = activeLayer(), rh = rowPx(), before = JSON.stringify(state.strokes.length);
+  const hit = q => Math.hypot(xOf(q[0]) - x, yOf(q[1]) - y) < r + q[2] * rh / 2;
+  let touched = false;
+  const out = [];
+  for (const st of state.strokes) {
+    if (st.layer !== layer.id || !st.pts.some(hit)) { out.push(st); continue; }
+    touched = true;
+    if (ui.eraser === "stroke" || st.pts.length < 2) continue;
+    if (ui.eraser === "point") {
+      let run = [], first = true;
+      const flush = () => { if (run.length >= 2) { out.push(pieceOf(st, run, first)); first = false; } run = []; };
+      for (const q of st.pts) { if (hit(q)) flush(); else run.push(q); }
+      flush();
+      continue;
+    }
+    // cut: from the touched point, back and forward to the nearest crossings
+    const i = st.pts.findIndex(hit);
+    const xs = crossings(st, state.strokes.filter(o => o !== st && o.layer === layer.id && o.pts.length > 1));
+    const lo = xs.filter(t => t <= i).pop(), hi = xs.find(t => t > i);
+    if (lo !== undefined) {
+      const k = Math.floor(lo), head = st.pts.slice(0, k + 1).concat([lerpPt(st.pts[k], st.pts[k + 1], lo - k)]);
+      if (head.length >= 2) out.push(pieceOf(st, head, true));
+    }
+    if (hi !== undefined) {
+      const k = Math.floor(hi), tail = [lerpPt(st.pts[k], st.pts[k + 1], hi - k)].concat(st.pts.slice(k + 1));
+      if (tail.length >= 2) out.push(pieceOf(st, tail, lo === undefined));
+    }
+  }
+  hover = { x, y };
+  if (touched) { state.strokes = out; changed({ ink: true }); refreshPanels(); } else requestFrame();
+}
+function renderErasers() {
+  const list = $("#eraserList");
+  list.textContent = "";
+  for (const er of ERASERS) {
+    const btn = document.createElement("button");
+    btn.className = "brush"; btn.setAttribute("aria-pressed", String(ui.eraser === er.id));
+    const cv = document.createElement("canvas"); eraserPreview(cv, er.id);
+    const txt = document.createElement("span");
+    const nm = document.createElement("b"); nm.textContent = er.name;
+    const sm = document.createElement("small"); sm.textContent = er.sound;
+    txt.append(nm, sm); btn.append(cv, txt);
+    btn.onclick = () => { ui.eraser = er.id; saveSoon(); renderErasers(); };
+    list.append(btn);
+  }
+  setRange($("#inEraser"), ui.eraserSize); $("#valEraser").textContent = Math.round(eraserRadius()) + " pt";
+}
+function eraserPreview(cv, id) {
+  const d = Math.min(devicePixelRatio || 1, 2), w = 112, h = 40;
+  cv.width = w * d; cv.height = h * d;
+  const c = cv.getContext("2d"); c.scale(d, d);
+  const color = colorOf(ui.inst), line = (pts, a = 1) => { c.globalAlpha = a; c.beginPath(); pts.forEach((q, i) => i ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1])); c.stroke(); };
+  c.lineCap = "round"; c.lineWidth = 4; c.strokeStyle = color;
+  const wave = Array.from({ length: 41 }, (_, i) => [8 + i * 2.4, 22 - Math.sin(i / 40 * Math.PI * 2) * 10]);
+  if (id === "stroke") line(wave, 0.22);
+  else if (id === "point") { line(wave.slice(0, 15)); line(wave.slice(24)); line(wave.slice(14, 25), 0.22); }
+  else {
+    c.strokeStyle = colors.fg; c.lineWidth = 2.5; line([[38, 4], [38, 36]], 0.5); line([[82, 4], [82, 36]], 0.5);
+    c.strokeStyle = color; c.lineWidth = 4; line(wave.slice(0, 13)); line(wave.slice(31)); line(wave.slice(12, 32), 0.22);
+  }
+  c.globalAlpha = 1;
+}
+$("#inEraser").addEventListener("input", e => { ui.eraserSize = +e.target.value; fillRange(e.target); $("#valEraser").textContent = Math.round(eraserRadius()) + " pt"; saveSoon(); });
 
 /* ---------- frame loop ---------- */
 
@@ -3024,6 +3346,7 @@ function requestFrame() { if (!frameQueued) { frameQueued = true; requestAnimati
 function frame() {
   frameQueued = false;
   if (viewDirty && ui.view === "draw") { viewDirty = false; cacheBoard(); renderInk(); syncZoomPill(); }
+  if (liveRec) liveTick();
   if (ui.view === "draw") drawBoard();
   else if (ui.view === "beat") markStep();
   else if (ui.view === "midi") drawRoll(false);
@@ -3086,6 +3409,7 @@ function setPad(pad, v) {
 $("#beatGrid").addEventListener("pointerdown", e => {
   const pad = e.target.closest(".pad");
   if (!pad) return;
+  if (pencilOnly() && e.pointerType === "touch") { pencilHint(); return; }  // fingers scroll
   e.preventDefault();
   const tr = state.beat.tracks[pad.dataset.track];
   remember();
@@ -3137,17 +3461,20 @@ let lastSlot = -1;
 function markStep() {
   const b = state.beat, abs = ui.playing ? Math.floor(fraction() * loopBeats() * 4) : -1;
   const slot = abs < 0 ? -1 : Math.floor(abs / b.steps);
-  // the pads follow the playhead only while the pattern being edited is the one playing
-  const step = abs >= 0 && b.chain[slot % 32] === b.edit ? abs % b.steps : -1;
+  const playing = abs < 0 ? null : b.ab ? b.chain[slot % 32] : "A";
+  const step = abs >= 0 && playing !== "-" ? abs % b.steps : -1;
+  const ghost = playing !== b.edit;  // the playhead is dimmer while the other pattern plays
   if (slot !== lastSlot) {
     const chips = $("#chain").children;
     if (chips[lastSlot]) chips[lastSlot].classList.remove("now");
     if (chips[slot]) chips[slot].classList.add("now");
     lastSlot = slot;
+    for (const btn of $("#segPat").children) btn.classList.toggle("playing", btn.dataset.v === playing);
+    if (step === lastStep && padEls[step]) for (const p of padEls[step]) p.classList.toggle("ghost", ghost);
   }
   if (step === lastStep) return;
-  if (lastStep >= 0 && padEls[lastStep]) for (const p of padEls[lastStep]) p.classList.remove("now");
-  if (step >= 0 && padEls[step]) for (const p of padEls[step]) p.classList.add("now");
+  if (lastStep >= 0 && padEls[lastStep]) for (const p of padEls[lastStep]) p.classList.remove("now", "ghost");
+  if (step >= 0 && padEls[step]) for (const p of padEls[step]) { p.classList.add("now"); p.classList.toggle("ghost", ghost); }
   lastStep = step;
 }
 
@@ -3155,16 +3482,18 @@ function syncBeatControls() {
   const b = state.beat, box = $("#presets");
   box.textContent = "";
   for (const [key, pr] of Object.entries(PRESETS)) {
-    const chip = document.createElement("button");
-    chip.className = "chip"; chip.textContent = pr.name;
-    chip.setAttribute("aria-pressed", String(b.preset === key));
-    chip.onclick = () => {
+    const item = document.createElement("button");
+    item.className = "menu-item"; item.setAttribute("aria-pressed", String(b.preset === key));
+    item.innerHTML = `<span>${pr.name}</span><small>${b.preset === key ? "✓" : pr.swing ? "swing " + Math.round(pr.swing * 100) + "%" : ""}</small>`;
+    item.onclick = () => {
       remember(); applyPreset(state.beat, key); state.beat.on = true;
-      buildBeatGrid(); syncBeatControls(); changed();
+      closePopovers(); buildBeatGrid(); syncBeatControls(); changed();
       if (!ui.playing && key !== "EMPTY") play();
     };
-    box.append(chip);
+    box.append(item);
   }
+  $("#beatAB").checked = !!b.ab;
+  $("#abRow").hidden = !b.ab;
   setRange($("#inSwing"), b.swing); $("#valSwing").textContent = Math.round(b.swing * 100) + "%";
   setRange($("#inBeatVol"), b.volume); $("#valBeatVol").textContent = Math.round(b.volume * 100) + "%";
   $("#beatOn").checked = b.on;
@@ -3198,13 +3527,19 @@ function syncBeatControls() {
     };
     chain.append(chip);
   }
-  $("#beatSub").textContent = `${state.bars} battute · ${state.bpm} BPM`;
+  $("#beatSub").textContent = (PRESETS[b.preset] ? PRESETS[b.preset].name + " · " : "") + `${state.bars} battute · ${state.bpm} BPM`;
 }
 $("#inSwing").addEventListener("input", e => { state.beat.swing = +e.target.value; fillRange(e.target); $("#valSwing").textContent = Math.round(state.beat.swing * 100) + "%"; });
 $("#inSwing").addEventListener("change", () => changed());
 $("#inBeatVol").addEventListener("input", e => { state.beat.volume = +e.target.value; fillRange(e.target); $("#valBeatVol").textContent = Math.round(state.beat.volume * 100) + "%"; });
 $("#inBeatVol").addEventListener("change", () => changed());
 $("#beatOn").addEventListener("change", e => { state.beat.on = e.target.checked; changed(); });
+$("#beatAB").addEventListener("change", e => {
+  remember(); const b = state.beat;
+  b.ab = e.target.checked;
+  if (!b.ab) b.edit = "A";
+  buildBeatGrid(); syncBeatControls(); changed();
+});
 /* Svuota clears the pattern being edited; with both empty the beat is back to "Vuoto". */
 $("#beatClear").onclick = () => {
   remember();
@@ -3487,9 +3822,10 @@ function showView(view, instant) {
     el.classList.toggle("enter", on && !instant);
     $(TAB[k]).setAttribute("aria-selected", String(on));
   }
-  $("#tools").hidden = view !== "draw";
+  $("#tools").hidden = view !== "draw"; $("#layersCap").hidden = view !== "draw";
+  if (view !== "draw") setCompact(false);
   if (view !== "draw") clearSelection();
-  movePill();
+  movePill(); followPill();
   if (view === "draw") layoutDraw();
   if (view === "beat") { buildBeatGrid(); syncBeatControls(); }
   if (view === "midi") { buildKeys(); syncMidiChip(); connectMidi(); drawRoll(true); if (loop.dirty || !loop.buffer) ensureLoop(); }
@@ -3502,7 +3838,21 @@ function movePill() {
   pill.style.width = btn.offsetWidth + "px";
   pill.style.transform = `translateX(${btn.offsetLeft}px)`;
 }
-for (const [k, sel] of Object.entries(TAB)) $(sel).onclick = () => { if (ui.view !== k) showView(k); };
+for (const [k, sel] of Object.entries(TAB)) $(sel).onclick = () => { setCompact(false); if (ui.view !== k) showView(k); };
+/* Sections as icons only: while drawing ("auto"), always, or never (Impostazioni). */
+function setCompact(on) {
+  const tabs = $("#tabs");
+  on = ui.tabsMode === "always" || (ui.tabsMode !== "never" && on);
+  if (tabs.classList.contains("compact") === on) return;
+  tabs.classList.toggle("compact", on);
+  followPill();
+}
+/* The labels grow and shrink with a transition: the pill follows them while they move. */
+function followPill() {
+  const t0 = performance.now();
+  const follow = () => { movePill(); if (performance.now() - t0 < 450) requestAnimationFrame(follow); };
+  requestAnimationFrame(follow);
+}
 
 function vslider(el, get, set, label, fmt) {
   const paint = () => {
@@ -3531,17 +3881,22 @@ function vslider(el, get, set, label, fmt) {
   return paint;
 }
 
-const POPS = { btnActions: "popActions", btnBoard: "popBoard", btnLayers: "popLayers", btnInst: "popInst" };
+const POPS = { btnActions: "popActions", btnBoard: "popBoard", btnLayers: "popLayers", btnInst: "popInst", btnPresets: "popPresets" };
 function openPopover(btnId, popId = POPS[btnId]) {
   const wasOpen = ui.open === popId;
   closePopovers();
   if (wasOpen) return;
   const pop = $("#" + popId), btn = $("#" + btnId), app = $("#app").getBoundingClientRect(), r = btn.getBoundingClientRect();
-  if (popId === "popLayers") { ui.layerOpen = null; ui.swipeOpen = null; ui.picked = new Set(); renderLayers(); }
-  if (popId === "popBoard") syncBoardForm();
+  if (popId === "popLayers") { ui.layerOpen = null; ui.layerMenu = null; ui.swipeOpen = null; ui.picked = new Set(); renderLayers(); }
+  if (popId === "popBoard") {  // Impostazioni: a sheet in the middle, not a bubble
+    syncBoardForm(); pop.hidden = false; $("#scrim").hidden = false;
+    btn.setAttribute("aria-expanded", "true"); ui.open = popId; ui.openBtn = btnId;
+    return;
+  }
   if (popId === "popActions") $("#actNewConfirm").hidden = true;
   if (popId === "popInst") renderInstruments();
   if (popId === "popBrush") renderBrushes();
+  if (popId === "popEraser") renderErasers();
   pop.hidden = false;
   const pw = pop.offsetWidth, leftSide = r.left + r.width / 2 < app.left + app.width / 2;
   const fromBottom = r.top - app.top > app.height * 0.55;
@@ -3554,8 +3909,10 @@ function openPopover(btnId, popId = POPS[btnId]) {
 }
 function closePopovers() {
   if (rec) stopRecording();
+  $("#scrim").hidden = true;
   $("#popRec").hidden = true;
   $("#popBrush").hidden = true; $("#btnBrush").setAttribute("aria-expanded", "false");
+  $("#popEraser").hidden = true; $("#btnEraser").setAttribute("aria-expanded", "false");
   if (!$("#popTrack").hidden) { $("#popTrack").hidden = true; if (ui.view === "beat") buildBeatGrid(); }
   for (const popId of Object.values(POPS)) $("#" + popId).hidden = true;
   for (const btnId of Object.keys(POPS).concat(["midiInst"])) $("#" + btnId).setAttribute("aria-expanded", "false");
@@ -3627,9 +3984,16 @@ const ICON_CHECK = '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" s
 const ICON_TRASH = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/></svg>';
 const SWIPE_OPEN = 96;
 let swipedAt = 0;
+function clearLayer(layer) {
+  remember();
+  state.strokes = state.strokes.filter(s => s.layer !== layer.id);
+  ui.swipeOpen = null; ui.layerMenu = null;
+  changed({ ink: true }); renderLayers();
+  toast(`«${layer.name}» è vuoto · due dita per annullare`);
+}
 function deleteLayers(ids) {
   const keep = state.layers.filter(l => !ids.includes(l.id));
-  if (!keep.length) { toast("Serve almeno un livello."); renderLayers(); return; }
+  if (!keep.length) { clearLayer(state.layers[0]); return; }  // the last layer is emptied, not removed
   const names = state.layers.filter(l => ids.includes(l.id)).map(l => l.name);
   remember();
   const at = state.layers.findIndex(l => ids.includes(l.id));
@@ -3678,6 +4042,12 @@ function attachSwipe(wrap, row, layer) {
     clearTimeout(done.hold);
     if (done.reorder) {
       reordering = false; swipedAt = performance.now();
+      if (Math.abs(done.dy || 0) < 8) {  // held still: the layer menu, as in Procreate
+        box().classList.remove("lifted"); box().style.transform = "";
+        ui.layerMenu = ui.layerMenu === layer.id ? null : layer.id; ui.layerOpen = null;
+        renderLayers();
+        return;
+      }
       const boxes = [...$("#layerList").querySelectorAll(".layer")], el = box(), from = boxes.indexOf(el);
       const step = el.offsetHeight + 6, to = clamp(from + Math.round((done.dy || 0) / step), 0, boxes.length - 1);
       el.classList.remove("lifted"); el.style.transform = "";
@@ -3741,7 +4111,7 @@ function renderLayers() {
     const bg = document.createElement("div"); bg.className = "swipe-bg";
     const pickBtn = document.createElement("button"); pickBtn.className = "swipe-pick"; pickBtn.tabIndex = -1;
     pickBtn.innerHTML = ICON_CHECK.replace('viewBox', 'width="16" height="16" viewBox') + (ui.picked.has(layer.id) ? "Deseleziona" : "Seleziona");
-    const delBtn = document.createElement("button"); delBtn.className = "swipe-del"; delBtn.innerHTML = ICON_TRASH + "Elimina";
+    const delBtn = document.createElement("button"); delBtn.className = "swipe-del"; delBtn.innerHTML = ICON_TRASH + (state.layers.length > 1 ? "Elimina" : "Cancella");
     delBtn.onclick = ev => { ev.stopPropagation(); deleteLayers([layer.id]); };
     bg.append(pickBtn, delBtn);
     const row = document.createElement("div");
@@ -3776,6 +4146,7 @@ function renderLayers() {
     row.onclick = () => {
       if (performance.now() - swipedAt < 350) return;
       if (ui.swipeOpen) { ui.swipeOpen = null; renderLayers(); return; }
+      if (ui.layerMenu) { ui.layerMenu = null; renderLayers(); return; }
       if (!active) { state.active = layer.id; ui.layerOpen = null; saveSoon(); }
       else ui.layerOpen = open ? null : layer.id;
       renderLayers();
@@ -3784,6 +4155,7 @@ function renderLayers() {
     wrap.append(bg, row);
     box.append(wrap);
     if (open) box.append(layerDetail(layer));
+    if (ui.layerMenu === layer.id) box.append(layerMenu(layer));
     list.append(box);
   }
   if (ui.picked.size) list.append(pickBar());
@@ -3812,28 +4184,38 @@ function layerDetail(layer) {
   const vol = miniRange("Volume", "layerVol", 0, 1, 0.01, layer.volume, pct, v => { layer.volume = v; });
   const pan = miniRange("Pan", "layerPan", -1, 1, 0.01, layer.pan || 0, v => (Math.abs(v) < 0.03 ? "C" : (v < 0 ? "S " : "D ") + Math.round(Math.abs(v) * 100)), v => { layer.pan = v; });
   const rev = miniRange("Riverbero", "layerRev", 0, 1, 0.01, layer.reverb ?? 0.25, pct, v => { layer.reverb = v; });
-  const acts = document.createElement("div"); acts.className = "layer-actions";
-  const i = state.layers.indexOf(layer);
-  const act = (label, fn, disabled, cls = "") => {
-    const b = document.createElement("button"); b.className = "mini-btn " + cls; b.textContent = label; b.disabled = disabled;
-    b.onclick = ev => { ev.stopPropagation(); remember(); fn(); changed({ ink: true }); renderLayers(); };
-    acts.append(b);
+  const tip = document.createElement("p"); tip.className = "help"; tip.textContent = "Tieni premuto il livello per Duplica, Unisci sotto, Cancella ed Elimina; tienilo e trascinalo per spostarlo.";
+  d.append(name, modes, help, vol, pan, rev, tip);
+  return d;
+}
+/* Touch and hold a layer: its actions. */
+function layerMenu(layer) {
+  const m = document.createElement("div"); m.className = "layer-menu";
+  const i = state.layers.indexOf(layer), below = state.layers[i - 1];
+  const item = (label, fn, opts = {}) => {
+    const b = document.createElement("button"); b.className = "menu-item" + (opts.danger ? " danger" : ""); b.disabled = !!opts.disabled;
+    b.innerHTML = `<span>${label}</span>` + (opts.note ? `<small>${opts.note}</small>` : "");
+    b.onclick = ev => { ev.stopPropagation(); ui.layerMenu = null; fn(); };
+    m.append(b);
   };
-  act("Duplica", () => {
+  item("Duplica", () => {
+    if (state.layers.length >= 12) { toast("Massimo 12 livelli."); renderLayers(); return; }
+    remember();
     const copy = { ...JSON.parse(JSON.stringify(layer)), id: newId("l"), name: layer.name + " copia" };
     state.layers.splice(i + 1, 0, copy);
     for (const st of state.strokes.filter(s => s.layer === layer.id)) state.strokes.push({ ...JSON.parse(JSON.stringify(st)), id: newId("s"), layer: copy.id });
-    state.active = copy.id; ui.layerOpen = copy.id;
-  }, state.layers.length >= 12);
-  act("Su", () => { state.layers.splice(i, 1); state.layers.splice(i + 1, 0, layer); }, i === state.layers.length - 1);
-  act("Giù", () => { state.layers.splice(i, 1); state.layers.splice(i - 1, 0, layer); }, i === 0);
-  act("Elimina", () => {
-    state.layers.splice(i, 1);
-    state.strokes = state.strokes.filter(s => s.layer !== layer.id);
-    state.active = state.layers[Math.max(0, i - 1)].id; ui.layerOpen = null;
-  }, state.layers.length < 2, "danger");
-  d.append(name, modes, help, vol, pan, rev, acts);
-  return d;
+    state.active = copy.id;
+    changed({ ink: true }); renderLayers();
+  }, { disabled: state.layers.length >= 12 });
+  item("Unisci sotto", () => {
+    remember();
+    for (const st of state.strokes) if (st.layer === layer.id) st.layer = below.id;
+    state.layers.splice(i, 1); state.active = below.id;
+    changed({ ink: true }); renderLayers(); toast(`Unito in «${below.name}»`);
+  }, { disabled: !below, note: below ? "in «" + below.name + "»" : "nessun livello sotto" });
+  item("Cancella", () => clearLayer(layer), { note: "toglie i tratti, il livello resta" });
+  item("Elimina livello", () => deleteLayers([layer.id]), { danger: true, disabled: state.layers.length < 2, note: state.layers.length < 2 ? "serve almeno un livello" : "" });
+  return m;
 }
 $("#btnAddLayer").onclick = () => {
   if (state.layers.length >= 12) { toast("Massimo 12 livelli."); return; }
@@ -4071,11 +4453,11 @@ $("#smpDelete").onclick = async () => {
 /* ---------- Onda view ---------- */
 
 const waveCv = $("#waveCanvas"), scopeCv = $("#waveScope");
-let waveDraw = null, waveBrush = "line";
+let waveDraw = null;
 const currentWave = () => state.waves.find(w => w.id === ui.wave);
 function newWave() {
   const used = new Set(state.waves.map(w => w.color));
-  const w = { id: "WAV:" + newId("w"), name: "Onda " + (state.waves.length + 1), color: SAMPLE_COLORS.find(c => !used.has(c)) || SAMPLE_COLORS[state.waves.length % SAMPLE_COLORS.length], sym: false, strokes: [] };
+  const w = { id: "WAV:" + newId("w"), name: "Onda " + (state.waves.length + 1), color: SAMPLE_COLORS.find(c => !used.has(c)) || SAMPLE_COLORS[state.waves.length % SAMPLE_COLORS.length], sym: false, mode: "line", strokes: [] };
   state.waves.push(w); registerWave(w);
   return w;
 }
@@ -4109,7 +4491,9 @@ function renderWaveView() {
   list.append(add);
   $("#waveName").value = w.name;
   $("#waveSym").checked = w.sym;
-  seg($("#segWaveBrush"), waveBrush, v => { waveBrush = v; });
+  seg($("#segWaveBrush"), w.mode, v => { if (w.mode === v) return; remember(); w.mode = v; waveChanged(); });
+  $("#waveHelp").hidden = !ui.waveHelp && w.strokes.length > 0;
+  $("#waveHelpBtn").setAttribute("aria-pressed", String(!$("#waveHelp").hidden));
   drawWaveEditor(); drawScope();
 }
 function sizeCanvas(cv) {
@@ -4145,14 +4529,14 @@ function drawWaveEditor() {
     c.setLineDash([]);
   }
   c.globalAlpha = 1;
-  const strokes = waveDraw ? w.strokes.concat([waveDraw]) : w.strokes;
+  const strokes = waveDraw ? w.strokes.concat([waveDraw]) : w.strokes, filled = w.mode === "fill";
   for (const st of strokes) {
     c.beginPath();
     st.pts.forEach((q, i) => i ? c.lineTo(X(q[0]), Y(q[1])) : c.moveTo(X(q[0]), Y(q[1])));
-    if (st.fill) { c.closePath(); c.globalAlpha = 0.4; c.fillStyle = color; c.fill(); c.globalAlpha = 1; c.lineWidth = 2; }
+    if (filled) { c.closePath(); c.globalAlpha = 0.4; c.fillStyle = color; c.fill(); c.globalAlpha = 1; c.lineWidth = 2; }
     else c.lineWidth = 3.5;
     c.strokeStyle = color; c.lineJoin = c.lineCap = "round"; c.stroke();
-    if (w.sym && !st.fill) {
+    if (w.sym && !filled) {
       c.globalAlpha = 0.35; c.beginPath();
       st.pts.forEach((q, i) => i ? c.lineTo(X(q[0]), Y(-q[1])) : c.moveTo(X(q[0]), Y(-q[1])));
       c.stroke(); c.globalAlpha = 1;
@@ -4182,23 +4566,42 @@ function wavePoint(e) {
   const r = waveCv.getBoundingClientRect(), pad = 26;
   return [+clamp((e.clientX - r.left) / r.width, 0, 1).toFixed(4), +clamp((r.height / 2 - (e.clientY - r.top)) / (r.height / 2 - pad), -1, 1).toFixed(4)];
 }
+/* Fingers on the wave: two-finger tap = undo, three = redo (as on the board). */
+const waveTouches = new Map();
+let waveTap = null;
 waveCv.addEventListener("pointerdown", e => {
+  if (e.pointerType === "touch") {
+    waveTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (waveTouches.size === 1) waveTap = { t: e.timeStamp, max: 1, moved: false };
+    else if (waveTap) {
+      waveTap.max = Math.max(waveTap.max, waveTouches.size);
+      if (waveDraw && e.timeStamp - waveTap.t < 200) { waveDraw = null; drawWaveEditor(); }  // it was a gesture, not a line
+    }
+    if (pencilOnly() || waveTouches.size > 1) return;
+  }
   if (!currentWave() || (waveDraw && waveDraw.pointer !== e.pointerId)) return;
   try { waveCv.setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointer */ }
-  waveDraw = { fill: waveBrush === "fill", pts: [wavePoint(e)], pointer: e.pointerId };
+  waveDraw = { pts: [wavePoint(e)], pointer: e.pointerId };
   drawWaveEditor();
 });
 waveCv.addEventListener("pointermove", e => {
+  const t0 = waveTouches.get(e.pointerId);
+  if (t0 && waveTap && Math.hypot(e.clientX - t0.x, e.clientY - t0.y) > 12) waveTap.moved = true;
   if (!waveDraw || waveDraw.pointer !== e.pointerId) return;
   const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
   for (const ce of (evs.length ? evs : [e])) waveDraw.pts.push(wavePoint(ce));
   drawWaveEditor();
 });
 const endWaveDraw = e => {
+  if (waveTouches.delete(e.pointerId) && !waveTouches.size && waveTap) {
+    const tap = waveTap; waveTap = null;
+    if (!tap.moved && tap.max >= 2 && e.timeStamp - tap.t < 400 && e.type === "pointerup") { tap.max >= 3 ? redo() : undo(); return; }
+    if (pencilOnly() && !tap.moved && tap.max === 1) pencilHint();
+  }
   if (!waveDraw || waveDraw.pointer !== e.pointerId) return;
   const st = waveDraw; waveDraw = null;
   delete st.pointer;
-  if (st.pts.length < 2 || (st.fill && st.pts.length < 4)) { drawWaveEditor(); return; }
+  if (st.pts.length < 2) { drawWaveEditor(); return; }
   remember();
   currentWave().strokes.push(st);
   waveChanged();
@@ -4213,6 +4616,7 @@ $("#waveName").addEventListener("change", e => {
 });
 $("#waveSym").addEventListener("change", e => { remember(); currentWave().sym = e.target.checked; waveChanged(); });
 $("#waveUndo").onclick = () => undo();
+$("#waveHelpBtn").onclick = () => { ui.waveHelp = $("#waveHelp").hidden; renderWaveView(); };
 $("#waveClear").onclick = () => { remember(); currentWave().strokes = []; waveChanged(); };
 const SHAPES = {
   sine: u => Math.sin(2 * Math.PI * u),
@@ -4228,13 +4632,13 @@ for (const b of document.querySelectorAll("[data-shape]")) b.onclick = () => {
     const pts = [];
     for (let i = 0; i < 64; i++) { const u = i / 63; pts.push([u, 0.15 + 0.6 * Math.sin(Math.PI * u) * (0.8 + 0.2 * Math.sin(6 * Math.PI * u))]); }
     for (let i = 63; i >= 0; i--) { const u = i / 63; pts.push([u, -0.1 - 0.7 * Math.sin(Math.PI * u) * Math.abs(Math.cos(3 * Math.PI * u))]); }
-    w.strokes = [{ fill: true, pts: pts.map(q => [+q[0].toFixed(4), +q[1].toFixed(4)]) }]; w.sym = false;
+    w.strokes = [{ pts: pts.map(q => [+q[0].toFixed(4), +q[1].toFixed(4)]) }]; w.sym = false; w.mode = "fill";
   } else {
     const f = SHAPES[k], pts = [];
     if (k === "square") pts.push([0, 0.8], [0.5, 0.8], [0.5, -0.8], [1, -0.8]);
     else if (k === "saw") pts.push([0, 0.8], [1, -0.8]);
     else for (let i = 0; i <= 96; i++) pts.push([+(i / 96).toFixed(4), +(0.8 * f(i / 96)).toFixed(4)]);
-    w.strokes = [{ fill: false, pts }]; w.sym = true;  // a single edge, mirrored: the same wave in both ears
+    w.strokes = [{ pts }]; w.sym = true; w.mode = "line";  // a single edge, mirrored: the same wave in both ears
   }
   waveChanged(); renderWaveView();
   previewNote(w.id, 60, 0.8, 1);
@@ -4275,6 +4679,8 @@ function setTool(tool) {
   $("#btnBrush").setAttribute("aria-pressed", String(tool === "brush"));
   $("#btnEraser").setAttribute("aria-pressed", String(tool === "eraser"));
   $("#btnLasso").setAttribute("aria-pressed", String(tool === "lasso"));
+  $("#btnLive").setAttribute("aria-pressed", String(tool === "live"));
+  setMetro();
   requestFrame();
 }
 /* Brush: the first tap picks the brush tool, the next one opens the brush library. */
@@ -4283,7 +4689,15 @@ $("#btnBrush").onclick = e => {
   if (ui.tool === "brush") openPopover("btnBrush", "popBrush");
   else { closePopovers(); setTool("brush"); }
 };
-$("#btnEraser").onclick = () => { closePopovers(); setTool("eraser"); };
+$("#btnEraser").onclick = e => {
+  e.stopPropagation();
+  if (ui.tool === "eraser") openPopover("btnEraser", "popEraser");
+  else { closePopovers(); setTool("eraser"); }
+};
+$("#btnLive").onclick = () => {
+  closePopovers(); setTool(ui.tool === "live" ? "brush" : "live");
+  if (ui.tool === "live") toast("Live: appoggia la Pencil sulla tavola, il tempo scorre da solo");
+};
 $("#btnLasso").onclick = () => { closePopovers(); setTool(ui.tool === "lasso" ? "brush" : "lasso"); if (ui.tool === "lasso") toast("Cerchia i tratti del livello attivo, poi trascinali"); };
 function brushPreview(cv, id) {
   const d = Math.min(devicePixelRatio || 1, 2), w = 112, h = 40;
@@ -4329,7 +4743,7 @@ $("#btnPlay").onclick = () => (ui.playing ? stop() : play());
 $("#btnMetro").onclick = () => {
   ui.metronome = !ui.metronome;
   $("#btnMetro").setAttribute("aria-pressed", String(ui.metronome));
-  if (metroGain) metroGain.gain.setTargetAtTime(ui.metronome ? 0.5 : 0, live.currentTime, 0.01);
+  setMetro();
 };
 
 function updateTransport() {
@@ -4369,7 +4783,51 @@ function syncChrome() {
 }
 
 const barsLabel = () => state.bars + (state.bars === 1 ? " battuta" : " battute") + ` · ${loopSec().toFixed(1)} s`;
+function showSetCat(cat) {
+  ui.setCat = cat;
+  for (const b of $("#setNav").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.cat === cat));
+  for (const el of document.querySelectorAll(".set-cat")) el.hidden = el.dataset.cat !== cat;
+  $("#setTitle").textContent = $(`#setNav button[data-cat="${cat}"]`).textContent;
+  if (cat === "pen") drawPressCurve();
+}
+for (const b of $("#setNav").querySelectorAll("button")) b.onclick = () => showSetCat(b.dataset.cat);
+$("#setDone").onclick = () => closePopovers();
+$("#scrim").addEventListener("pointerdown", () => closePopovers());
+function drawPressCurve() {
+  const cv = $("#pressCurve"), r = cv.getBoundingClientRect();
+  if (!r.width) return;
+  const d = Math.min(devicePixelRatio || 1, 2); cv.width = r.width * d; cv.height = r.height * d;
+  const c = cv.getContext("2d"); c.scale(d, d);
+  const W = r.width, H = r.height, pad = 12;
+  c.strokeStyle = colors.fg; c.globalAlpha = 0.15; c.lineWidth = 1; c.strokeRect(pad, pad, W - 2 * pad, H - 2 * pad);
+  c.globalAlpha = 1; c.strokeStyle = cssVar("--orange"); c.lineWidth = 2.5; c.beginPath();
+  for (let i = 0; i <= 40; i++) { const p = i / 40, w = ui.minWidth + (1 - ui.minWidth) * Math.pow(p, ui.pressCurve); c.lineTo(pad + p * (W - 2 * pad), H - pad - w * (H - 2 * pad)); }
+  c.stroke();
+  c.fillStyle = colors["fg-2"]; c.font = "600 10px -apple-system, system-ui, sans-serif";
+  c.textAlign = "right"; c.fillText("pressione →", W - pad - 4, H - pad - 4); c.textAlign = "left"; c.save(); c.translate(pad + 10, pad + 4); c.rotate(Math.PI / 2); c.fillText("spessore", 0, 0); c.restore();
+}
+const pctOf = v => Math.round(v * 100) + "%";
+function bindRange(id, get, set, fmt) {
+  const el = $("#" + id), out = $("#val" + id.slice(2));
+  el.addEventListener("input", () => { set(+el.value); fillRange(el); if (out) out.textContent = fmt(+el.value); saveSoon(); });
+  return () => { setRange(el, get()); if (out) out.textContent = fmt(get()); };
+}
+const settingSyncs = [
+  bindRange("inBpm", () => state.bpm, v => setBpm(v), v => v + " BPM"),
+  bindRange("inPress", () => ui.pressCurve, v => { ui.pressCurve = v; drawPressCurve(); }, v => (v < 0.9 ? "leggera" : v > 1.6 ? "decisa" : "media") + " · " + v.toFixed(2)),
+  bindRange("inMinW", () => ui.minWidth, v => { ui.minWidth = v; drawPressCurve(); }, pctOf),
+  bindRange("inRough2", () => ui.rough, v => { ui.rough = v; }, pctOf),
+  bindRange("inMaster", () => ui.master, v => { ui.master = v; if (liveOut) liveOut.gain.setTargetAtTime(0.95 * v, live.currentTime, 0.02); }, pctOf),
+  bindRange("inMetroVol", () => ui.metroVol, v => { ui.metroVol = v; setMetro(); }, pctOf),
+];
+$("#swDrawSound").onchange = e => { ui.drawSound = e.target.checked; saveSoon(); };
+$("#swCountIn").onchange = e => { ui.countIn = e.target.checked; saveSoon(); };
 function syncBoardForm() {
+  for (const f of settingSyncs) f();
+  $("#swDrawSound").checked = ui.drawSound; $("#swCountIn").checked = ui.countIn;
+  seg($("#segPencil"), ui.pencilMode, v => { ui.pencilMode = v; saveSoon(); });
+  seg($("#segTabs"), ui.tabsMode, v => { ui.tabsMode = v; setCompact(false); saveSoon(); });
+  showSetCat(ui.setCat || "board");
   setRange($("#inBars"), state.bars); $("#valBars").textContent = barsLabel();
   const root = $("#inRoot"); root.textContent = "";
   for (let i = 0; i < 12; i++) root.append(new Option(noteName(i, false), i, false, i === state.root));
@@ -4439,6 +4897,7 @@ document.addEventListener("keydown", e => {
   else if (e.key === "b" && ui.view === "draw") setTool("brush");
   else if (e.key === "e" && ui.view === "draw") setTool("eraser");
   else if (e.key === "s" && ui.view === "draw") setTool("lasso");
+  else if (e.key === "r" && ui.view === "draw") setTool(ui.tool === "live" ? "brush" : "live");
   else if (e.key === "l" && ui.view === "draw") openPopover("btnLayers");
   else if (e.key === "Escape") closePopovers();
 });
@@ -4459,8 +4918,9 @@ vslider($("#sizeSlider"), () => (ui.size - SIZE_MIN) / (SIZE_MAX - SIZE_MIN), v 
 paintOpSlider = vslider($("#opSlider"), () => (ui.opacity - 0.15) / 0.85, v => { ui.opacity = 0.15 + v * 0.85; }, "Opacità", v => Math.round((0.15 + v * 0.85) * 100) + "%");
 syncChrome(); syncMidiChip(); updateUndo(); updateTransport();
 loadSampleAudio();
-const hashView = { disegna: "draw", beat: "beat", midi: "midi", esporta: "export" }[(location.hash || "").slice(1)];
+const hashView = { disegna: "draw", beat: "beat", midi: "midi", onda: "wave", esporta: "export" }[(location.hash || "").slice(1)];
 showView(hashView || ui.view, true);
+setCompact(false);
 new ResizeObserver(() => {
   movePill();
   if (ui.view === "draw") layoutDraw();
@@ -4473,7 +4933,12 @@ $("#exSingles").hidden = inArtifact;  // .wav and .mid alone cannot be saved fro
 downloadsCap.then(dl => { if (!dl && inArtifact) { for (const id of ["#exZip", "#exPng", "#exJson"]) $(id).disabled = true; $("#exNote").hidden = false; } });
 // Installed on the Home Screen: works offline (service worker) and keeps its data.
 if (!inArtifact && "serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
-  navigator.serviceWorker.register("sw.js").catch(() => {});
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register("sw.js").then(reg => {
+    // iPad resumes an installed app instead of relaunching it: look for a new version on return.
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update().catch(() => {}); });
+  }).catch(() => {});
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController) { save(); $("#updateBar").hidden = false; } });
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 }
 // No page zoom from pinches on the interface (Safari).
