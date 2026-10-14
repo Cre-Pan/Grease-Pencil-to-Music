@@ -140,6 +140,26 @@ suona uguale).
 *Volume + Vibrato* separa lo spessore in due: l'andamento lento è il volume,
 l'irregolarità veloce (per esempio il jitter del pennello Ink) diventa vibrato.
 
+## Web app per iPad (senza App Store)
+
+La stessa idea gira anche nel browser, pensata per iPad e Apple Pencil: sezioni **Disegna**,
+**Beat** (step sequencer), **MIDI** (piano roll, tastiera sul vetro, import .mid) ed
+**Esporta** (WAV + MIDI in .zip, PNG, progetto .json).
+
+Per installarla come app sulla schermata Home, che funziona anche offline:
+
+1. Su GitHub: *Settings → Pages → Build and deployment → Deploy from a branch*, scegli il
+   branch con questa cartella `docs/` (per esempio `main` dopo il merge) e la cartella
+   **/docs**, poi *Save*.
+2. Dopo un minuto apri in **Safari** sull'iPad
+   `https://cre-pan.github.io/Grease-Pencil-to-Music/app/`.
+3. *Condividi → Aggiungi alla schermata Home*. Si apre a tutto schermo e funziona anche
+   senza connessione; i disegni restano salvati nell'app. Per esportare usa il foglio di
+   condivisione → *Salva su File*.
+
+Il sorgente è `web/app.html`; `python tools/build_web.py` rigenera `docs/app/` (pagina,
+manifest, icone e service worker).
+
 ## Limiti noti (0.0.x)
 
 - Senza *Sezioni da keyframe* viene letto solo il keyframe attivo all'inizio della scena.

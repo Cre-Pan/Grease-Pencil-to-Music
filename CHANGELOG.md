@@ -1,5 +1,16 @@
 # Changelog
 
+## Web app (iPad)
+
+- Prima versione web: Disegna, Beat, MIDI, Esporta, in stile Apple (tema chiaro e scuro).
+- Apple Pencil: lo spessore segue la pressione (anche dove il browser la passa solo come
+  forza del tocco), indicatore della pressione in basso a destra.
+- Livelli come in Procreate: tocca per scegliere, tocca di nuovo per le impostazioni; occhio
+  (nascondi) e altoparlante (muto) separati; tieni premuto per vedere o sentire solo quel
+  livello; miniature, Duplica, Su, Giù.
+- Gesti: due dita annulla, tre ripeti, quattro play/stop.
+- Installabile sulla schermata Home e utilizzabile offline (`docs/app`, GitHub Pages).
+
 ## 0.0.5
 
 Novità
