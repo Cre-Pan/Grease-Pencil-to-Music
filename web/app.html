@@ -549,7 +549,7 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
 .brush canvas { width: 112px; height: 40px; }
 .brush b { display: block; font-size: 15px; font-weight: 600; }
 .brush small { display: block; font-size: 12.5px; color: var(--fg-2); line-height: 1.35; }
-.help { position: absolute; inset: 0; z-index: 25; display: grid; place-items: center; padding: 20px; background: rgba(0, 0, 0, 0.32); animation: fade-in 0.25s both; }
+.help-overlay { position: absolute; inset: 0; z-index: 25; display: grid; place-items: center; padding: 20px; background: rgba(0, 0, 0, 0.32); animation: fade-in 0.25s both; }
 .help-card { width: min(860px, 100%); max-height: 100%; overflow-y: auto; padding: 22px 24px; border-radius: 28px; background: var(--pop); box-shadow: var(--shadow-lg); animation: pop-in 0.34s var(--spring) both; }
 .help-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
 .help-item { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; padding: 12px; border-radius: 16px; background: var(--fill); }
@@ -894,7 +894,7 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   </div>
 
   <div class="bubble" id="bubble" hidden></div>
-  <div class="help" id="vidProgress" hidden>
+  <div class="help-overlay" id="vidProgress" hidden>
     <div class="help-card" style="width:min(420px,100%)">
       <div class="sheet-top"><h3>Registro il video…</h3><button class="chip danger" id="vidCancel">Annulla</button></div>
       <div class="progress"><i id="vidBar"></i></div>
@@ -932,7 +932,7 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   </section>
 
   <div class="scrim" id="scrim" hidden></div>
-  <section class="help" id="help" hidden aria-label="Aiuto">
+  <section class="help-overlay" id="help" hidden aria-label="Aiuto">
     <div class="help-card">
       <div class="sheet-top"><h3 id="helpTitle"></h3><button class="chip primary" id="helpDone">Ho capito</button></div>
       <div class="help-grid" id="helpBody"></div>
