@@ -57,6 +57,17 @@
 - Impostazioni in un pannello grande con categorie (Tavola, Pennello e Pencil, Audio,
   Interfaccia, Info).
 - Registrazione **Live**: il tempo scorre da solo, la Pencil dà altezza e intensità.
+- Audio più robusto: una nota che non si può calcolare non blocca più tutto il loop, l'audio
+  riparte dopo che l'iPad lo ha interrotto, cache più leggera; pulsante ↻ *Ricarica l'audio*.
+- In alto: isole separate (strumenti, Livelli con il nome, colore); **?** con l'aiuto della
+  schermata; nome della composizione modificabile; menu ⋯ con Salva, Apri, Importa video ed
+  Esempi; le sezioni si riducono a icone (con il nome di quella attiva) quando manca spazio.
+- Gesti uguali per M, altoparlante e occhio: tocco, tieni premuto (solo questo), trascina
+  (tutti come il primo). Menu vicino al dito per livelli, suoni e onde.
+- Beat: modalità **Pad** per suonare la batteria dal vivo e registrarla nel pattern; con
+  Solo Pencil le dita scorrono la griglia.
+- MIDI: selezione e spostamento delle note, Registra e Ricarica in alto, Livelli e strumento.
+- **Video** in una finestra mobile sincronizzata con il play.
 
 ## 0.0.5
 

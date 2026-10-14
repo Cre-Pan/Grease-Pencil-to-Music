@@ -125,10 +125,20 @@ canvas { display: block; }
   -webkit-backdrop-filter: blur(26px) saturate(180%); backdrop-filter: blur(26px) saturate(180%);
 }
 .cap { position: absolute; z-index: 6; display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 999px; }
-.cap-left { top: 12px; left: max(16px, env(safe-area-inset-left, 0px)); max-width: calc(50% - 190px); }
+.top-left, .top-right { position: absolute; z-index: 6; top: 12px; display: flex; gap: 10px; align-items: flex-start; }
+.top-left { left: max(16px, env(safe-area-inset-left, 0px)); }
+.top-right { right: max(16px, env(safe-area-inset-right, 0px)); }
+.top-left .cap, .top-right .cap { position: static; }
+/* No room beside the sections: the right islands stack down the right edge. */
+.top-right.stacked { top: 66px; flex-direction: column; align-items: flex-end; }
+.top-right.stacked .cap-tools { flex-direction: column; border-radius: 26px; }
+.top-right.stacked .ib.wide { width: 44px; padding: 0; justify-content: center; }
+.top-right.stacked .ib.wide span { display: none; }
+#app.right-stacked .midi-view { padding-right: 76px; }
+.ib.wide { width: auto; padding: 0 16px 0 12px; gap: 7px; display: inline-flex; border-radius: 999px; font-size: 14px; font-weight: 600; }
+.doc-input { width: 170px; margin: 0 6px 0 2px; padding: 8px 12px; border-radius: 12px; border: 0; background: var(--fill); color: var(--fg); font: 600 14px inherit; }
 .cap-sections { top: 12px; left: 50%; transform: translateX(-50%); }
-.cap-tools { top: 12px; right: calc(max(16px, env(safe-area-inset-right, 0px)) + 64px); }
-.cap-layers { top: 12px; right: max(16px, env(safe-area-inset-right, 0px)); }
+
 .cap-transport { bottom: 14px; left: 50%; transform: translateX(-50%); padding: 6px; gap: 4px; }
 .ib {
   flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; color: var(--fg);
@@ -143,8 +153,8 @@ canvas { display: block; }
 .ib[aria-expanded="true"] { background: var(--fill); }
 .ib svg { width: 22px; height: 22px; }
 .doc-name {
-  padding: 0 12px 0 4px; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden;
-  text-overflow: ellipsis; min-width: 0;
+  padding: 8px 12px 8px 4px; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; min-width: 0; max-width: 180px; border-radius: 12px; color: var(--fg);
 }
 .doc-name small { font-weight: 400; color: var(--fg-2); }
 .color-dot {
@@ -163,8 +173,12 @@ canvas { display: block; }
 .tab svg { width: 19px; height: 19px; flex: 0 0 auto; }
 .tab .tl { display: inline-block; max-width: 90px; overflow: hidden; transition: max-width 0.35s var(--spring), opacity 0.25s; }
 /* While drawing the sections shrink to icons; a tap on them brings the names back. */
-.tabs.compact .tab { padding: 11px 12px; gap: 0; }
-.tabs.compact .tl { max-width: 0; opacity: 0; }
+.tabs.measure .tab, .tabs.measure .tl { transition: none !important; }
+.tabs.compact .tab, .tabs.squeeze .tab { padding: 11px 12px; gap: 0; }
+.tabs.compact .tl, .tabs.squeeze .tl { max-width: 0; opacity: 0; }
+/* compact: icons, and the name of the section you are in */
+.tabs.compact .tab[aria-selected="true"], .tabs.squeeze .tab[aria-selected="true"] { gap: 6px; padding-right: 15px; }
+.tabs.compact .tab[aria-selected="true"] .tl, .tabs.squeeze .tab[aria-selected="true"] .tl { max-width: 90px; opacity: 1; }
 .tab[aria-selected="true"] { color: var(--fg); }
 .tab-pill {
   position: absolute; z-index: 0; top: 0; bottom: 0; left: 0; width: 0; border-radius: 999px;
@@ -303,6 +317,9 @@ input[type="range"]::-moz-range-thumb {
 .lbtn:active { transform: scale(0.86); }
 .lbtn svg { width: 21px; height: 21px; }
 .lbtn[aria-pressed="false"] { opacity: 0.45; }
+.ctx-menu { position: absolute; z-index: 30; min-width: 220px; max-width: min(300px, calc(100% - 24px)); padding: 6px; border-radius: 18px; display: grid; box-shadow: var(--shadow-lg); border: 0.5px solid var(--glass-edge); animation: pop-in 0.26s var(--spring) both; }
+.ctx-title { padding: 6px 12px 4px; font-size: 12px; font-weight: 650; color: var(--fg-2); text-transform: uppercase; letter-spacing: 0.04em; }
+.mute, .lbtn { touch-action: none; }
 .layer-menu { margin: 4px 6px 8px; padding: 4px; border-radius: 16px; background: var(--fill); display: grid; animation: pop-in 0.28s var(--spring) both; }
 .menu-item { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 11px 12px; border-radius: 12px; font-size: 15px; font-weight: 600; text-align: left; }
 .menu-item + .menu-item { border-top: 0.5px solid var(--sep); border-radius: 0; }
@@ -429,6 +446,20 @@ label.btn input { position: absolute; width: 1px; height: 1px; opacity: 0; point
 .wave-foot .spacer { flex: 1; }
 .wave-foot > span { color: var(--fg-2); font-weight: 600; margin-right: 2px; }
 .chip.primary { background: var(--blue); color: var(--on-tint); }
+.beat-pads-card { padding: 16px; display: grid; gap: 14px; }
+.pads-top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.live-pads { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; touch-action: none; user-select: none; -webkit-user-select: none; }
+.live-pad {
+  --c: var(--blue); position: relative; aspect-ratio: 1.25; border-radius: 26px; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-start;
+  padding: 14px 16px; text-align: left; color: #fff; font-weight: 700; font-size: 16px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--c) 82%, white), var(--c));
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--c) 35%, transparent), inset 0 -6px 14px rgba(0, 0, 0, 0.12);
+  transition: transform 0.12s var(--spring), filter 0.12s;
+}
+.live-pad small { font-size: 12px; font-weight: 600; opacity: 0.75; }
+.live-pad.hit { transform: scale(0.95); filter: brightness(1.25); }
+.live-pad.flash { filter: brightness(1.12); }
+@media (max-width: 760px) { .live-pads { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }
 .pattern-row { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; font-size: 14px; }
 .pattern-row > span { color: var(--fg-2); font-weight: 600; }
 .chain { display: flex; gap: 6px; flex-wrap: wrap; flex: 1 1 260px; }
@@ -477,7 +508,15 @@ label.btn input { position: absolute; width: 1px; height: 1px; opacity: 0; point
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 .roll-card { position: relative; overflow: hidden; min-height: 120px; }
-#roll { position: absolute; inset: 0; width: 100%; height: 100%; }
+#roll { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+.video-win { position: absolute; z-index: 8; border-radius: 18px; overflow: hidden; background: #000; box-shadow: var(--shadow-lg); border: 0.5px solid var(--glass-edge); display: flex; flex-direction: column; touch-action: none; }
+.video-bar { display: flex; align-items: center; gap: 4px; padding: 4px 6px 4px 12px; background: var(--pop); color: var(--fg); cursor: grab; font-size: 13px; font-weight: 600; }
+.video-bar span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.video-bar button { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; flex: 0 0 auto; }
+.video-bar button svg { width: 18px; height: 18px; }
+.video-bar button[aria-pressed="true"] { color: var(--blue); }
+.video-win video { display: block; width: 100%; flex: 1; min-height: 0; object-fit: contain; background: #000; }
+.video-resize { position: absolute; right: 0; bottom: 0; width: 26px; height: 26px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.55) 50%, rgba(255, 255, 255, 0.55) 58%, transparent 58%, transparent 70%, rgba(255, 255, 255, 0.55) 70%, rgba(255, 255, 255, 0.55) 78%, transparent 78%); }
 .midi-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .midi-bar .grow { flex: 1 1 auto; }
 .inst-chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px 6px 6px; border-radius: 999px; background: var(--fill); font-weight: 600; font-size: 14px; }
@@ -525,6 +564,14 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
 .brush canvas { width: 112px; height: 40px; }
 .brush b { display: block; font-size: 15px; font-weight: 600; }
 .brush small { display: block; font-size: 12.5px; color: var(--fg-2); line-height: 1.35; }
+.help { position: absolute; inset: 0; z-index: 25; display: grid; place-items: center; padding: 20px; background: rgba(0, 0, 0, 0.32); animation: fade-in 0.25s both; }
+.help-card { width: min(860px, 100%); max-height: 100%; overflow-y: auto; padding: 22px 24px; border-radius: 28px; background: var(--pop); box-shadow: var(--shadow-lg); animation: pop-in 0.34s var(--spring) both; }
+.help-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.help-item { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; padding: 12px; border-radius: 16px; background: var(--fill); }
+.help-item .hi { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--pop); color: var(--blue); }
+.help-item .hi svg { width: 22px; height: 22px; }
+.help-item b { display: block; font-size: 15px; margin-bottom: 3px; }
+.help-item span { font-size: 13.5px; color: var(--fg-2); line-height: 1.45; }
 .scrim { position: absolute; inset: 0; z-index: 19; background: rgba(0, 0, 0, 0.28); animation: fade-in 0.25s both; }
 @keyframes fade-in { from { opacity: 0; } }
 .popover.sheet {
@@ -584,8 +631,7 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   .cap-sections { left: auto; right: max(16px, env(safe-area-inset-right, 0px)); transform: none; }
   .tab { padding: 8px 10px; font-size: 13px; gap: 5px; }
   .tab svg { width: 17px; height: 17px; }
-  .cap-tools { top: 66px; right: max(16px, env(safe-area-inset-right, 0px)); flex-direction: column; border-radius: 26px; }
-  .cap-layers { top: auto; bottom: 84px; }
+  .top-left { flex-direction: column; }
   .export-grid { grid-template-columns: minmax(0, 1fr); }
   .beat-row { grid-template-columns: 96px 32px auto; }
   .beat-name { font-size: 13px; padding: 7px 6px; }
@@ -636,6 +682,7 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
         <div class="card beat-head">
           <div class="beat-head-top">
             <h2 class="beat-title"><input class="switch" type="checkbox" id="beatOn" aria-label="Beat attivo"><label for="beatOn">Beat</label> <small id="beatSub"></small></h2>
+            <div class="seg" id="segBeatMode" style="width:170px;margin-left:auto"><button data-v="grid">Griglia</button><button data-v="pads">Pad</button></div>
             <button class="ib" id="btnPresets" title="Template" aria-label="Template" aria-expanded="false" aria-controls="popPresets">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7h14M5 12h14M5 17h14"/></svg>
             </button>
@@ -654,7 +701,14 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
             <div class="chain" id="chain" aria-label="Sequenza dei pattern: tocca per cambiare A, B o pausa"></div>
           </div>
         </div>
-        <div class="card beat-grid"><div class="beat-inner" id="beatGrid"></div></div>
+        <div class="card beat-grid" id="beatGridCard"><div class="beat-inner" id="beatGrid"></div></div>
+        <div class="card beat-pads-card" id="beatPadsCard" hidden>
+          <div class="pads-top">
+            <button class="rec" id="padRec" aria-pressed="false"><i></i>Registra nel pattern</button>
+            <span class="status" id="padStatus">Suona i pad con le dita o la Pencil (tasti A S D F G H J K).</span>
+          </div>
+          <div class="live-pads" id="livePads"></div>
+        </div>
         <div class="beat-foot">
           <span class="legend"><i></i>spento</span><span class="legend"><i class="on"></i>colpo</span><span class="legend"><i class="acc"></i>accento</span>
           <span>Tocca un pad per cambiarlo, trascina per dipingere più passi. Tocca il nome per sentire il suono, tienilo premuto per volume e intonazione. A e B sono due pattern: la sequenza decide quale suona in ogni battuta (– = pausa).</span>
@@ -679,14 +733,7 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
             <div class="ctl-row" style="gap:8px"><label for="waveSym">Simmetrico</label><input class="switch" type="checkbox" id="waveSym"></div>
             <button class="chip" id="waveUndo">Annulla</button>
             <button class="chip danger" id="waveClear">Svuota</button>
-            <button class="chip" id="waveHelpBtn" aria-pressed="false">Come funziona?</button>
           </div>
-          <ol class="wave-help" id="waveHelp" hidden>
-            <li><b>Un giro dell'onda.</b> Da sinistra a destra disegni una sola vibrazione: il suono la ripete centinaia di volte al secondo. L'altezza della nota la scegli poi disegnando nella tavola.</li>
-            <li><b>Sopra = orecchio sinistro, sotto = destro.</b> Il bordo alto della forma è il canale sinistro, quello basso il destro; il riempimento colorato tra i due è il suono. Il bordo che manca è lo specchio dell'altro.</li>
-            <li><b>Tratto o Pieno.</b> Con Tratto le linee sono i bordi; con Pieno ogni linea si chiude e diventa una forma. Passa dall'uno all'altro quando vuoi: il disegno resta.</li>
-            <li><b>Il timbro è la forma.</b> Curve morbide (sinusoide) suonano dolci; angoli e scalini (dente di sega, quadra) suonano brillanti. Una linea piatta non suona.</li>
-          </ol>
           <div class="wave-stage">
             <canvas id="waveCanvas" aria-label="Un ciclo dell'onda: sopra il canale sinistro, sotto il destro"></canvas>
             <span class="wave-side l">SINISTRA ↑</span><span class="wave-side r">DESTRA ↓</span>
@@ -761,14 +808,22 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   </section>
 
   <!-- Capsules -->
-  <div class="cap cap-left glass">
-    <button class="ib" id="btnActions" title="Composizione" aria-label="Composizione" aria-expanded="false" aria-controls="popActions">
+  <div class="top-left" id="topLeft">
+    <div class="cap cap-left glass">
+      <button class="ib" id="btnActions" title="Composizione" aria-label="Composizione" aria-expanded="false" aria-controls="popActions">
       <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="6" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18" cy="12" r="1.8"/></svg>
     </button>
-    <button class="ib" id="btnBoard" title="Impostazioni" aria-label="Impostazioni" aria-expanded="false" aria-controls="popBoard">
+      <button class="ib" id="btnBoard" title="Impostazioni" aria-label="Impostazioni" aria-expanded="false" aria-controls="popBoard">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>
     </button>
-    <div class="doc-name" id="docName"></div>
+      <button class="doc-name" id="docName" title="Tocca per rinominare"></button>
+      <input type="text" class="doc-input" id="docInput" aria-label="Nome della composizione" maxlength="60" hidden>
+    </div>
+    <div class="cap glass">
+      <button class="ib" id="btnHelp" title="Aiuto: cosa fa ogni cosa in questa schermata" aria-label="Aiuto">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 1 1 3.6 2.3c-.8.4-1.2 1-1.2 1.9v.4"/><circle cx="12" cy="17" r=".6" fill="currentColor"/></svg>
+      </button>
+    </div>
   </div>
 
   <nav class="cap cap-sections glass" aria-label="Sezioni">
@@ -782,7 +837,8 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
     </div>
   </nav>
 
-  <div class="cap cap-tools glass" id="tools">
+  <div class="top-right" id="topRight">
+    <div class="cap cap-tools glass" id="tools">
     <button class="ib" id="btnBrush" title="Pennello (B)" aria-label="Pennello" aria-pressed="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 3.5c-3 1.2-7.6 5.6-9.4 8.3l2.1 2.1c2.7-1.8 7.1-6.4 8.3-9.4z"/><path d="M9.6 12.7c-2.4.2-3.6 1.8-3.8 3.6-.2 1.6-.9 2.5-2.3 3.2 3.6.9 7.4-.2 8.2-4.7z"/></svg>
     </button>
@@ -795,12 +851,26 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
     <button class="ib" id="btnLive" title="Live: il tempo scorre, la Pencil dà la nota (R)" aria-label="Registrazione live" aria-pressed="false">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.6" fill="currentColor" stroke="none"/></svg>
     </button>
-    <button class="color-dot" id="btnInst" title="Strumento" aria-expanded="false" aria-controls="popInst"></button>
-  </div>
-  <div class="cap cap-layers glass" id="layersCap">
-    <button class="ib" id="btnLayers" title="Livelli (L)" aria-label="Livelli" aria-expanded="false" aria-controls="popLayers">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 4l8.5 4.5L12 13 3.5 8.5z"/><path d="M3.5 12.5L12 17l8.5-4.5M3.5 16.5L12 21l8.5-4.5"/></svg>
-    </button>
+    </div>
+    <div class="cap cap-tools glass" id="midiTools" hidden>
+      <button class="ib" id="btnRollLasso" title="Seleziona e sposta le note" aria-label="Seleziona note" aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><ellipse cx="12" cy="10" rx="8" ry="5.5" stroke-dasharray="3.2 3"/><path d="M8.5 15c-1.2 1.8-.8 4 1.6 5"/></svg>
+      </button>
+      <button class="ib" id="btnRollRec" title="Registra dalla tastiera" aria-label="Registra" aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.6" fill="currentColor" stroke="none"/></svg>
+      </button>
+      <button class="ib" id="btnRefresh" title="Ricarica l'audio (se non senti più niente)" aria-label="Ricarica l'audio">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/></svg>
+      </button>
+    </div>
+    <div class="cap cap-layers glass" id="layersCap">
+      <button class="ib wide" id="btnLayers" title="Livelli (L)" aria-label="Livelli" aria-expanded="false" aria-controls="popLayers">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 4l8.5 4.5L12 13 3.5 8.5z"/><path d="M3.5 12.5L12 17l8.5-4.5M3.5 16.5L12 21l8.5-4.5"/></svg><span>Livelli</span>
+      </button>
+    </div>
+    <div class="cap glass" id="colorCap">
+      <button class="color-dot" id="btnInst" title="Strumento" aria-expanded="false" aria-controls="popInst"></button>
+    </div>
   </div>
 
   <div class="cap cap-transport glass">
@@ -820,6 +890,16 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   </div>
 
   <div class="bubble" id="bubble" hidden></div>
+  <div class="video-win" id="videoWin" hidden>
+    <div class="video-bar" id="videoBar">
+      <span id="videoName">Video</span>
+      <button id="videoSound" title="Audio del video" aria-label="Audio del video" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg></button>
+      <button id="videoPip" title="Picture in picture di sistema" aria-label="Picture in picture" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><rect x="12" y="12" width="7" height="5" rx="1.2" fill="currentColor"/></svg></button>
+      <button id="videoClose" title="Chiudi il video" aria-label="Chiudi il video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <video id="videoEl" playsinline muted preload="auto"></video>
+    <div class="video-resize" id="videoResize"></div>
+  </div>
   <div class="cap update-bar glass" id="updateBar" hidden>
     <span>Nuova versione pronta</span>
     <button class="chip primary" id="updateNow">Aggiorna</button>
@@ -836,13 +916,26 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   <section class="popover" id="popActions" hidden aria-label="Composizione">
     <div class="pop-head"><h2>Composizione</h2></div>
     <div class="group">
-      <button class="item item-btn" id="actNew"><span>Nuova tela</span><small>vuota, un livello</small></button>
+      <button class="item item-btn" id="actNew"><span>Nuova composizione</span><small>vuota</small></button>
       <button class="item item-btn danger" id="actNewConfirm" hidden><span>Conferma: cancella tutto</span><small>annullabile</small></button>
+      <button class="item item-btn" id="actSave"><span>Salva composizione</span><small>file .json</small></button>
+      <label class="item item-btn" for="fileJson2"><span>Apri composizione…</span><small>file .json</small><input type="file" id="fileJson2" accept=".json,application/json" hidden></label>
+      <label class="item item-btn" for="fileVideo"><span>Importa un video…</span><small>in una finestra mobile</small><input type="file" id="fileVideo" accept="video/*" hidden></label>
+    </div>
+    <div class="label">Esempi</div>
+    <div class="group">
       <button class="item item-btn" id="actExample"><span>Carica l'esempio</span><small>3 livelli e un beat</small></button>
     </div>
   </section>
 
   <div class="scrim" id="scrim" hidden></div>
+  <section class="help" id="help" hidden aria-label="Aiuto">
+    <div class="help-card">
+      <div class="sheet-top"><h3 id="helpTitle"></h3><button class="chip primary" id="helpDone">Ho capito</button></div>
+      <div class="help-grid" id="helpBody"></div>
+      <p class="set-help" id="helpFoot"></p>
+    </div>
+  </section>
   <section class="popover sheet" id="popBoard" hidden aria-label="Impostazioni">
     <nav class="sheet-nav" id="setNav" aria-label="Categorie">
       <h2>Impostazioni</h2>
@@ -898,6 +991,7 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
           <div class="item col"><div class="item" style="padding:0;min-height:0"><label for="inMetroVol">Volume del metronomo</label><span class="v" id="valMetroVol"></span></div><input id="inMetroVol" type="range" min="0" max="1" step="0.01"></div>
           <div class="item"><label for="swCountIn">Metronomo durante la registrazione live</label><input class="switch" type="checkbox" id="swCountIn"></div>
         </div>
+        <div class="group" style="margin-top:10px"><button class="item item-btn" id="setRestart"><span>Ricarica l'audio</span><small>se non senti più niente</small></button></div>
         <p class="set-help">Il volume di ascolto non cambia i file esportati, che sono normalizzati. Il volume e il riverbero di ogni livello sono nel pannello Livelli.</p>
       </div>
       <div class="set-cat" data-cat="ui" hidden>
@@ -1202,7 +1296,7 @@ function makeStroke(layer, inst, path, w, op, bpm) {
 
 function save() {
   try {
-    localStorage.setItem(STORE_KEY, JSON.stringify({ state, ui: { master: ui.master, metroVol: ui.metroVol, drawSound: ui.drawSound, countIn: ui.countIn, pencilMode: ui.pencilMode, tabsMode: ui.tabsMode, eraser: ui.eraser, eraserSize: ui.eraserSize, minWidth: ui.minWidth, pressCurve: ui.pressCurve, brush: ui.brush, rough: ui.rough, inst: ui.inst, size: ui.size, opacity: ui.opacity, naming: ui.naming, stabilize: ui.stabilize, kbBase: ui.kbBase, view: ui.view } }));
+    localStorage.setItem(STORE_KEY, JSON.stringify({ state, ui: { videoName: ui.videoName, videoRect: ui.videoRect, beatMode: ui.beatMode, master: ui.master, metroVol: ui.metroVol, drawSound: ui.drawSound, countIn: ui.countIn, pencilMode: ui.pencilMode, tabsMode: ui.tabsMode, eraser: ui.eraser, eraserSize: ui.eraserSize, minWidth: ui.minWidth, pressCurve: ui.pressCurve, brush: ui.brush, rough: ui.rough, inst: ui.inst, size: ui.size, opacity: ui.opacity, naming: ui.naming, stabilize: ui.stabilize, kbBase: ui.kbBase, view: ui.view } }));
   } catch (e) { /* storage blocked */ }
 }
 let saveTimer = 0;
@@ -1421,7 +1515,7 @@ function interpretFill(st, layer, voices, notes) {
     for (const c of cols) if (c.pitches.length) {
       const a = clamp(amp * Math.sqrt(c.pitches.length / most) * 1.4, 0.1, 1);
       voices.push({ inst: st.inst, bright: st.op, layer: layer.id, start: c.start * k, dur: 0.1, midi: 60, amp: Float32Array.of(a, a) });
-      notes.push({ start: c.start * k, end: c.start * k + 0.1, midi: 60, vel, inst: st.inst, layer: layer.id });
+      notes.push({ start: c.start * k, end: c.start * k + 0.1, midi: 60, vel, inst: st.inst, layer: layer.id, sid: st.id });
     }
     return;
   }
@@ -1429,7 +1523,7 @@ function interpretFill(st, layer, voices, notes) {
   const close = (m, end) => {
     const start = open.get(m); open.delete(m);
     voices.push({ inst: st.inst, bright: st.op, layer: layer.id, start: start * k, dur: (end - start) * k, midi: m, amp: Float32Array.of(amp, amp) });
-    notes.push({ start: start * k, end: end * k, midi: m, vel, inst: st.inst, layer: layer.id });
+    notes.push({ start: start * k, end: end * k, midi: m, vel, inst: st.inst, layer: layer.id, sid: st.id });
   };
   let prevEnd = null;
   for (const c of cols) {
@@ -1466,7 +1560,7 @@ function readRun(run, st, layer, mode, step, voices, notes) {
   const snap = x => (step ? Math.round(x / step) * step : x);
   const base = { inst: st.inst, bright: st.op * (st.brush === "pencil" ? 0.65 : 1), layer: layer.id, soft: st.brush === "air" };
   const mean = a => a.reduce((s, v) => s + v, 0) / a.length;
-  const note = (start, end, midi, amp) => notes.push({ start, end, midi: Math.round(midi), vel: Math.round(clamp(20 + 107 * amp, 1, 127)), inst: st.inst, layer: layer.id });
+  const note = (start, end, midi, amp) => notes.push({ start, end, midi: Math.round(midi), vel: Math.round(clamp(20 + 107 * amp, 1, 127)), inst: st.inst, layer: layer.id, sid: st.id });
 
   if (t1 - t0 < MIN_NOTE) {  // a dot: one short note
     const start = snap(Math.max(t0, 0));
@@ -2052,14 +2146,16 @@ function detectPitch(d) {
 
 const renderCache = new Map();
 function cacheGet(key) { if (!renderCache.has(key)) return null; const v = renderCache.get(key); renderCache.delete(key); renderCache.set(key, v); return v; }
-function cachePut(key, v) { renderCache.set(key, v); while (renderCache.size > 40) renderCache.delete(renderCache.keys().next().value); }
+/* Rendered layers are big (a 4-bar loop is ~5 MB): keep the cache under ~80 MB, which iPad Safari tolerates. */
+const cacheBytes = () => { let n = 0; for (const v of renderCache.values()) n += v.length * v.numberOfChannels * 4; return n; };
+function cachePut(key, v) { renderCache.set(key, v); while (renderCache.size > 2 && (renderCache.size > 24 || cacheBytes() > 80e6)) renderCache.delete(renderCache.keys().next().value); }
 const baseKey = () => [state.bpm, state.bars, state.scale, state.root, state.grid, samplesVersion];
 
 async function renderParts(voices, hits) {
   const ctx = new OfflineAudioContext(2, Math.ceil((loopSec() + TAIL) * SR), SR);
   const out = ctx.createGain(); out.connect(ctx.destination);
-  for (const v of voices) scheduleVoice(ctx, out, v, 0);
-  for (const h of hits) scheduleDrum(ctx, out, h.id, h.t, h.vel, null, h.tune);
+  for (const v of voices) { try { scheduleVoice(ctx, out, v, 0); } catch (err) { audioFault(err, v); } }
+  for (const h of hits) { try { scheduleDrum(ctx, out, h.id, h.t, h.vel, null, h.tune); } catch (err) { audioFault(err, h); } }
   return ctx.startRendering();
 }
 async function layerBuffer(layer) {
@@ -2158,19 +2254,43 @@ function audio() {
     liveSend = live.createGain(); liveSend.gain.value = 0.22; liveSend.connect(conv); conv.connect(liveOut);
     metroGain = live.createGain(); metroGain.gain.value = metroLevel(); metroGain.connect(liveOut);
   }
-  if (live.state === "suspended") live.resume();
+  if (live.state !== "running" && live.state !== "closed") live.resume().catch(() => {});
   return live;
 }
+/* The refresh button: a new audio engine, every sound rendered again. */
+async function restartAudio() {
+  const wasPlaying = ui.playing;
+  if (wasPlaying) stop();
+  thereminStop();
+  try { if (live) await live.close(); } catch (e) { /* already closed */ }
+  live = null; liveOut = null; liveSend = null; metroGain = null; player = null;
+  renderCache.clear(); waveCache.clear();
+  loop.buffer = null; loop.dirty = true; samplesVersion++;
+  audio();
+  await ensureLoop();
+  if (wasPlaying) play();
+  toast("Audio ricaricato");
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden && live && live.state !== "running") live.resume().catch(() => {}); });
 
+let audioFaults = 0;
+function audioFault(err, what) {
+  if (audioFaults++ < 5) console.warn("Nota saltata:", err && err.message, what);
+}
 let rendering = null;
 function ensureLoop() {
   if (!rendering) rendering = (async () => {
     try {
-      while (loop.dirty || !loop.buffer) {
+      for (let tries = 0; (loop.dirty || !loop.buffer) && tries < 3; tries++) {
         const serial = ++renderSerial;
         loop.dirty = false;
-        const r = await renderAll(true);
-        if (serial === renderSerial) { loop.buffer = r.loop; loop.full = r.full; loop.notes = r.notes; onRendered(); }
+        try {
+          const r = await renderAll(true);
+          if (serial === renderSerial) { loop.buffer = r.loop; loop.full = r.full; loop.notes = r.notes; onRendered(); tries = -1; }
+        } catch (err) {  // keep what was playing, and try again on the next change
+          console.warn("Render non riuscito:", err);
+          loop.dirty = true;
+        }
       }
     } finally { rendering = null; }
     return loop;
@@ -2219,6 +2339,7 @@ async function play() {
   ui.playing = true; updateTransport();
   await ensureLoop();
   if (!ui.playing || player) return;
+  if (!loop.buffer) { ui.playing = false; updateTransport(); toast("L'audio non è pronto: tocca ↻ per ricaricarlo"); return; }
   startPlayer(ui.startFrac || 0);
   requestFrame();
 }
@@ -2291,6 +2412,7 @@ function liveNote(inst, midi, vel) {
 
 let theremin = null;  // continuous voice while drawing in Ottica
 function thereminStart(inst, midi, amp) {
+  thereminStop();
   const ctx = audio();
   const o = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter();
   const kind = INST[inst].kind;
@@ -2645,13 +2767,13 @@ function layoutDraw() {
   dpr = Math.min(window.devicePixelRatio || 1, 2.5);
   W = r.width; H = r.height;
   for (const c of [canvas, boardCanvas, inkCanvas]) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
-  const side = $("#sidebar").getBoundingClientRect(), tools = $("#tools").getBoundingClientRect();
-  const narrow = innerWidth <= 760;
+  const side = $("#sidebar").getBoundingClientRect(), tools = $("#topRight").getBoundingClientRect();
+  const narrow = innerWidth <= 760 || $("#topRight").classList.contains("stacked");
   const keyW = narrow ? 34 : 46;
   const left = side.right - r.left + 14 + keyW;
   let right = W - 16;
   if (narrow) right = Math.min(right, tools.left - r.left - 10);
-  const top = (narrow ? 64 : 70) + 18;
+  const top = (innerWidth <= 760 ? 64 : 70) + 18;
   geo = { keyW, left, right, top, bottom: H - 84 };
   cacheBoard(); renderInk(); syncZoomPill(); requestFrame();
 }
@@ -2888,6 +3010,7 @@ function clearSelection() {
   sel = null; lasso = null; drag = null;
   $("#selBar").hidden = true;
   renderInk(); requestFrame();
+  if (ui.view === "midi") drawRoll(false);
 }
 function syncSelBar() {
   $("#selBar").hidden = !sel;
@@ -2924,6 +3047,8 @@ $("#selDel").onclick = () => {
 };
 $("#selDone").onclick = () => clearSelection();
 $("#updateNow").onclick = () => { save(); location.reload(); };
+$("#btnRefresh").onclick = () => restartAudio();
+$("#btnRollRec").onclick = () => setRecording(!ui.recording);
 
 let hover = null, current = null;
 function drawBoard() {
@@ -3369,6 +3494,7 @@ function frame() {
   frameQueued = false;
   if (viewDirty && ui.view === "draw") { viewDirty = false; cacheBoard(); renderInk(); syncZoomPill(); }
   if (liveRec) liveTick();
+  if (!videoWin.hidden) syncVideo(false);
   if (ui.view === "draw") drawBoard();
   else if (ui.view === "beat") markStep();
   else if (ui.view === "midi") drawRoll(false);
@@ -3401,7 +3527,7 @@ function buildBeatGrid() {
     const mute = document.createElement("button");
     mute.className = "mute"; mute.textContent = "M"; mute.title = "Muto";
     mute.setAttribute("aria-label", "Silenzia " + INST[id].name); mute.setAttribute("aria-pressed", String(tr.mute));
-    mute.onclick = () => { remember(); tr.mute = !tr.mute; mute.setAttribute("aria-pressed", String(tr.mute)); row.classList.toggle("row-off", tr.mute); changed(); };
+    mute.dataset.track = id;
     const pads = document.createElement("div");
     pads.className = "pads";
     for (let i = 0; i < b.steps; i++) {
@@ -3419,6 +3545,19 @@ function buildBeatGrid() {
   }
   lastStep = -1;
 }
+toggleStrip($("#beatGrid"), ".mute", {
+  get: el => !state.beat.tracks[el.dataset.track].mute,
+  set: (el, v) => { state.beat.tracks[el.dataset.track].mute = !v; el.setAttribute("aria-pressed", String(!v)); el.closest(".beat-row").classList.toggle("row-off", !v); },
+  solo: el => {  // only this track; again: all of them
+    const id = el.dataset.track, tr = state.beat.tracks;
+    const alone = !tr[id].mute && BEAT_TRACKS.every(k => k === id || tr[k].mute);
+    remember();
+    for (const k of BEAT_TRACKS) tr[k].mute = !(alone || k === id);
+    toast(alone ? "Tutte le tracce suonano" : `Senti solo ${INST[id].name}`);
+    buildBeatGrid(); changed();
+  },
+  done: () => changed(),
+});
 function paintPad(pad, v) { pad.classList.toggle("on", v === 1); pad.classList.toggle("acc", v === 2); pad.setAttribute("aria-pressed", String(v > 0)); }
 function setPad(pad, v) {
   const b = state.beat, tr = b.tracks[pad.dataset.track], i = +pad.dataset.i, arr = patOf(tr, b.edit);
@@ -3431,7 +3570,11 @@ function setPad(pad, v) {
 $("#beatGrid").addEventListener("pointerdown", e => {
   const pad = e.target.closest(".pad");
   if (!pad) return;
-  if (pencilOnly() && e.pointerType === "touch") { pencilHint(); return; }  // fingers scroll
+  if (pencilOnly() && e.pointerType === "touch") {  // fingers scroll (the pads themselves never scroll)
+    const sv = $("#viewBeat .scroll-view"), card = $("#beatGrid").parentElement;
+    beatPan = { id: e.pointerId, x: e.clientX, y: e.clientY, top: sv.scrollTop, left: card.scrollLeft, sv, card, moved: false };
+    return;
+  }
   e.preventDefault();
   const tr = state.beat.tracks[pad.dataset.track];
   remember();
@@ -3448,6 +3591,18 @@ document.addEventListener("pointermove", e => {
   setPad(pad, painting.value);
 });
 document.addEventListener("pointerup", () => { if (painting) { painting = null; changed(); } });
+let beatPan = null;
+document.addEventListener("pointermove", e => {
+  if (!beatPan || e.pointerId !== beatPan.id) return;
+  const dx = e.clientX - beatPan.x, dy = e.clientY - beatPan.y;
+  if (Math.hypot(dx, dy) > 6) beatPan.moved = true;
+  beatPan.sv.scrollTop = beatPan.top - dy; beatPan.card.scrollLeft = beatPan.left - dx;
+});
+for (const t of ["pointerup", "pointercancel"]) document.addEventListener(t, e => {
+  if (!beatPan || e.pointerId !== beatPan.id) return;
+  if (!beatPan.moved && t === "pointerup") pencilHint();
+  beatPan = null;
+});
 function previewDrum(id) {
   const tr = state.beat.tracks[id], ctx = audio();
   const g = ctx.createGain(); g.connect(liveOut); g.connect(liveSend);
@@ -3497,11 +3652,67 @@ function markStep() {
   if (step === lastStep) return;
   if (lastStep >= 0 && padEls[lastStep]) for (const p of padEls[lastStep]) p.classList.remove("now", "ghost");
   if (step >= 0 && padEls[step]) for (const p of padEls[step]) { p.classList.add("now"); p.classList.toggle("ghost", ghost); }
+  if (step >= 0 && ui.beatMode === "pads" && b.on) for (const el of $("#livePads").children) {
+    const tr = b.tracks[el.dataset.track];
+    if (!tr.mute && patOf(tr, playing === "-" ? b.edit : playing)[step]) { el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 90); }
+  }
   lastStep = step;
+}
+
+/* Pad: a drum kit to play live, and to record into the pattern while it loops. */
+const PAD_KEYS = ["a", "s", "d", "f", "g", "h", "j", "k"];
+let padRecording = false;
+function buildPads() {
+  const box = $("#livePads");
+  box.textContent = "";
+  BEAT_TRACKS.forEach((id, i) => {
+    const p = document.createElement("button");
+    p.className = "live-pad"; p.dataset.track = id; p.style.setProperty("--c", colorOf(id));
+    p.innerHTML = `<small>${PAD_KEYS[i] ? PAD_KEYS[i].toUpperCase() : ""}</small><span></span>`;
+    p.lastChild.textContent = INST[id].name;
+    box.append(p);
+  });
+}
+function hitPad(id, vel) {
+  const pad = $(`#livePads [data-track="${id}"]`);
+  if (pad) { pad.classList.add("hit"); setTimeout(() => pad.classList.remove("hit"), 110); }
+  const tr = state.beat.tracks[id], ctx = audio();
+  const g = ctx.createGain(); g.connect(liveOut); g.connect(liveSend);
+  scheduleDrum(ctx, g, id, ctx.currentTime + 0.003, vel * (tr.vol ?? 1), null, tr.tune || 0);
+  if (padRecording && ui.playing && player) {  // into the pattern, on the nearest step
+    const b = state.beat, abs = fraction() * loopBeats() * 4, i = Math.round(abs) % b.steps;
+    const arr = patOf(tr, b.edit);
+    arr[i] = vel > 0.85 ? 2 : 1;
+    if (b.steps === 16) arr[i + 16] = arr[i];
+    b.on = true; b.preset = "CUSTOM";
+    clearTimeout(hitPad.t); hitPad.t = setTimeout(() => changed(), 120);
+  }
+}
+$("#livePads").addEventListener("pointerdown", e => {
+  const pad = e.target.closest(".live-pad");
+  if (!pad) return;
+  e.preventDefault();
+  const r = pad.getBoundingClientRect();
+  const vel = e.pointerType === "pen" ? clamp((e.pressure || 0.6) * 1.2, 0.25, 1) : clamp(0.55 + 0.45 * (1 - (e.clientY - r.top) / r.height), 0.4, 1);
+  hitPad(pad.dataset.track, vel);
+});
+$("#padRec").onclick = () => {
+  padRecording = !padRecording;
+  $("#padRec").setAttribute("aria-pressed", String(padRecording));
+  if (padRecording) { remember(); if (!ui.playing) play(); $("#padStatus").textContent = `Registro nel pattern ${state.beat.edit}: ogni colpo va sul passo più vicino.`; }
+  else { $("#padStatus").textContent = "Suona i pad con le dita o la Pencil (tasti A S D F G H J K)."; if (ui.view === "beat") buildBeatGrid(); }
+};
+function setBeatMode(mode) {
+  ui.beatMode = mode;
+  $("#beatGridCard").hidden = mode !== "grid"; $("#beatPadsCard").hidden = mode !== "pads";
+  $("#viewBeat .beat-foot").hidden = mode !== "grid";
+  if (mode === "pads") buildPads(); else { if (padRecording) $("#padRec").click(); buildBeatGrid(); }
+  saveSoon();
 }
 
 function syncBeatControls() {
   const b = state.beat, box = $("#presets");
+  seg($("#segBeatMode"), ui.beatMode || "grid", setBeatMode);
   box.textContent = "";
   for (const [key, pr] of Object.entries(PRESETS)) {
     const item = document.createElement("button");
@@ -3620,10 +3831,28 @@ function drawRoll(rebuild) {
       c.fillText(loop.dirty ? "Leggo il disegno…" : "Nessuna nota: disegna, attiva un beat o suona la tastiera.", r.width / 2, r.height / 2);
       c.textAlign = "start";
     }
-    rollGeo = { w: r.width, h: r.height, dark: darkMode, d, left, right, top, bottom: r.height - 14 };
+    rollGeo = { w: r.width, h: r.height, dark: darkMode, d, left, right, top, bottom: r.height - 14, lo, rowH, L, melBottom: bottom, dTop: bottom + 10 };
   }
   const c = roll.getContext("2d");
   c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(rollBg, 0, 0);
+  if (sel || rollLasso) {
+    c.setTransform(rollGeo.d, 0, 0, rollGeo.d, 0, 0);
+    const hi = SYS.orange[darkMode ? 1 : 0];
+    if (sel) {
+      for (const n of rollNotes()) {
+        if (!sel.ids.has(n.sid)) continue;
+        const q = noteRect(n, sel.db * spb(), sel.dp);
+        c.fillStyle = hi; roundRect(c, q.x, q.y, q.w, q.h, 3); c.fill();
+      }
+      const bx = rollSelBox();
+      if (bx) { c.strokeStyle = SYS.blue[darkMode ? 1 : 0]; c.lineWidth = 1.5; c.setLineDash([6, 5]); roundRect(c, bx.x0, bx.y0, bx.x1 - bx.x0, bx.y1 - bx.y0, 8); c.stroke(); c.setLineDash([]); }
+    }
+    if (rollLasso && rollLasso.pts.length > 1) {
+      c.strokeStyle = colors.fg; c.globalAlpha = 0.7; c.lineWidth = 1.5; c.setLineDash([5, 5]);
+      c.beginPath(); rollLasso.pts.forEach((q, i) => i ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1])); c.stroke();
+      c.setLineDash([]); c.globalAlpha = 1;
+    }
+  }
   if (ui.playing || ui.startFrac > 0) {
     c.setTransform(rollGeo.d, 0, 0, rollGeo.d, 0, 0);
     const x = rollGeo.left + (ui.playing ? fraction() : ui.startFrac) * (rollGeo.right - rollGeo.left);
@@ -3632,11 +3861,64 @@ function drawRoll(rebuild) {
   }
 }
 
+/* MIDI: select notes with the lasso and drag them (they move the strokes they come from). */
+let rollLasso = null, rollDrag = null;
+const rollNotes = () => (loop.notes || []).filter(n => n.sid);
+function noteRect(n, dt = 0, dp = 0) {
+  const g = rollGeo, x = t => g.left + t / g.L * (g.right - g.left);
+  if (isDrum(n.inst)) { const lane = Math.max(0, BEAT_TRACKS.indexOf(n.inst)); return { x: x(n.start + dt) - 3, y: g.dTop + lane * 9 + 1, w: 6, h: 7 }; }
+  return { x: x(n.start + dt) + 0.5, y: g.melBottom - (n.midi + dp - g.lo + 1) * g.rowH + 1, w: Math.max(3, x(n.end) - x(n.start) - 1), h: Math.max(2, g.rowH - 2) };
+}
+function rollSelBox() {
+  const rs = rollNotes().filter(n => sel && sel.ids.has(n.sid)).map(n => noteRect(n, sel.db * spb(), sel.dp));
+  if (!rs.length) return null;
+  return { x0: Math.min(...rs.map(q => q.x)) - 8, x1: Math.max(...rs.map(q => q.x + q.w)) + 8, y0: Math.min(...rs.map(q => q.y)) - 8, y1: Math.max(...rs.map(q => q.y + q.h)) + 8 };
+}
+const rollXY = e => { const r = roll.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
 roll.addEventListener("pointerdown", e => {
   if (!rollGeo) return;
-  const x = e.clientX - roll.getBoundingClientRect().left;
+  const [x, y] = rollXY(e);
+  if (ui.rollTool === "lasso") {
+    try { roll.setPointerCapture(e.pointerId); } catch (err) { /* gone */ }
+    const bx = sel && rollSelBox();
+    if (bx && x >= bx.x0 && x <= bx.x1 && y >= bx.y0 && y <= bx.y1) { rollDrag = { x, y, id: e.pointerId }; return; }
+    if (sel) clearSelection();
+    rollLasso = { pts: [[x, y]], id: e.pointerId };
+    return;
+  }
   if (x >= rollGeo.left) { seek((x - rollGeo.left) / (rollGeo.right - rollGeo.left)); drawRoll(false); }
 });
+roll.addEventListener("pointermove", e => {
+  const [x, y] = rollXY(e);
+  if (rollLasso && e.pointerId === rollLasso.id) { rollLasso.pts.push([x, y]); drawRoll(false); return; }
+  if (rollDrag && e.pointerId === rollDrag.id) {
+    const step = state.grid || 0, g = rollGeo;
+    let db = (x - rollDrag.x) / ((g.right - g.left) / g.L) / spb();
+    if (step) db = Math.round(db / step) * step;
+    sel.db = db; sel.dp = Math.round((rollDrag.y - y) / g.rowH);
+    $("#midiStatus").textContent = `Sposta: ${sel.dp > 0 ? "+" : ""}${sel.dp} semitoni · ${db > 0 ? "+" : ""}${+db.toFixed(2)} battiti`;
+    drawRoll(false);
+  }
+});
+const rollEnd = e => {
+  if (rollLasso && e.pointerId === rollLasso.id) {
+    const poly = rollLasso.pts; rollLasso = null;
+    if (poly.length > 4) {
+      const ids = new Set(rollNotes().filter(n => { const q = noteRect(n); return inPolygon(q.x + q.w / 2, q.y + q.h / 2, poly) || inPolygon(q.x + 2, q.y + q.h / 2, poly); }).map(n => n.sid));
+      if (ids.size) { sel = { ids, db: 0, dp: 0 }; syncSelBar(); } else toast("Nessuna nota qui: fai un giro sopra le note.");
+    }
+    drawRoll(false);
+  }
+  if (rollDrag && e.pointerId === rollDrag.id) { rollDrag = null; applyMove(); $("#midiStatus").textContent = ""; drawRoll(false); }
+};
+roll.addEventListener("pointerup", rollEnd);
+roll.addEventListener("pointercancel", rollEnd);
+$("#btnRollLasso").onclick = () => {
+  ui.rollTool = ui.rollTool === "lasso" ? null : "lasso";
+  $("#btnRollLasso").setAttribute("aria-pressed", String(ui.rollTool === "lasso"));
+  if (ui.rollTool !== "lasso") clearSelection();
+  else toast("Fai un giro sopra le note, poi trascinale");
+};
 
 const KEYMAP = { KeyA: 0, KeyW: 1, KeyS: 2, KeyE: 3, KeyD: 4, KeyF: 5, KeyT: 6, KeyG: 7, KeyY: 8, KeyH: 9, KeyU: 10, KeyJ: 11, KeyK: 12, KeyO: 13, KeyL: 14, KeyP: 15, Semicolon: 16 };
 const heldNotes = new Map();
@@ -3694,6 +3976,7 @@ function recordNote(n) {
 function setRecording(on) {
   ui.recording = on;
   $("#btnRec").setAttribute("aria-pressed", String(on));
+  $("#btnRollRec").setAttribute("aria-pressed", String(on));
   if (on && !ui.playing) play();
 }
 const keysBox = $("#keys");
@@ -3811,7 +4094,82 @@ $("#exPng").onclick = async () => {
   const blob = await new Promise(res => out.toBlob(res, "image/png"));
   if (blob) saveFile(fileBase() + ".png", blob);
 };
-$("#fileJson").addEventListener("change", async e => {
+/* ---------- video in a floating window, in time with the loop ---------- */
+const videoEl = $("#videoEl"), videoWin = $("#videoWin");
+let videoUrl = null;
+function showVideo(blob, name, keep = true) {
+  if (videoUrl) URL.revokeObjectURL(videoUrl);
+  videoUrl = URL.createObjectURL(blob);
+  videoEl.src = videoUrl;
+  $("#videoName").textContent = name || "Video";
+  const r = ui.videoRect || { x: null, y: 140, w: 340 };
+  const app = $("#app").getBoundingClientRect();
+  videoWin.style.width = clamp(r.w, 180, app.width - 24) + "px";
+  videoWin.style.left = clamp(r.x ?? app.width - r.w - 24, 8, app.width - 180) + "px";
+  videoWin.style.top = clamp(r.y, 8, app.height - 120) + "px";
+  videoWin.hidden = false;
+  videoEl.onloadedmetadata = () => { fitVideo(); syncVideo(true); };
+  if (keep) { sampleStore.set("video", blob); ui.videoName = name; saveSoon(); }
+  $("#videoPip").hidden = !(document.pictureInPictureEnabled || (videoEl.webkitSupportsPresentationMode && videoEl.webkitSupportsPresentationMode("picture-in-picture")));
+}
+function fitVideo() {
+  const w = videoWin.offsetWidth, ar = videoEl.videoWidth ? videoEl.videoHeight / videoEl.videoWidth : 9 / 16;
+  videoWin.style.height = Math.round(w * ar + $("#videoBar").offsetHeight) + "px";
+}
+function saveVideoRect() { ui.videoRect = { x: videoWin.offsetLeft, y: videoWin.offsetTop, w: videoWin.offsetWidth }; saveSoon(); }
+/* The video follows the playhead: play, stop, seek and every turn of the loop. */
+function syncVideo(force) {
+  if (videoWin.hidden || !videoEl.duration) return;
+  const t = (ui.playing ? fraction() : ui.startFrac) * loopSec(), want = t % videoEl.duration;
+  if (ui.playing) {
+    if (force || Math.abs(videoEl.currentTime - want) > 0.25) videoEl.currentTime = want;
+    if (videoEl.paused) videoEl.play().catch(() => {});
+  } else {
+    if (!videoEl.paused) videoEl.pause();
+    if (force || Math.abs(videoEl.currentTime - want) > 0.05) videoEl.currentTime = want;
+  }
+}
+$("#fileVideo").addEventListener("change", e => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = ""; closePopovers();
+  if (!f) return;
+  showVideo(f, f.name.replace(/\.[^.]+$/, ""));
+  toast("Video aperto: segue il play. Trascinalo dalla barra, ridimensionalo dall'angolo.");
+});
+$("#videoClose").onclick = () => { videoEl.pause(); videoWin.hidden = true; videoEl.removeAttribute("src"); sampleStore.del("video"); ui.videoName = null; saveSoon(); };
+$("#videoSound").onclick = () => { videoEl.muted = !videoEl.muted; $("#videoSound").setAttribute("aria-pressed", String(!videoEl.muted)); };
+$("#videoPip").onclick = () => {
+  if (document.pictureInPictureElement) document.exitPictureInPicture();
+  else if (videoEl.requestPictureInPicture) videoEl.requestPictureInPicture().catch(() => toast("Picture in picture non disponibile qui."));
+  else if (videoEl.webkitSetPresentationMode) videoEl.webkitSetPresentationMode("picture-in-picture");
+};
+(() => {  // drag by the bar, resize from the corner
+  let g = null;
+  const down = (mode, e) => {
+    if (e.target.closest("button")) return;
+    e.preventDefault(); e.stopPropagation();
+    g = { mode, id: e.pointerId, x: e.clientX, y: e.clientY, l: videoWin.offsetLeft, t: videoWin.offsetTop, w: videoWin.offsetWidth };
+    try { e.target.setPointerCapture(e.pointerId); } catch (err) { /* gone */ }
+  };
+  $("#videoBar").addEventListener("pointerdown", e => down("move", e));
+  $("#videoResize").addEventListener("pointerdown", e => down("size", e));
+  document.addEventListener("pointermove", e => {
+    if (!g || e.pointerId !== g.id) return;
+    const app = $("#app").getBoundingClientRect(), dx = e.clientX - g.x, dy = e.clientY - g.y;
+    if (g.mode === "move") {
+      videoWin.style.left = clamp(g.l + dx, 4 - videoWin.offsetWidth / 2, app.width - videoWin.offsetWidth / 2) + "px";
+      videoWin.style.top = clamp(g.t + dy, 4, app.height - 60) + "px";
+    } else { videoWin.style.width = clamp(g.w + dx, 180, app.width - 16) + "px"; fitVideo(); }
+  });
+  const up = e => { if (g && e.pointerId === g.id) { g = null; saveVideoRect(); } };
+  document.addEventListener("pointerup", up); document.addEventListener("pointercancel", up);
+})();
+sampleStore.get("video").then(b => { if (b instanceof Blob && ui.videoName) showVideo(b, ui.videoName, false); }).catch(() => {});
+
+$("#actSave").onclick = () => { closePopovers(); saveFile(fileBase() + ".json", projectJson()); };
+$("#fileJson2").addEventListener("change", e => { closePopovers(); openProject(e); });
+$("#fileJson").addEventListener("change", e => openProject(e));
+async function openProject(e) {
   const f = e.target.files && e.target.files[0];
   e.target.value = "";
   if (!f) return;
@@ -3828,7 +4186,7 @@ $("#fileJson").addEventListener("change", async e => {
     samplesVersion++;
     remember(); Object.assign(state, s); afterBigChange(); toast("Progetto aperto: " + state.name);
   } catch (err) { toast("Progetto non leggibile: " + err.message); }
-});
+}
 
 /* ---------- chrome: sections, popovers, panels ---------- */
 
@@ -3844,12 +4202,13 @@ function showView(view, instant) {
     el.classList.toggle("enter", on && !instant);
     $(TAB[k]).setAttribute("aria-selected", String(on));
   }
-  $("#tools").hidden = view !== "draw"; $("#layersCap").hidden = view !== "draw";
-  if (view !== "draw") setCompact(false);
-  if (view !== "draw") clearSelection();
+  $("#tools").hidden = view !== "draw"; $("#midiTools").hidden = view !== "midi";
+  $("#layersCap").hidden = $("#colorCap").hidden = view !== "draw" && view !== "midi";
+  fitTabs();
+  clearSelection();
   movePill(); followPill();
   if (view === "draw") layoutDraw();
-  if (view === "beat") { buildBeatGrid(); syncBeatControls(); }
+  if (view === "beat") { buildBeatGrid(); syncBeatControls(); setBeatMode(ui.beatMode || "grid"); }
   if (view === "midi") { buildKeys(); syncMidiChip(); connectMidi(); drawRoll(true); if (loop.dirty || !loop.buffer) ensureLoop(); }
   if (view === "export") { drawWave(); if (loop.dirty || !loop.buffer) ensureLoop(); }
   if (view === "wave") renderWaveView();
@@ -3860,8 +4219,37 @@ function movePill() {
   pill.style.width = btn.offsetWidth + "px";
   pill.style.transform = `translateX(${btn.offsetLeft}px)`;
 }
-for (const [k, sel] of Object.entries(TAB)) $(sel).onclick = () => { setCompact(false); if (ui.view !== k) showView(k); };
+/* A tab: go to its section. The section you are in, tapped again: names on or off. */
+for (const [k, sel] of Object.entries(TAB)) $(sel).onclick = () => {
+  if (ui.view !== k) { showView(k); return; }
+  if (ui.tabsMode === "auto") setCompact(!$("#tabs").classList.contains("compact"));
+};
 /* Sections as icons only: while drawing ("auto"), always, or never (Impostazioni). */
+/* When the islands left and right leave no room, the names give way (except the current one). */
+function fitTabs() {
+  const tabs = $("#tabs");
+  tabs.classList.add("measure"); tabs.classList.remove("squeeze");
+  void tabs.offsetWidth;
+  const right = $("#topRight"), wasStacked = right.classList.contains("stacked");
+  right.classList.remove("stacked");
+  const rightOn = [...right.children].some(c => !c.hidden);
+  const clash = () => {
+    const t = $(".cap-sections").getBoundingClientRect(), l = $("#topLeft").getBoundingClientRect(), r = right.getBoundingClientRect();
+    return t.left < l.right + 8 || (rightOn && t.right > r.left - 8);
+  };
+  const sec = $(".cap-sections"), app = $("#app").getBoundingClientRect();
+  sec.style.left = ""; sec.style.transform = "";
+  if (clash()) {
+    tabs.classList.add("squeeze"); void tabs.offsetWidth;
+    const l = $("#topLeft").getBoundingClientRect();
+    if (innerWidth > 760 && sec.getBoundingClientRect().left < l.right + 8) { sec.style.left = (l.right - app.left + 10) + "px"; sec.style.transform = "none"; }
+    if (clash()) right.classList.add("stacked");
+  }
+  $("#app").classList.toggle("right-stacked", right.classList.contains("stacked") && rightOn);
+  void tabs.offsetWidth; tabs.classList.remove("measure");
+  movePill();
+  if (wasStacked !== right.classList.contains("stacked") && ui.view === "draw") layoutDraw();
+}
 function setCompact(on) {
   const tabs = $("#tabs");
   on = ui.tabsMode === "always" || (ui.tabsMode !== "never" && on);
@@ -3903,6 +4291,78 @@ function vslider(el, get, set, label, fmt) {
   return paint;
 }
 
+/* "?": what everything on this screen does. */
+const I = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const IC = {
+  brush: I('<path d="M19.5 3.5c-3 1.2-7.6 5.6-9.4 8.3l2.1 2.1c2.7-1.8 7.1-6.4 8.3-9.4z"/><path d="M9.6 12.7c-2.4.2-3.6 1.8-3.8 3.6-.2 1.6-.9 2.5-2.3 3.2 3.6.9 7.4-.2 8.2-4.7z"/>'),
+  eraser: I('<path d="M14.5 4.5l5 5-9 9H6l-2.5-2.5z"/><path d="M9 10l5 5M10.5 18.5H20"/>'),
+  lasso: I('<ellipse cx="12" cy="10" rx="8" ry="5.5" stroke-dasharray="3.2 3"/><path d="M8.5 15c-1.2 1.8-.8 4 1.6 5"/>'),
+  live: I('<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.6" fill="currentColor" stroke="none"/>'),
+  layers: I('<path d="M12 4l8.5 4.5L12 13 3.5 8.5z"/><path d="M3.5 12.5L12 17l8.5-4.5M3.5 16.5L12 21l8.5-4.5"/>'),
+  color: I('<circle cx="12" cy="12" r="8" fill="currentColor" stroke="none"/>'),
+  hand: I('<path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V11M11 10.5V4a1.5 1.5 0 0 1 3 0v6.5M14 10.5V5.5a1.5 1.5 0 0 1 3 0V13c0 4-2.5 7-6 7s-5.5-2.5-6.5-5l-1-2.5a1.5 1.5 0 0 1 2.7-1.3L8 13"/>'),
+  sliders: I('<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>'),
+  play: I('<path d="M7 4.5v15l12-7.5z"/>'),
+  pads: I('<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>'),
+  mute: I('<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M16 9.5l4 5M20 9.5l-4 5"/>'),
+  menu: I('<path d="M5 7h14M5 12h14M5 17h14"/>'),
+  keys: I('<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M8 4.5v9M12 4.5v15M16 4.5v9"/>'),
+  refresh: I('<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/>'),
+  wave: I('<path d="M2.5 12c2.4-7 4.8-7 7.2 0s4.8 7 7.2 0 3.6-5.3 4.6-3.5"/>'),
+  share: I('<path d="M12 15V3.5M7.5 8L12 3.5 16.5 8"/><path d="M8 11H6.5A2.5 2.5 0 0 0 4 13.5v4A2.5 2.5 0 0 0 6.5 20h11a2.5 2.5 0 0 0 2.5-2.5v-4a2.5 2.5 0 0 0-2.5-2.5H16"/>'),
+  video: I('<rect x="3" y="6" width="13" height="12" rx="2.5"/><path d="M16 10.5l5-3v9l-5-3"/>'),
+};
+const HELP = {
+  draw: { title: "Disegna", foot: "Il tratto è la musica: da sinistra a destra il tempo, in alto le note acute, lo spessore è il volume, l'opacità la brillantezza.", items: [
+    [IC.brush, "Pennello", "Disegna le note. Toccalo di nuovo per scegliere il pennello: ognuno cambia anche il suono."],
+    [IC.eraser, "Gomma", "Toccala di nuovo per i modi: tratto intero, punti, fino agli incroci."],
+    [IC.lasso, "Lazo", "Fai un giro sopra i tratti, poi trascinali: si agganciano a battiti e semitoni. Duplica, cambia strumento o elimina."],
+    [IC.live, "Live", "Appoggia la Pencil: il tempo scorre da solo, tu muovi solo in alto e in basso. Premi di più per suonare più forte."],
+    [IC.layers, "Livelli", "Ogni livello ha la sua lettura (quantizzata, ottica, legato, gesto), volume e riverbero. Tienilo premuto per il menu."],
+    [IC.color, "Colore = strumento", "Il pallino in alto a destra sceglie lo strumento. Tienilo premuto su un tuo suono per modificarlo o eliminarlo."],
+    [IC.hand, "Dita", "Due dita: annulla. Tre: ripeti. Quattro: play/stop. Pinch per ingrandire. Tieni premuto un tratto: contagocce."],
+    [IC.sliders, "Barra a sinistra", "Spessore (volume) e opacità (brillantezza) del pennello, annulla e ripeti."],
+    [IC.play, "Play e tempo", "Tocca i numeri di battuta per scegliere da dove parte. Metronomo e BPM in basso."],
+  ] },
+  beat: { title: "Beat", foot: "Il beat suona sotto il disegno, in loop, per tutta la durata della tavola.", items: [
+    [IC.pads, "Griglia o Pad", "In Griglia tocchi i passi (un tocco = colpo, due = accento) e trascini per dipingerne tanti. In Pad suoni la batteria dal vivo."],
+    [IC.mute, "M = muto", "Tocca: solo questa traccia. Tieni premuto: senti solo questa (di nuovo: tutte). Trascina sulle M: tutte uguali alla prima."],
+    [IC.menu, "Template", "Il menu ≡ in alto a destra carica Base, Hip-hop, House, Bossa, Trap o Vuoto."],
+    [IC.keys, "Pattern A e B", "Due varianti per traccia; la Sequenza sceglie quale suona in ogni battuta (A, B o pausa)."],
+    [IC.hand, "Nome della traccia", "Tocca: senti il suono. Tieni premuto: volume e intonazione."],
+  ] },
+  midi: { title: "MIDI", foot: "Qui vedi le note che il disegno produce, e puoi suonare e registrare con la tastiera.", items: [
+    [IC.lasso, "Seleziona note", "Fai un giro sulle note e trascinale: si spostano i tratti da cui vengono."],
+    [IC.live, "Registra", "Suona la tastiera sul vetro (o una tastiera MIDI): le note diventano tratti nel livello attivo."],
+    [IC.refresh, "Ricarica l'audio", "Se non senti più niente, ricrea l'audio e rilegge tutto il disegno."],
+    [IC.layers, "Livelli e strumento", "Gli stessi del Disegna: scegli dove registrare e con quale suono."],
+    [IC.share, "Importa MIDI", "Apri un file .mid (anche da GarageBand): ogni traccia diventa un livello."],
+  ] },
+  wave: { title: "Onda", foot: "Come la colonna sonora ottica di Norman McLaren: il suono disegnato.", items: [
+    [IC.wave, "Un giro dell'onda", "Da sinistra a destra disegni una sola vibrazione: il suono la ripete centinaia di volte al secondo. La nota la scegli poi nel Disegna."],
+    [IC.layers, "Sopra e sotto", "Il bordo alto è l'orecchio sinistro, quello basso il destro; il riempimento tra i due è il suono. Il bordo che manca è lo specchio dell'altro."],
+    [IC.brush, "Tratto o Pieno", "Con Tratto le linee sono i bordi; con Pieno ogni linea diventa una forma. Puoi passare dall'uno all'altro: il disegno resta."],
+    [IC.sliders, "Il timbro è la forma", "Curve morbide suonano dolci, angoli e scalini brillanti. Una linea piatta non suona."],
+    [IC.hand, "Dita", "Due dita annullano, tre ripetono. Con la Pencil, le dita non disegnano."],
+  ] },
+  export: { title: "Esporta", foot: "Dentro claude.ai alcuni formati non si possono salvare: dall'app installata sì.", items: [
+    [IC.share, "Audio e MIDI", "Un .zip con il mix WAV, il MIDI con una traccia per livello e il progetto. Anche tracce separate per GarageBand."],
+    [IC.video, "Video", "Dal menu ⋯ in alto a sinistra puoi importare un video, che resta in una finestra mobile sopra la tavola."],
+    [IC.menu, "Progetto", "Salva composizione e Apri composizione sono anche nel menu ⋯."],
+  ] },
+};
+function showHelp() {
+  closePopovers();
+  const h = HELP[ui.view] || HELP.draw;
+  $("#helpTitle").textContent = "Come funziona: " + h.title;
+  $("#helpBody").innerHTML = h.items.map(([icon, t, d]) => `<div class="help-item"><div class="hi">${icon}</div><div><b>${t}</b><span>${d}</span></div></div>`).join("");
+  $("#helpFoot").textContent = h.foot;
+  $("#help").hidden = false;
+}
+$("#btnHelp").onclick = e => { e.stopPropagation(); showHelp(); };
+$("#helpDone").onclick = () => { $("#help").hidden = true; };
+$("#help").addEventListener("pointerdown", e => { if (e.target === $("#help")) $("#help").hidden = true; });
+
 const POPS = { btnActions: "popActions", btnBoard: "popBoard", btnLayers: "popLayers", btnInst: "popInst", btnPresets: "popPresets" };
 function openPopover(btnId, popId = POPS[btnId]) {
   const wasOpen = ui.open === popId;
@@ -3931,6 +4391,7 @@ function openPopover(btnId, popId = POPS[btnId]) {
 }
 function closePopovers() {
   if (rec) stopRecording();
+  $("#help").hidden = true; closeContextMenu();
   $("#scrim").hidden = true;
   $("#popRec").hidden = true;
   $("#popBrush").hidden = true; $("#btnBrush").setAttribute("aria-expanded", "false");
@@ -3942,7 +4403,7 @@ function closePopovers() {
 }
 for (const btnId of Object.keys(POPS)) $("#" + btnId).addEventListener("click", e => { e.stopPropagation(); openPopover(btnId); });
 document.addEventListener("pointerdown", e => {
-  if (ui.open && !e.target.closest(".popover") && !e.target.closest("#" + ui.openBtn)) closePopovers();
+  if (ui.open && !e.target.closest(".popover") && !e.target.closest(".ctx-menu") && !e.target.closest("#" + ui.openBtn)) closePopovers();
 });
 
 function seg(el, value, onPick) {
@@ -3969,7 +4430,78 @@ function pressable(el, onTap, onLong) {
   el.addEventListener("contextmenu", e => e.preventDefault());
 }
 
+/* Touch and hold anything with options (a layer, a sound, a wave): a small menu right by the finger. */
+let ctxMenu = null;
+function contextMenu(anchor, title, items) {
+  closeContextMenu();
+  const m = document.createElement("div"); m.className = "ctx-menu glass";
+  if (title) { const h = document.createElement("div"); h.className = "ctx-title"; h.textContent = title; m.append(h); }
+  for (const it of items) {
+    const b = document.createElement("button");
+    b.className = "menu-item" + (it.danger ? " danger" : ""); b.disabled = !!it.disabled;
+    b.innerHTML = `<span></span>` + (it.note ? `<small></small>` : "");
+    b.firstChild.textContent = it.label; if (it.note) b.lastChild.textContent = it.note;
+    b.onclick = ev => { ev.stopPropagation(); closeContextMenu(); it.fn(); };
+    m.append(b);
+  }
+  $("#app").append(m);
+  const app = $("#app").getBoundingClientRect(), r = anchor.getBoundingClientRect(), mw = m.offsetWidth, mh = m.offsetHeight;
+  let top = r.bottom - app.top + 6;
+  if (top + mh > app.height - 12) top = Math.max(12, r.top - app.top - mh - 6);
+  m.style.left = clamp(r.left - app.left + Math.min(24, r.width / 3), 12, app.width - mw - 12) + "px";
+  m.style.top = top + "px";
+  ctxMenu = m;
+}
+function closeContextMenu() { if (ctxMenu) { ctxMenu.remove(); ctxMenu = null; } }
+document.addEventListener("pointerdown", e => { if (ctxMenu && !e.target.closest(".ctx-menu")) closeContextMenu(); }, true);
+
+/* On/off buttons in a list (mute, speaker, eye) behave the same everywhere:
+   tap = this one; hold = only this one (again: all); drag across = set all you touch like the first. */
+function toggleStrip(root, selector, api) {
+  let g = null;
+  root.addEventListener("pointerdown", e => {
+    const el = e.target.closest(selector);
+    if (!el || !root.contains(el)) return;
+    e.stopPropagation(); e.preventDefault();
+    g = { el, id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, held: false, value: !api.get(el), touched: new Set([el]) };
+    const mine = g;
+    g.timer = setTimeout(() => { if (g === mine && !mine.moved) { mine.held = true; api.solo(el); } }, 450);
+  });
+  document.addEventListener("pointermove", e => {
+    if (!g || e.pointerId !== g.id || g.held) return;
+    if (!g.moved) {
+      if (Math.hypot(e.clientX - g.x, e.clientY - g.y) < 8) return;
+      g.moved = true; clearTimeout(g.timer);
+      remember(); api.set(g.el, g.value);
+    }
+    const hit = document.elementFromPoint(e.clientX, e.clientY), el = hit && hit.closest(selector);
+    if (el && root.contains(el) && !g.touched.has(el)) { g.touched.add(el); api.set(el, g.value); }
+  });
+  const end = e => {
+    if (!g || e.pointerId !== g.id) return;
+    const done = g; g = null; clearTimeout(done.timer);
+    if (!done.moved && !done.held && e.type === "pointerup") { remember(); api.set(done.el, !api.get(done.el)); }
+    if (!done.held) api.done();
+  };
+  document.addEventListener("pointerup", end);
+  document.addEventListener("pointercancel", end);
+  root.addEventListener("click", e => { if (e.target.closest(selector)) e.stopPropagation(); }, true);
+  root.addEventListener("contextmenu", e => { if (e.target.closest(selector)) e.preventDefault(); });
+}
+
 /* Long press: only this layer (seen or heard); again: all of them. */
+const layerOf = el => state.layers.find(l => l.id === el.dataset.layer);
+toggleStrip($("#layerList"), ".lbtn[data-kind]", {
+  get: el => { const l = layerOf(el); return el.dataset.kind === "see" ? l.visible : !l.muted; },
+  set: (el, v) => {
+    const l = layerOf(el);
+    if (el.dataset.kind === "see") { l.visible = v; el.innerHTML = v ? ICON_EYE : ICON_EYE_OFF; }
+    else { l.muted = !v; el.innerHTML = v ? ICON_SPK : ICON_SPK_OFF; }
+    el.setAttribute("aria-pressed", String(v));
+  },
+  solo: el => solo(layerOf(el), el.dataset.kind),
+  done: () => { changed({ ink: true }); renderLayers(); },
+});
 function solo(layer, what) {
   const on = what === "see" ? l => l.visible : l => !l.muted;
   const set = (l, v) => { if (what === "see") l.visible = v; else l.muted = !v; };
@@ -4066,8 +4598,7 @@ function attachSwipe(wrap, row, layer) {
       reordering = false; swipedAt = performance.now();
       if (Math.abs(done.dy || 0) < 8) {  // held still: the layer menu, as in Procreate
         box().classList.remove("lifted"); box().style.transform = "";
-        ui.layerMenu = ui.layerMenu === layer.id ? null : layer.id; ui.layerOpen = null;
-        renderLayers();
+        showLayerMenu(layer, row);
         return;
       }
       const boxes = [...$("#layerList").querySelectorAll(".layer")], el = box(), from = boxes.indexOf(el);
@@ -4156,19 +4687,19 @@ function renderLayers() {
     spk.className = "lbtn"; spk.innerHTML = layer.muted ? ICON_SPK_OFF : ICON_SPK;
     spk.setAttribute("aria-pressed", String(!layer.muted));
     spk.setAttribute("aria-label", (layer.muted ? "Fai suonare " : "Silenzia ") + layer.name + " (tieni premuto: solo questo)");
-    pressable(spk, () => { remember(); layer.muted = !layer.muted; changed(); renderLayers(); }, () => solo(layer, "hear"));
+    spk.dataset.layer = layer.id; spk.dataset.kind = "hear";
     const eye = document.createElement("button");
     eye.className = "lbtn"; eye.innerHTML = layer.visible ? ICON_EYE : ICON_EYE_OFF;
     eye.setAttribute("aria-pressed", String(layer.visible));
     eye.setAttribute("aria-label", (layer.visible ? "Nascondi " : "Mostra ") + layer.name + " (tieni premuto: solo questo)");
-    pressable(eye, () => { remember(); layer.visible = !layer.visible; changed({ ink: true }); renderLayers(); }, () => solo(layer, "see"));
+    eye.dataset.layer = layer.id; eye.dataset.kind = "see";
     row.append(thumbBox, main);
     if (active) row.insertAdjacentHTML("beforeend", ICON_CHEV);
     row.append(spk, eye);
     row.onclick = () => {
       if (performance.now() - swipedAt < 350) return;
       if (ui.swipeOpen) { ui.swipeOpen = null; renderLayers(); return; }
-      if (ui.layerMenu) { ui.layerMenu = null; renderLayers(); return; }
+
       if (!active) { state.active = layer.id; ui.layerOpen = null; saveSoon(); }
       else ui.layerOpen = open ? null : layer.id;
       renderLayers();
@@ -4177,7 +4708,7 @@ function renderLayers() {
     wrap.append(bg, row);
     box.append(wrap);
     if (open) box.append(layerDetail(layer));
-    if (ui.layerMenu === layer.id) box.append(layerMenu(layer));
+
     list.append(box);
   }
   if (ui.picked.size) list.append(pickBar());
@@ -4210,16 +4741,10 @@ function layerDetail(layer) {
   d.append(name, modes, help, vol, pan, rev, tip);
   return d;
 }
-/* Touch and hold a layer: its actions. */
-function layerMenu(layer) {
-  const m = document.createElement("div"); m.className = "layer-menu";
-  const i = state.layers.indexOf(layer), below = state.layers[i - 1];
-  const item = (label, fn, opts = {}) => {
-    const b = document.createElement("button"); b.className = "menu-item" + (opts.danger ? " danger" : ""); b.disabled = !!opts.disabled;
-    b.innerHTML = `<span>${label}</span>` + (opts.note ? `<small>${opts.note}</small>` : "");
-    b.onclick = ev => { ev.stopPropagation(); ui.layerMenu = null; fn(); };
-    m.append(b);
-  };
+/* Touch and hold a layer: its actions, by the finger. */
+function showLayerMenu(layer, anchor) {
+  const i = state.layers.indexOf(layer), below = state.layers[i - 1], items = [];
+  const item = (label, fn, opts = {}) => items.push({ label, fn, ...opts });
   item("Duplica", () => {
     if (state.layers.length >= 12) { toast("Massimo 12 livelli."); renderLayers(); return; }
     remember();
@@ -4237,7 +4762,7 @@ function layerMenu(layer) {
   }, { disabled: !below, note: below ? "in «" + below.name + "»" : "nessun livello sotto" });
   item("Cancella", () => clearLayer(layer), { note: "toglie i tratti, il livello resta" });
   item("Elimina livello", () => deleteLayers([layer.id]), { danger: true, disabled: state.layers.length < 2, note: state.layers.length < 2 ? "serve almeno un livello" : "" });
-  return m;
+  contextMenu(anchor, layer.name, items);
 }
 $("#btnAddLayer").onclick = () => {
   if (state.layers.length >= 12) { toast("Massimo 12 livelli."); return; }
@@ -4273,7 +4798,10 @@ function renderInstruments() {
     const nm = document.createElement("span"); nm.textContent = w.name;
     b.append(sw, nm);
     pressable(b, () => { ui.inst = w.id; setTool("brush"); renderInstruments(); syncChrome(); syncMidiChip(); saveSoon(); previewNote(w.id, 60, 0.8, 1); },
-      () => { ui.wave = w.id; showView("wave"); });
+      () => contextMenu(b, w.name, [
+        { label: "Modifica", note: "apre Onda", fn: () => { ui.wave = w.id; showView("wave"); } },
+        { label: "Elimina", danger: true, fn: () => deleteWave(w.id) },
+      ]));
     box.append(b);
   }
   const add = document.createElement("button");
@@ -4297,7 +4825,10 @@ function renderSamples() {
     pressable(b, () => {
       ui.inst = m.id; setTool("brush"); renderInstruments(); syncChrome(); syncMidiChip(); saveSoon();
       previewNote(m.id, m.root, 0.8, 1);
-    }, () => editSample(m.id));
+    }, () => contextMenu(b, m.name, [
+      { label: "Modifica", note: "nome, nota base", fn: () => editSample(m.id) },
+      { label: "Elimina", danger: true, fn: () => deleteSample(m.id) },
+    ]));
     box.append(b);
   }
   const rec = document.createElement("button");
@@ -4458,8 +4989,9 @@ $("#smpSave").onclick = async () => {
   closePopovers(); setTool("brush"); syncChrome(); syncMidiChip(); changed({ ink: true });
   toast(`«${name}» è uno strumento: disegna con lui`);
 };
-$("#smpDelete").onclick = async () => {
-  const id = review.editing, m = state.samples.find(x => x.id === id);
+$("#smpDelete").onclick = () => deleteSample(review.editing);
+async function deleteSample(id) {
+  const m = state.samples.find(x => x.id === id);
   if (!m) return;
   remember();
   let moved = 0;
@@ -4470,7 +5002,7 @@ $("#smpDelete").onclick = async () => {
   samplesVersion++;
   closePopovers(); syncChrome(); syncMidiChip(); changed({ ink: true });
   toast(`Eliminato «${m.name}»` + (moved ? ` · ${moved} tratti ora suonano Piano elettrico` : ""));
-};
+}
 
 /* ---------- Onda view ---------- */
 
@@ -4514,8 +5046,7 @@ function renderWaveView() {
   $("#waveName").value = w.name;
   $("#waveSym").checked = w.sym;
   seg($("#segWaveBrush"), w.mode, v => { if (w.mode === v) return; remember(); w.mode = v; waveChanged(); });
-  $("#waveHelp").hidden = !ui.waveHelp && w.strokes.length > 0;
-  $("#waveHelpBtn").setAttribute("aria-pressed", String(!$("#waveHelp").hidden));
+
   drawWaveEditor(); drawScope();
 }
 function sizeCanvas(cv) {
@@ -4638,7 +5169,7 @@ $("#waveName").addEventListener("change", e => {
 });
 $("#waveSym").addEventListener("change", e => { remember(); currentWave().sym = e.target.checked; waveChanged(); });
 $("#waveUndo").onclick = () => undo();
-$("#waveHelpBtn").onclick = () => { ui.waveHelp = $("#waveHelp").hidden; renderWaveView(); };
+
 $("#waveClear").onclick = () => { remember(); currentWave().strokes = []; waveChanged(); };
 const SHAPES = {
   sine: u => Math.sin(2 * Math.PI * u),
@@ -4676,15 +5207,17 @@ $("#waveUse").onclick = () => {
   ui.inst = w.id; setTool("brush"); syncChrome(); syncMidiChip(); saveSoon();
   showView("draw"); toast(`Disegni con «${w.name}»`);
 };
-$("#waveDelete").onclick = () => {
-  const w = currentWave(); if (!w) return;
+$("#waveDelete").onclick = () => { const w = currentWave(); if (w) deleteWave(w.id); };
+function deleteWave(id) {
+  const w = state.waves.find(x => x.id === id); if (!w) return;
   remember();
   let moved = 0;
   for (const st of state.strokes) if (st.inst === w.id) { st.inst = "EPIANO"; moved++; }
   state.waves = state.waves.filter(x => x.id !== w.id);
   if (ui.inst === w.id) { ui.inst = "EPIANO"; syncChrome(); syncMidiChip(); }
   ui.wave = null; samplesVersion++;
-  changed({ ink: true }); renderWaveView();
+  changed({ ink: true });
+  if (ui.view === "wave") renderWaveView(); else if (!$("#popInst").hidden) renderInstruments();
   toast(`Eliminata «${w.name}»` + (moved ? ` · ${moved} tratti ora suonano Piano elettrico` : ""));
 };
 addEventListener("resize", () => { if (ui.view === "wave") { drawWaveEditor(); drawScope(); } });
@@ -4797,12 +5330,22 @@ function syncChrome() {
   $("#btnInst").setAttribute("aria-label", "Strumento: " + INST[ui.inst].name);
   $("#bpmLabel").firstChild.textContent = state.bpm;
   $("#clockSub").textContent = `di ${state.bars} battute`;
-  const name = $("#docName");
-  name.textContent = state.name + " ";
-  const small = document.createElement("small");
-  small.textContent = `${noteName(state.root, false)} ${SCALES[state.scale].name.toLowerCase()}` + (state.example ? " · esempio" : "");
-  name.append(small);
+  $("#docName").textContent = state.name;
 }
+/* Tap the name to rename the composition. */
+$("#docName").onclick = () => {
+  const inp = $("#docInput");
+  $("#docName").hidden = true; inp.hidden = false; inp.value = state.name; inp.focus(); inp.select();
+};
+function endRename(keep) {
+  const inp = $("#docInput");
+  if (inp.hidden) return;
+  if (keep) { state.name = inp.value.trim().slice(0, 60) || state.name; state.example = false; saveSoon(); }
+  inp.hidden = true; $("#docName").hidden = false; syncChrome();
+  if (ui.view === "export") syncExport();
+}
+$("#docInput").addEventListener("keydown", e => { if (e.key === "Enter") endRename(true); else if (e.key === "Escape") endRename(false); e.stopPropagation(); });
+$("#docInput").addEventListener("blur", () => endRename(true));
 
 const barsLabel = () => state.bars + (state.bars === 1 ? " battuta" : " battute") + ` · ${loopSec().toFixed(1)} s`;
 function showSetCat(cat) {
@@ -4842,6 +5385,7 @@ const settingSyncs = [
   bindRange("inMaster", () => ui.master, v => { ui.master = v; if (liveOut) liveOut.gain.setTargetAtTime(0.95 * v, live.currentTime, 0.02); }, pctOf),
   bindRange("inMetroVol", () => ui.metroVol, v => { ui.metroVol = v; setMetro(); }, pctOf),
 ];
+$("#setRestart").onclick = () => { closePopovers(); restartAudio(); };
 $("#swDrawSound").onchange = e => { ui.drawSound = e.target.checked; saveSoon(); };
 $("#swCountIn").onchange = e => { ui.countIn = e.target.checked; saveSoon(); };
 function syncBoardForm() {
@@ -4911,6 +5455,7 @@ document.addEventListener("keydown", e => {
   if (e.code === "Space") { e.preventDefault(); if (ui.playing) stop(); else play(); return; }
   if (ui.view === "midi" && e.code in KEYMAP) { e.preventDefault(); if (!e.repeat) noteOn("k" + e.code, ui.kbBase + KEYMAP[e.code], 0.8); return; }
   if (ui.view === "midi" && (e.key === "z" || e.key === "x")) { ui.kbBase = clamp(ui.kbBase + (e.key === "x" ? 12 : -12), 24, 96); buildKeys(); return; }
+  if (ui.view === "beat" && ui.beatMode === "pads" && PAD_KEYS.includes(e.key.toLowerCase()) && !e.repeat && !mod) { hitPad(BEAT_TRACKS[PAD_KEYS.indexOf(e.key.toLowerCase())], 0.85); return; }
   if (e.key === "1") showView("draw");
   else if (e.key === "2") showView("beat");
   else if (e.key === "3") showView("midi");
@@ -4944,7 +5489,7 @@ const hashView = { disegna: "draw", beat: "beat", midi: "midi", onda: "wave", es
 showView(hashView || ui.view, true);
 setCompact(false);
 new ResizeObserver(() => {
-  movePill();
+  fitTabs();
   if (ui.view === "draw") layoutDraw();
   if (ui.view === "midi") { buildKeys(); drawRoll(true); }
   if (ui.view === "export") drawWave();
@@ -4952,7 +5497,7 @@ new ResizeObserver(() => {
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(movePill);
 downloadsCap = inArtifact ? window.claude.use("downloads").catch(() => null) : Promise.resolve(null);
 $("#exSingles").hidden = inArtifact;  // .wav and .mid alone cannot be saved from claude.ai
-downloadsCap.then(dl => { if (!dl && inArtifact) { for (const id of ["#exZip", "#exPng", "#exJson"]) $(id).disabled = true; $("#exNote").hidden = false; } });
+downloadsCap.then(dl => { if (!dl && inArtifact) { for (const id of ["#exZip", "#exPng", "#exJson", "#actSave"]) $(id).disabled = true; $("#exNote").hidden = false; } });
 // Installed on the Home Screen: works offline (service worker) and keeps its data.
 if (!inArtifact && "serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
   const hadController = !!navigator.serviceWorker.controller;
@@ -4966,7 +5511,7 @@ if (!inArtifact && "serviceWorker" in navigator && (location.protocol === "https
 // No page zoom from pinches on the interface (Safari).
 document.addEventListener("gesturestart", e => e.preventDefault());
 
-window.__gp2m = { waveData, screenOf: (b, p) => [xOf(b), yOf(p)], geoTop: () => geo.top, state: () => state, ui, renderAll, reviewAudio, detectPitch, sampleBuffers, deleteLayers, collectParts, tiled, allNotes, midiBytes, wavBytes, zipBlob, parseMidi, importMidi, beatHits, showView, loop, ensureLoop };
+window.__gp2m = { showVideo, restartAudio, waveData, screenOf: (b, p) => [xOf(b), yOf(p)], geoTop: () => geo.top, state: () => state, ui, renderAll, reviewAudio, detectPitch, sampleBuffers, deleteLayers, collectParts, tiled, allNotes, midiBytes, wavBytes, zipBlob, parseMidi, importMidi, beatHits, showView, loop, ensureLoop };
 </script>
 
 </body>

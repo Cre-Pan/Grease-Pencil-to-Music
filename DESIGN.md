@@ -105,9 +105,8 @@ Note tecniche su Blender 5.2 emerse durante lo sviluppo:
 ### Web app
 
 - ~~Pennelli con effetto sul suono, lazo, beat A/B, sezione Onda~~.
-- **Video in picture-in-picture**: importare un video e tenerlo in una finestra mobile sopra
-  la tavola, per disegnare la musica mentre lo si guarda (sincronizzato col play, esportato
-  con l'audio). Da valutare: peso dei video nell'app offline e supporto PiP di Safari.
+- ~~Video in una finestra mobile sincronizzata col play~~. Prossimo passo: esportare il video
+  con la musica disegnata (MediaRecorder) e scegliere da quale secondo del video parte il loop.
 - Onda che cambia nel tempo (più cicli disegnati, interpolati lungo la nota).
 - Pennelli importati da librerie libere (MyPaint, CC0).
 

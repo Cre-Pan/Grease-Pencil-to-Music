@@ -201,9 +201,29 @@ semitoni), poi Duplica, Strumento attuale, Elimina o Fine.
 con il play; muovi la Pencil solo in alto e in basso per la nota, premi di più per suonare più
 forte, alzala per una pausa. Ogni giro del loop diventa un nuovo tratto.
 
-**Livelli**: sono nella loro isola, a destra degli strumenti. Tieni premuto un livello per
-*Duplica*, *Unisci sotto*, *Cancella* (toglie i tratti, il livello resta) ed *Elimina livello*;
-tienilo e trascinalo per spostarlo. Con un solo livello, scorrere a sinistra lo cancella.
+**In alto**: a sinistra il menu ⋯ (Nuova, Salva, Apri composizione, Importa un video, Carica
+l'esempio), le Impostazioni e il nome (toccalo per rinominare); a parte il **?**, che spiega
+ogni cosa della schermata in cui sei. A destra tre isole: strumenti, **Livelli** e il colore
+(lo strumento). Se manca spazio le sezioni mostrano solo le icone e le isole si mettono in
+colonna.
+
+**Livelli**: tieni premuto un livello per *Duplica*, *Unisci sotto*, *Cancella* (toglie i
+tratti, il livello resta) ed *Elimina livello*, in un menu vicino al dito; tienilo e
+trascinalo per spostarlo. Con un solo livello, scorrere a sinistra lo cancella.
+
+**Gesti uguali ovunque** per i pulsanti acceso/spento (M del beat, altoparlante e occhio dei
+livelli): tocco = solo quello; tieni premuto = solo quello acceso, gli altri spenti (di nuovo:
+tutti accesi); trascina in verticale = tutti quelli che tocchi come il primo. Tenere premuto
+un livello, un tuo suono o un'onda apre il suo menu vicino al dito.
+
+**Video**: *⋯ → Importa un video* lo apre in una finestra mobile sopra la tavola, che segue
+play, stop e ogni giro del loop. Si sposta dalla barra, si ridimensiona dall'angolo; l'audio
+del video è spento finché non lo accendi; dove il browser lo permette c'è anche il picture in
+picture di sistema.
+
+**MIDI**: in alto a destra *Seleziona* (fai un giro sulle note e trascinale: si spostano i
+tratti da cui vengono), *Registra* e **↻ Ricarica l'audio** (se non senti più niente), più
+Livelli e strumento.
 
 **Impostazioni** (icona con i cursori): un pannello grande con le categorie Tavola, Pennello e
 Pencil (sensibilità della pressione con la curva, spessore minimo, *Solo Pencil*), Audio,
@@ -213,7 +233,9 @@ Interfaccia (tema, nomi delle note, sezioni come icone) e Info con le scorciatoi
 Beat, ingrandiscono la tavola e fanno i gesti.
 
 **Beat**: l'interruttore accanto al titolo accende o spegne il beat; i template sono nel menu
-≡ a destra. Con *Pattern A e B* acceso ogni traccia ha due pattern: *Modifica A | B* sceglie
+≡ a destra. *Griglia | Pad*: in Pad suoni la batteria dal vivo su otto pad colorati (anche con
+i tasti A S D F G H J K) e con *Registra nel pattern* i colpi entrano nel passo più vicino
+mentre il loop gira. Con *Pattern A e B* acceso ogni traccia ha due pattern: *Modifica A | B* sceglie
 quale modifichi (il pallino verde dice quale sta suonando), *Copia A in B* parte da una copia,
 la *Sequenza* dice quale suona in ogni battuta (tocca: A → B → pausa). I template mettono in
 B una variazione con un fill e suonano A A A B.
@@ -222,8 +244,8 @@ B una variazione con un fill e suonano A A A B.
 bordo sopra della forma è il canale sinistro, quello sotto il destro; il riempimento tra i
 due è il suono. *Tratto* disegna un bordo (sopra o sotto, l'altro è lo specchio), *Pieno*
 chiude ogni linea in una forma che dà entrambi i bordi; passando dall'uno all'altro il disegno
-resta. *Simmetrico* fa sentire lo stesso suono nelle due orecchie. *Come funziona?* spiega i
-passi; due dita annullano, tre ripetono. *Disegna con questa onda* la usa come strumento; le onde sono anche in *Strumento →
+resta. *Simmetrico* fa sentire lo stesso suono nelle due orecchie; il **?** in alto spiega i passi;
+due dita annullano, tre ripetono. *Disegna con questa onda* la usa come strumento; le onde sono anche in *Strumento →
 Onde disegnate* ed entrano nel progetto .json.
 
 ### Gesti della web app
@@ -239,7 +261,8 @@ Onde disegnate* ed entrano nel progetto .json.
 | Occhio o altoparlante tenuti premuti | solo quel livello visibile / udibile |
 | Nome di una traccia del beat tenuto premuto | volume e intonazione |
 | Pennello o gomma già attivi, tocco | libreria dei pennelli / modi della gomma |
-| Livello tenuto premuto | Duplica, Unisci sotto, Cancella, Elimina |
+| Livello, suono o onda tenuti premuti | menu vicino al dito |
+| M / altoparlante / occhio: tocco · tieni · trascina | solo questo · solo questo acceso · tutti come il primo |
 | Lazo: cerchia, poi trascina | sposta i tratti scelti |
 
 ## Limiti noti (0.0.x)
