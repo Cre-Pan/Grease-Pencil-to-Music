@@ -364,6 +364,25 @@ label.btn input { position: absolute; width: 1px; height: 1px; opacity: 0; point
 .beat-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 6px 18px; align-items: center; }
 .ctl { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; font-size: 14px; min-width: 0; }
 .ctl .v { color: var(--fg-2); font-variant-numeric: tabular-nums; font-size: 13px; min-width: 38px; text-align: right; }
+.wave-head { padding: 16px 18px; display: grid; gap: 12px; }
+.wave-head h2 { font-size: 28px; font-weight: 700; letter-spacing: -0.025em; }
+.wave-head h2 small { font-size: 15px; color: var(--fg-2); font-weight: 500; letter-spacing: -0.01em; margin-left: 8px; }
+.wave-list { display: flex; gap: 8px; flex-wrap: wrap; }
+.wave-chip { display: inline-flex; align-items: center; gap: 8px; }
+.wave-chip i { width: 12px; height: 12px; border-radius: 4px; }
+.wave-editor { padding: 14px; display: grid; gap: 12px; }
+.wave-tools { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; font-size: 14px; }
+.wave-tools .title-input { flex: 1 1 160px; min-width: 0; font-size: 20px; }
+.wave-stage { position: relative; }
+#waveCanvas { display: block; width: 100%; height: min(40vh, 400px); border-radius: 18px; background: var(--fill); touch-action: none; cursor: crosshair; }
+#waveScope { display: block; width: 100%; height: 96px; border-radius: 14px; background: var(--fill); }
+.wave-side { position: absolute; left: 14px; font-size: 12px; font-weight: 650; letter-spacing: 0.02em; pointer-events: none; }
+.wave-side.l { top: 10px; color: var(--blue); }
+.wave-side.r { bottom: 10px; color: var(--orange); }
+.wave-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+.wave-foot .spacer { flex: 1; }
+.wave-foot > span { color: var(--fg-2); font-weight: 600; margin-right: 2px; }
+.chip.primary { background: var(--blue); color: var(--on-tint); }
 .pattern-row { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; font-size: 14px; }
 .pattern-row > span { color: var(--fg-2); font-weight: 600; }
 .chain { display: flex; gap: 6px; flex-wrap: wrap; flex: 1 1 260px; }
@@ -497,6 +516,11 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   .tempo span { min-width: 54px; }
   .clock { min-width: 52px; }
   .sel-bar { top: auto; bottom: 136px; max-width: calc(100% - 24px); }
+  .wave-head h2 small { display: block; margin: 4px 0 0; }
+}
+@media (max-width: 440px) {
+  .tab { padding: 8px 6px; font-size: 12.5px; }
+  .cap-left .ib { width: 40px; }
   .sel-count { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -553,6 +577,45 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
           <span>Tocca un pad per cambiarlo, trascina per dipingere più passi. Tocca il nome per sentire il suono, tienilo premuto per volume e intonazione. A e B sono due pattern: la sequenza decide quale suona in ogni battuta (– = pausa).</span>
           <button class="chip" id="beatClear">Svuota</button>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Onda: draw one cycle of a waveform, the McLaren way -->
+  <section class="view" id="viewWave" aria-label="Onda" hidden>
+    <div class="scroll-view">
+      <div class="wrap">
+        <div class="card wave-head">
+          <h2>Onda <small>Disegna un ciclo del suono: il bordo sopra è il canale sinistro, quello sotto il destro.</small></h2>
+          <div class="wave-list" id="waveList"></div>
+        </div>
+        <div class="card wave-editor">
+          <div class="wave-tools">
+            <input type="text" class="title-input" id="waveName" aria-label="Nome dell'onda">
+            <div class="seg" id="segWaveBrush" style="width:150px"><button data-v="line">Tratto</button><button data-v="fill">Pieno</button></div>
+            <div class="ctl-row" style="gap:8px"><label for="waveSym">Simmetrico</label><input class="switch" type="checkbox" id="waveSym"></div>
+            <button class="chip" id="waveUndo">Annulla</button>
+            <button class="chip" id="waveClear">Svuota</button>
+          </div>
+          <div class="wave-stage">
+            <canvas id="waveCanvas" aria-label="Un ciclo dell'onda: sopra il canale sinistro, sotto il destro"></canvas>
+            <span class="wave-side l">SINISTRA ↑</span><span class="wave-side r">DESTRA ↓</span>
+          </div>
+          <canvas id="waveScope" aria-label="L'onda che si sente: sinistra in blu, destra in arancione"></canvas>
+          <div class="wave-foot">
+            <span>Parti da</span>
+            <button class="chip" data-shape="sine">Sinusoide</button>
+            <button class="chip" data-shape="tri">Triangolo</button>
+            <button class="chip" data-shape="saw">Dente di sega</button>
+            <button class="chip" data-shape="square">Quadra</button>
+            <button class="chip" data-shape="blob">Forma piena</button>
+            <span class="spacer"></span>
+            <button class="chip" id="waveListen">Ascolta</button>
+            <button class="chip primary" id="waveUse">Disegna con questa onda</button>
+            <button class="chip danger" id="waveDelete">Elimina</button>
+          </div>
+        </div>
+        <div class="beat-foot"><span>Come la colonna sonora ottica di Norman McLaren: il riempimento tra i due bordi è il suono. Con il Tratto disegni un bordo (sopra o sotto); con il Pieno disegni una forma chiusa, che dà entrambi i bordi. Un bordo che manca è lo specchio dell'altro. Una linea piatta non suona: il suono è il movimento.</span></div>
       </div>
     </div>
   </section>
@@ -624,6 +687,7 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
       <button class="tab" role="tab" id="tabDraw">Disegna</button>
       <button class="tab" role="tab" id="tabBeat">Beat</button>
       <button class="tab" role="tab" id="tabMidi">MIDI</button>
+      <button class="tab" role="tab" id="tabWave">Onda</button>
       <button class="tab" role="tab" id="tabExport">Esporta</button>
     </div>
   </nav>
@@ -728,6 +792,8 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
     <div class="inst-grid" id="instDrum"></div>
     <div class="label">I tuoi suoni</div>
     <div class="inst-grid" id="instSmp"></div>
+    <div class="label">Onde disegnate</div>
+    <div class="inst-grid" id="instWave"></div>
   </section>
 
   <section class="popover" id="popTrack" hidden aria-label="Traccia del beat">
@@ -863,11 +929,13 @@ function noise1(t, seed) {
 
 /* ---------- state ---------- */
 
+const VIEW_IDS = ["draw", "beat", "midi", "wave", "export"];
+
 let state = null;
 const ui = {
   view: "draw", tool: "brush", brush: "smooth", rough: 0.5, inst: "EPIANO", size: 0.5, opacity: 1, naming: "IT", stabilize: 0.3,
   playing: false, open: null, openBtn: null, metronome: false, recording: false, kbBase: 60, repeats: 1, exportBeat: true,
-  stems: false, picked: new Set(), swipeOpen: null, layerOpen: null, startFrac: 0,
+  stems: false, wave: null, picked: new Set(), swipeOpen: null, layerOpen: null, startFrac: 0,
 };
 /* Tap the bar numbers (or the piano roll): Play starts there; while playing it jumps. */
 function seek(frac) {
@@ -911,7 +979,7 @@ function applyPreset(beat, key) {
 function blankState() {
   const layer = newLayer("Livello 1");
   return { name: "Senza titolo", example: false, bpm: 100, bars: 4, low: 48, octaves: 3, scale: "MAJOR", root: 0, grid: 0.25,
-    layers: [layer], active: layer.id, strokes: [], beat: blankBeat(), samples: [] };
+    layers: [layer], active: layer.id, strokes: [], beat: blankBeat(), samples: [], waves: [] };
 }
 
 function exampleState() {
@@ -919,7 +987,7 @@ function exampleState() {
   const pad = newLayer("Atmosfera", "OPTICAL", { volume: 0.7, pan: -0.15, reverb: 0.55 });
   const melody = newLayer("Melodia", "QUANTIZED", { volume: 0.85, pan: 0.12, reverb: 0.3 });
   const s = { name: "Prima melodia", example: true, bpm: 92, bars: 4, low: 36, octaves: 4, scale: "MAJOR", root: 0, grid: 0.25,
-    layers: [bass, pad, melody], active: melody.id, strokes: [], beat: blankBeat(), samples: [] };
+    layers: [bass, pad, melody], active: melody.id, strokes: [], beat: blankBeat(), samples: [], waves: [] };
   applyPreset(s.beat, "HIPHOP");
   const add = (layer, inst, path, w, op = 1) => s.strokes.push(makeStroke(layer.id, inst, path, w, op, s.bpm));
   const notes = [[0, 1, 72], [1, 1, 76], [4, 1, 76], [5, 1, 72], [6, 2, 69], [8, 1, 69], [9, 1, 72], [10, 1.5, 77],
@@ -957,6 +1025,9 @@ function save() {
 }
 let saveTimer = 0;
 const saveSoon = () => { clearTimeout(saveTimer); saveTimer = setTimeout(save, 500); };
+/* iPad suspends apps sent to the background: save right away. */
+addEventListener("pagehide", () => { clearTimeout(saveTimer); save(); });
+document.addEventListener("visibilitychange", () => { if (document.hidden) { clearTimeout(saveTimer); save(); } });
 
 function sanitize(s) {
   if (!s || !Array.isArray(s.layers) || !s.layers.length) return null;
@@ -964,6 +1035,11 @@ function sanitize(s) {
   out.samples = (Array.isArray(s.samples) ? s.samples : []).filter(m => m && typeof m.id === "string" && m.id.startsWith("SMP:"))
     .map((m, i) => ({ id: m.id, name: String(m.name || "Suono"), root: clamp(Math.round(+m.root || 60), 24, 96), color: SYS[m.color] ? m.color : SAMPLE_COLORS[i % SAMPLE_COLORS.length] }));
   for (const m of out.samples) registerSample(m);
+  out.waves = (Array.isArray(s.waves) ? s.waves : []).filter(w => w && typeof w.id === "string" && w.id.startsWith("WAV:"))
+    .map((w, i) => ({ id: w.id, name: String(w.name || "Onda"), color: SYS[w.color] ? w.color : SAMPLE_COLORS[i % SAMPLE_COLORS.length], sym: !!w.sym,
+      strokes: (Array.isArray(w.strokes) ? w.strokes : []).filter(t => t && Array.isArray(t.pts) && t.pts.length)
+        .map(t => ({ fill: !!t.fill, pts: t.pts.map(q => [clamp(+q[0] || 0, 0, 1), clamp(+q[1] || 0, -1, 1)]) })) }));
+  for (const w of out.waves) registerWave(w);
   // "muted" is the sound, "visible" the drawing; older projects hid both with the eye.
   out.layers = s.layers.map(l => ({ ...newLayer(l.name || "Livello"), ...l, mode: MODE[l.mode] ? l.mode : "QUANTIZED",
     muted: "muted" in l ? !!l.muted : l.visible === false }));
@@ -1012,7 +1088,7 @@ function load() {
         Object.assign(ui, data.ui || {});
         if (!INST[ui.inst]) ui.inst = "EPIANO";
         if (!BRUSH[ui.brush]) ui.brush = "smooth";
-        if (!["draw", "beat", "midi", "export"].includes(ui.view)) ui.view = "draw";
+        if (!VIEW_IDS.includes(ui.view)) ui.view = "draw";
         return;
       }
     }
@@ -1024,7 +1100,7 @@ function load() {
 
 /* ---------- history ---------- */
 
-const snapshot = () => JSON.stringify({ layers: state.layers, strokes: state.strokes, active: state.active, beat: state.beat });
+const snapshot = () => JSON.stringify({ layers: state.layers, strokes: state.strokes, active: state.active, beat: state.beat, waves: state.waves });
 function remember() {
   history.push(snapshot());
   if (history.length > 100) history.shift();
@@ -1034,6 +1110,7 @@ function remember() {
 function restore(snap) {
   const d = JSON.parse(snap);
   state.layers = d.layers; state.strokes = d.strokes; state.active = d.active; state.beat = d.beat;
+  if (d.waves) { state.waves = d.waves; for (const w of state.waves) registerWave(w); samplesVersion++; }
 }
 function undo() {
   if (!history.length) return;
@@ -1047,6 +1124,7 @@ function afterUndo() {
   sel = null; $("#selBar").hidden = true;
   changed({ ink: true }); refreshPanels(); updateUndo();
   if (ui.view === "beat") { buildBeatGrid(); syncBeatControls(); }
+  if (ui.view === "wave") renderWaveView();
 }
 function updateUndo() { $("#btnUndo").disabled = !history.length; $("#btnRedo").disabled = !future.length; }
 
@@ -1499,6 +1577,15 @@ function scheduleVoice(ctx, dest, v, when, track) {
       stopAt = Math.min(e + 0.3, s + buf.duration / rate0 + 0.02);
       break;
     }
+    case "wave": {
+      const pw = wavePair(ctx, v.inst);
+      if (!pw) { stopAt = e; break; }
+      stopAt = adsr(env.gain, s, e, 0.006, 0.2, 0.85, inst.rel, 0.3);
+      const merge = ctx.createChannelMerger(2);
+      merge.connect(lowpass(700 + bright * 14000, 0.5, env));
+      pw.forEach((wave, ch) => { const o = osc("sine"); o.setPeriodicWave(wave); o.connect(merge, 0, ch); });
+      break;
+    }
     case "bass": {
       stopAt = adsr(env.gain, s, e, 0.004, 0.3, 0.85, inst.rel, 0.3);
       const sh = ctx.createWaveShaper(); sh.curve = driveCurve; sh.connect(env);
@@ -1590,6 +1677,93 @@ const SAMPLE_COLORS = ["pink", "mint", "orange", "purple", "teal", "green", "ind
 const MAX_SAMPLE = 8;  // seconds
 const sampleBuffers = new Map();
 let samplesVersion = 0;
+/* Drawn waves (Onda): one cycle, left and right, turned into periodic waves. */
+function registerWave(w) { INST[w.id] = { id: w.id, name: w.name, c: w.color, kind: "wave", gm: 80, rel: 0.18 }; }
+const WAVE_N = 256, WAVE_H = 64;
+const waveCache = new Map();
+/* Fill the gaps of a contour by going round the cycle: a cycle wraps. */
+function closeGaps(col) {
+  const known = []; for (let i = 0; i < WAVE_N; i++) if (col[i] !== null) known.push(i);
+  if (!known.length) return null;
+  const out = new Float32Array(WAVE_N);
+  for (let k = 0; k < known.length; k++) {
+    const a = known[k], b = known[(k + 1) % known.length], span = ((b - a + WAVE_N - 1) % WAVE_N) + 1;
+    for (let d = 0; d < span; d++) out[(a + d) % WAVE_N] = col[a] + (col[b] - col[a]) * (known.length > 1 ? d / span : 0);
+  }
+  return out;
+}
+/* The two edges of the ink, column by column: the top one is L, the bottom one R. */
+function waveContours(w) {
+  const top = new Array(WAVE_N).fill(null), bot = new Array(WAVE_N).fill(null);
+  const put = (arr, c, y, hi) => { if (c < 0 || c >= WAVE_N) return; if (arr[c] === null || (hi ? y > arr[c] : y < arr[c])) arr[c] = y; };
+  for (const st of w.strokes) {
+    const pts = st.pts;
+    if (st.fill && pts.length > 2) {
+      for (let c = 0; c < WAVE_N; c++) {
+        const x = (c + 0.5) / WAVE_N; let hi = null, lo = null;
+        for (let i = 0; i < pts.length; i++) {
+          const [xa, ya] = pts[i], [xb, yb] = pts[(i + 1) % pts.length];
+          if ((xa <= x && xb > x) || (xb <= x && xa > x)) { const y = ya + (x - xa) / (xb - xa) * (yb - ya); hi = hi === null ? y : Math.max(hi, y); lo = lo === null ? y : Math.min(lo, y); }
+        }
+        if (hi !== null) { put(top, c, hi, true); put(bot, c, lo, false); }
+      }
+      continue;
+    }
+    const upper = pts.reduce((a, q) => a + q[1], 0) / pts.length >= 0 || w.sym;
+    for (let i = 0; i < pts.length; i++) {
+      const [xa, ya] = pts[i], [xb, yb] = pts[Math.min(i + 1, pts.length - 1)];
+      const n = Math.max(1, Math.ceil(Math.abs(xb - xa) * WAVE_N * 2));
+      for (let k = 0; k <= n; k++) {
+        const u = k / n, x = xa + (xb - xa) * u, y = ya + (yb - ya) * u, c = Math.min(WAVE_N - 1, Math.floor(x * WAVE_N));
+        if (upper) put(top, c, y, true); else put(bot, c, y, false);
+      }
+    }
+  }
+  let T = closeGaps(top), B = w.sym ? null : closeGaps(bot);
+  if (!T && B) T = B.map(v => -v);
+  if (T && !B) B = T.map(v => -v);
+  return T ? { top: T, bot: B } : null;
+}
+function waveData(w) {
+  const key = JSON.stringify([w.strokes, w.sym]), hit = waveCache.get(w.id);
+  if (hit && hit.key === key) return hit;
+  const cont = waveContours(w);
+  let L = new Float32Array(WAVE_N), R = new Float32Array(WAVE_N);
+  if (cont) {
+    L = cont.top.slice(); R = cont.bot.map(v => -v);
+    for (const a of [L, R]) {
+      const mean = a.reduce((x, y) => x + y, 0) / WAVE_N;
+      for (let i = 0; i < WAVE_N; i++) a[i] -= mean;
+      for (let pass = 0; pass < 2; pass++) {  // a light smoothing: fewer harsh corners, less aliasing
+        const c = a.slice();
+        for (let i = 0; i < WAVE_N; i++) a[i] = 0.25 * c[(i + WAVE_N - 1) % WAVE_N] + 0.5 * c[i] + 0.25 * c[(i + 1) % WAVE_N];
+      }
+    }
+    const peak = Math.max(...L.map(Math.abs), ...R.map(Math.abs));
+    if (peak > 1e-3) for (const a of [L, R]) for (let i = 0; i < WAVE_N; i++) a[i] /= peak;
+    else { L.fill(0); R.fill(0); }
+  }
+  const fourier = a => {
+    const re = new Float32Array(WAVE_H), im = new Float32Array(WAVE_H);
+    for (let k = 1; k < WAVE_H; k++) {
+      let c = 0, sn = 0;
+      for (let n = 0; n < WAVE_N; n++) { const ph = 2 * Math.PI * k * n / WAVE_N; c += a[n] * Math.cos(ph); sn += a[n] * Math.sin(ph); }
+      re[k] = 2 * c / WAVE_N; im[k] = 2 * sn / WAVE_N;
+    }
+    return [re, im];
+  };
+  const d = { key, L, R, cont, fL: fourier(L), fR: fourier(R), silent: !L.some(v => v) && !R.some(v => v), ctx: new WeakMap() };
+  waveCache.set(w.id, d);
+  return d;
+}
+function wavePair(ctx, id) {
+  const w = state.waves.find(x => x.id === id);
+  if (!w) return null;
+  const d = waveData(w);
+  if (!d.ctx.has(ctx)) d.ctx.set(ctx, [d.fL, d.fR].map(([re, im]) => ctx.createPeriodicWave(re, im, { disableNormalization: true })));
+  return d.ctx.get(ctx);
+}
+
 function registerSample(m) { INST[m.id] = { id: m.id, name: m.name, c: m.color, kind: "sample", gm: 0, rel: 0.12, root: m.root }; }
 
 /* Sample audio lives in IndexedDB (per device); the project keeps name, root and colour. */
@@ -2135,7 +2309,7 @@ function importMidi(bytes, fileName) {
   }
   if (!s.layers.length) s.layers.push(newLayer("Livello 1"));
   s.active = s.layers[s.layers.length - 1].id;
-  s.samples = state.samples;
+  s.samples = state.samples; s.waves = state.waves;
   Object.assign(state, s);
   afterBigChange();
   return every.length;
@@ -3301,10 +3475,11 @@ $("#fileJson").addEventListener("change", async e => {
 
 /* ---------- chrome: sections, popovers, panels ---------- */
 
-const VIEWS = { draw: "#viewDraw", beat: "#viewBeat", midi: "#viewMidi", export: "#viewExport" };
-const TAB = { draw: "#tabDraw", beat: "#tabBeat", midi: "#tabMidi", export: "#tabExport" };
+const VIEWS = { draw: "#viewDraw", beat: "#viewBeat", midi: "#viewMidi", wave: "#viewWave", export: "#viewExport" };
+const TAB = { draw: "#tabDraw", beat: "#tabBeat", midi: "#tabMidi", wave: "#tabWave", export: "#tabExport" };
 function showView(view, instant) {
   closePopovers();
+  if (ui.view === "wave" && view !== "wave") pruneWaves();
   ui.view = view;
   for (const [k, sel] of Object.entries(VIEWS)) {
     const el = $(sel), on = k === view;
@@ -3319,6 +3494,7 @@ function showView(view, instant) {
   if (view === "beat") { buildBeatGrid(); syncBeatControls(); }
   if (view === "midi") { buildKeys(); syncMidiChip(); connectMidi(); drawRoll(true); if (loop.dirty || !loop.buffer) ensureLoop(); }
   if (view === "export") { drawWave(); if (loop.dirty || !loop.buffer) ensureLoop(); }
+  if (view === "wave") renderWaveView();
   requestFrame(); saveSoon();
 }
 function movePill() {
@@ -3685,7 +3861,23 @@ function renderInstruments() {
     }
   }
   renderSamples();
+  const box = $("#instWave"); box.textContent = "";
+  for (const w of state.waves) {
+    const b = document.createElement("button");
+    b.className = "inst"; b.setAttribute("aria-pressed", String(w.id === ui.inst));
+    const sw = document.createElement("span"); sw.className = "swatch sample"; sw.style.background = colorOf(w.id); sw.innerHTML = ICON_SINE;
+    const nm = document.createElement("span"); nm.textContent = w.name;
+    b.append(sw, nm);
+    pressable(b, () => { ui.inst = w.id; setTool("brush"); renderInstruments(); syncChrome(); syncMidiChip(); saveSoon(); previewNote(w.id, 60, 0.8, 1); },
+      () => { ui.wave = w.id; showView("wave"); });
+    box.append(b);
+  }
+  const add = document.createElement("button");
+  add.className = "inst"; add.innerHTML = `<span class="swatch tool">${ICON_SINE}</span><span>Disegna un'onda</span>`;
+  add.onclick = () => { ui.wave = null; showView("wave"); };
+  box.append(add);
 }
+const ICON_SINE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2.5 12c2.4-7 4.8-7 7.2 0s4.8 7 7.2 0 3.6-5.3 4.6-3.5"/></svg>';
 const ICON_WAVE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 7v10M21 12h0"/></svg>';
 const ICON_IMPORT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/></svg>';
 function renderSamples() {
@@ -3876,6 +4068,201 @@ $("#smpDelete").onclick = async () => {
   toast(`Eliminato «${m.name}»` + (moved ? ` · ${moved} tratti ora suonano Piano elettrico` : ""));
 };
 
+/* ---------- Onda view ---------- */
+
+const waveCv = $("#waveCanvas"), scopeCv = $("#waveScope");
+let waveDraw = null, waveBrush = "line";
+const currentWave = () => state.waves.find(w => w.id === ui.wave);
+function newWave() {
+  const used = new Set(state.waves.map(w => w.color));
+  const w = { id: "WAV:" + newId("w"), name: "Onda " + (state.waves.length + 1), color: SAMPLE_COLORS.find(c => !used.has(c)) || SAMPLE_COLORS[state.waves.length % SAMPLE_COLORS.length], sym: false, strokes: [] };
+  state.waves.push(w); registerWave(w);
+  return w;
+}
+/* Leaving the view drops empty waves nobody draws with. */
+function pruneWaves() {
+  const used = new Set(state.strokes.map(st => st.inst));
+  const keep = state.waves.filter(w => w.strokes.length || used.has(w.id) || ui.inst === w.id);
+  if (keep.length !== state.waves.length) { state.waves = keep; saveSoon(); }
+}
+function waveChanged() {
+  const w = currentWave();
+  if (w) INST[w.id].name = w.name;
+  samplesVersion++;
+  changed(); drawWaveEditor(); drawScope();
+}
+function renderWaveView() {
+  if (!currentWave()) ui.wave = (state.waves[state.waves.length - 1] || newWave()).id;
+  const w = currentWave(), list = $("#waveList");
+  list.textContent = "";
+  for (const x of state.waves) {
+    const b = document.createElement("button");
+    b.className = "chip wave-chip"; b.setAttribute("aria-pressed", String(x.id === w.id));
+    const dot = document.createElement("i"); dot.style.background = colorOf(x.id);
+    b.append(dot, document.createTextNode(x.name));
+    b.onclick = () => { ui.wave = x.id; renderWaveView(); };
+    list.append(b);
+  }
+  const add = document.createElement("button");
+  add.className = "chip"; add.textContent = "+ Nuova onda";
+  add.onclick = () => { remember(); ui.wave = newWave().id; renderWaveView(); };
+  list.append(add);
+  $("#waveName").value = w.name;
+  $("#waveSym").checked = w.sym;
+  seg($("#segWaveBrush"), waveBrush, v => { waveBrush = v; });
+  drawWaveEditor(); drawScope();
+}
+function sizeCanvas(cv) {
+  const r = cv.getBoundingClientRect(), d = Math.min(devicePixelRatio || 1, 2);
+  if (cv.width !== Math.round(r.width * d) || cv.height !== Math.round(r.height * d)) { cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d); }
+  const c = cv.getContext("2d"); c.setTransform(d, 0, 0, d, 0, 0);
+  return { c, w: r.width, h: r.height };
+}
+function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function drawWaveEditor() {
+  const w = currentWave();
+  if (!w || !waveCv.getBoundingClientRect().width) return;
+  const { c, w: W, h: H } = sizeCanvas(waveCv), pad = 26;
+  const X = x => x * W, Y = y => H / 2 - y * (H / 2 - pad);
+  c.clearRect(0, 0, W, H);
+  c.strokeStyle = colors.fg; c.globalAlpha = 0.08; c.lineWidth = 1;
+  for (let i = 1; i < 8; i++) { c.beginPath(); c.moveTo(X(i / 8), 0); c.lineTo(X(i / 8), H); c.stroke(); }
+  for (const y of [0.5, -0.5, 1, -1]) { c.beginPath(); c.moveTo(0, Y(y)); c.lineTo(W, Y(y)); c.stroke(); }
+  c.globalAlpha = 0.3; c.beginPath(); c.moveTo(0, Y(0)); c.lineTo(W, Y(0)); c.stroke();
+  c.globalAlpha = 1;
+  const color = colorOf(w.id), d = waveData(w);
+  if (d.cont) {  // the sound: everything between the two edges
+    c.beginPath();
+    for (let i = 0; i <= WAVE_N; i++) c.lineTo(X(i / WAVE_N), Y(d.cont.top[i % WAVE_N]));
+    for (let i = WAVE_N; i >= 0; i--) c.lineTo(X(i / WAVE_N), Y(d.cont.bot[i % WAVE_N]));
+    c.closePath(); c.globalAlpha = 0.16; c.fillStyle = color; c.fill();
+    c.globalAlpha = 0.55; c.lineWidth = 1.5; c.setLineDash([4, 4]);
+    for (const [arr, col] of [[d.cont.top, cssVar("--blue")], [d.cont.bot, cssVar("--orange")]]) {
+      c.strokeStyle = col; c.beginPath();
+      for (let i = 0; i <= WAVE_N; i++) c.lineTo(X(i / WAVE_N), Y(arr[i % WAVE_N]));
+      c.stroke();
+    }
+    c.setLineDash([]);
+  }
+  c.globalAlpha = 1;
+  const strokes = waveDraw ? w.strokes.concat([waveDraw]) : w.strokes;
+  for (const st of strokes) {
+    c.beginPath();
+    st.pts.forEach((q, i) => i ? c.lineTo(X(q[0]), Y(q[1])) : c.moveTo(X(q[0]), Y(q[1])));
+    if (st.fill) { c.closePath(); c.globalAlpha = 0.4; c.fillStyle = color; c.fill(); c.globalAlpha = 1; c.lineWidth = 2; }
+    else c.lineWidth = 3.5;
+    c.strokeStyle = color; c.lineJoin = c.lineCap = "round"; c.stroke();
+    if (w.sym && !st.fill) {
+      c.globalAlpha = 0.35; c.beginPath();
+      st.pts.forEach((q, i) => i ? c.lineTo(X(q[0]), Y(-q[1])) : c.moveTo(X(q[0]), Y(-q[1])));
+      c.stroke(); c.globalAlpha = 1;
+    }
+  }
+}
+function drawScope() {
+  const w = currentWave();
+  if (!w || !scopeCv.getBoundingClientRect().width) return;
+  const { c, w: W, h: H } = sizeCanvas(scopeCv), d = waveData(w), cycles = 3;
+  c.clearRect(0, 0, W, H);
+  c.strokeStyle = colors.fg; c.globalAlpha = 0.15; c.lineWidth = 1;
+  c.beginPath(); c.moveTo(0, H / 2); c.lineTo(W, H / 2); c.stroke();
+  c.globalAlpha = 1; c.lineWidth = 2; c.lineJoin = "round";
+  for (const [arr, col, off] of [[d.L, cssVar("--blue"), 0], [d.R, cssVar("--orange"), 0]]) {
+    c.strokeStyle = col; c.beginPath();
+    for (let i = 0; i <= W; i++) { const u = i / W * cycles, k = Math.floor((u % 1) * WAVE_N); c.lineTo(i, H / 2 - arr[k] * (H / 2 - 8) + off); }
+    c.stroke();
+  }
+  if (d.silent) {
+    c.fillStyle = colors.fg; c.globalAlpha = 0.5; c.font = "600 13px -apple-system, system-ui, sans-serif"; c.textAlign = "center";
+    c.fillText(w.strokes.length ? "Silenzio: una linea piatta non suona. Fai salire e scendere il tratto." : "Disegna sopra la linea per il canale sinistro, sotto per il destro.", W / 2, H / 2 - 10);
+    c.globalAlpha = 1;
+  }
+}
+function wavePoint(e) {
+  const r = waveCv.getBoundingClientRect(), pad = 26;
+  return [+clamp((e.clientX - r.left) / r.width, 0, 1).toFixed(4), +clamp((r.height / 2 - (e.clientY - r.top)) / (r.height / 2 - pad), -1, 1).toFixed(4)];
+}
+waveCv.addEventListener("pointerdown", e => {
+  if (!currentWave() || (waveDraw && waveDraw.pointer !== e.pointerId)) return;
+  try { waveCv.setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointer */ }
+  waveDraw = { fill: waveBrush === "fill", pts: [wavePoint(e)], pointer: e.pointerId };
+  drawWaveEditor();
+});
+waveCv.addEventListener("pointermove", e => {
+  if (!waveDraw || waveDraw.pointer !== e.pointerId) return;
+  const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+  for (const ce of (evs.length ? evs : [e])) waveDraw.pts.push(wavePoint(ce));
+  drawWaveEditor();
+});
+const endWaveDraw = e => {
+  if (!waveDraw || waveDraw.pointer !== e.pointerId) return;
+  const st = waveDraw; waveDraw = null;
+  delete st.pointer;
+  if (st.pts.length < 2 || (st.fill && st.pts.length < 4)) { drawWaveEditor(); return; }
+  remember();
+  currentWave().strokes.push(st);
+  waveChanged();
+  previewNote(ui.wave, 60, 0.8, 1);
+};
+waveCv.addEventListener("pointerup", endWaveDraw);
+waveCv.addEventListener("pointercancel", endWaveDraw);
+$("#waveName").addEventListener("change", e => {
+  const w = currentWave(); if (!w) return;
+  w.name = e.target.value.trim().slice(0, 40) || w.name; e.target.value = w.name;
+  waveChanged(); renderWaveView(); syncChrome(); syncMidiChip();
+});
+$("#waveSym").addEventListener("change", e => { remember(); currentWave().sym = e.target.checked; waveChanged(); });
+$("#waveUndo").onclick = () => undo();
+$("#waveClear").onclick = () => { remember(); currentWave().strokes = []; waveChanged(); };
+const SHAPES = {
+  sine: u => Math.sin(2 * Math.PI * u),
+  tri: u => 1 - 4 * Math.abs(((u + 0.25) % 1) - 0.5),
+  saw: u => 1 - 2 * u,
+  square: u => (u < 0.5 ? 1 : -1),
+};
+for (const b of document.querySelectorAll("[data-shape]")) b.onclick = () => {
+  const w = currentWave(); if (!w) return;
+  remember();
+  const k = b.dataset.shape;
+  if (k === "blob") {  // a closed shape: different top and bottom edges, so L and R differ
+    const pts = [];
+    for (let i = 0; i < 64; i++) { const u = i / 63; pts.push([u, 0.15 + 0.6 * Math.sin(Math.PI * u) * (0.8 + 0.2 * Math.sin(6 * Math.PI * u))]); }
+    for (let i = 63; i >= 0; i--) { const u = i / 63; pts.push([u, -0.1 - 0.7 * Math.sin(Math.PI * u) * Math.abs(Math.cos(3 * Math.PI * u))]); }
+    w.strokes = [{ fill: true, pts: pts.map(q => [+q[0].toFixed(4), +q[1].toFixed(4)]) }]; w.sym = false;
+  } else {
+    const f = SHAPES[k], pts = [];
+    if (k === "square") pts.push([0, 0.8], [0.5, 0.8], [0.5, -0.8], [1, -0.8]);
+    else if (k === "saw") pts.push([0, 0.8], [1, -0.8]);
+    else for (let i = 0; i <= 96; i++) pts.push([+(i / 96).toFixed(4), +(0.8 * f(i / 96)).toFixed(4)]);
+    w.strokes = [{ fill: false, pts }]; w.sym = true;  // a single edge, mirrored: the same wave in both ears
+  }
+  waveChanged(); renderWaveView();
+  previewNote(w.id, 60, 0.8, 1);
+};
+$("#waveListen").onclick = () => {
+  const w = currentWave(); if (!w) return;
+  const ctx = audio(), now = ctx.currentTime + 0.02;
+  const g = ctx.createGain(); g.connect(liveOut); g.connect(liveSend);
+  [60, 64, 67, 72, 67, 64, 60].forEach((m, i) => scheduleVoice(ctx, g, { inst: w.id, start: i * 0.2, dur: i === 6 ? 0.8 : 0.18, midi: m, amp: Float32Array.of(0.75, 0.75), bright: 1 }, now));
+};
+$("#waveUse").onclick = () => {
+  const w = currentWave(); if (!w) return;
+  ui.inst = w.id; setTool("brush"); syncChrome(); syncMidiChip(); saveSoon();
+  showView("draw"); toast(`Disegni con «${w.name}»`);
+};
+$("#waveDelete").onclick = () => {
+  const w = currentWave(); if (!w) return;
+  remember();
+  let moved = 0;
+  for (const st of state.strokes) if (st.inst === w.id) { st.inst = "EPIANO"; moved++; }
+  state.waves = state.waves.filter(x => x.id !== w.id);
+  if (ui.inst === w.id) { ui.inst = "EPIANO"; syncChrome(); syncMidiChip(); }
+  ui.wave = null; samplesVersion++;
+  changed({ ink: true }); renderWaveView();
+  toast(`Eliminata «${w.name}»` + (moved ? ` · ${moved} tratti ora suonano Piano elettrico` : ""));
+};
+addEventListener("resize", () => { if (ui.view === "wave") { drawWaveEditor(); drawScope(); } });
+
 function syncMidiChip() {
   const chip = $("#midiInst");
   chip.querySelector("i").style.background = colorOf(ui.inst);
@@ -4005,10 +4392,10 @@ $("#actNew").onclick = () => { $("#actNewConfirm").hidden = false; };
 $("#actNewConfirm").onclick = () => {
   remember();
   const keep = { bpm: state.bpm, bars: state.bars, low: state.low, octaves: state.octaves, scale: state.scale, root: state.root, grid: state.grid };
-  Object.assign(state, blankState(), keep, { samples: state.samples });
+  Object.assign(state, blankState(), keep, { samples: state.samples, waves: state.waves });
   closePopovers(); afterBigChange(); toast("Tela nuova · tocca con due dita per annullare");
 };
-$("#actExample").onclick = () => { remember(); Object.assign(state, exampleState(), { samples: state.samples }); closePopovers(); afterBigChange(); toast("Esempio caricato"); };
+$("#actExample").onclick = () => { remember(); Object.assign(state, exampleState(), { samples: state.samples, waves: state.waves }); closePopovers(); afterBigChange(); toast("Esempio caricato"); };
 
 function themeChoice() { try { return localStorage.getItem(THEME_KEY) || "system"; } catch (e) { return "system"; } }
 function applyTheme(choice) {
@@ -4047,7 +4434,8 @@ document.addEventListener("keydown", e => {
   if (e.key === "1") showView("draw");
   else if (e.key === "2") showView("beat");
   else if (e.key === "3") showView("midi");
-  else if (e.key === "4") showView("export");
+  else if (e.key === "4") showView("wave");
+  else if (e.key === "5") showView("export");
   else if (e.key === "b" && ui.view === "draw") setTool("brush");
   else if (e.key === "e" && ui.view === "draw") setTool("eraser");
   else if (e.key === "s" && ui.view === "draw") setTool("lasso");
@@ -4091,5 +4479,5 @@ if (!inArtifact && "serviceWorker" in navigator && (location.protocol === "https
 // No page zoom from pinches on the interface (Safari).
 document.addEventListener("gesturestart", e => e.preventDefault());
 
-window.__gp2m = { screenOf: (b, p) => [xOf(b), yOf(p)], geoTop: () => geo.top, state: () => state, ui, renderAll, reviewAudio, detectPitch, sampleBuffers, deleteLayers, collectParts, tiled, allNotes, midiBytes, wavBytes, zipBlob, parseMidi, importMidi, beatHits, showView, loop, ensureLoop };
+window.__gp2m = { waveData, screenOf: (b, p) => [xOf(b), yOf(p)], geoTop: () => geo.top, state: () => state, ui, renderAll, reviewAudio, detectPitch, sampleBuffers, deleteLayers, collectParts, tiled, allNotes, midiBytes, wavBytes, zipBlob, parseMidi, importMidi, beatHits, showView, loop, ensureLoop };
 </script>
