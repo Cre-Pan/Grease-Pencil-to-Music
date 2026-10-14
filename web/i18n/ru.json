@@ -505,5 +505,9 @@
  "Immagini e video": "Изображения и видео",
  "Dal menu ⋯: in una finestra mobile o come sfondo della tavola, per disegnarci sopra. Il video segue il play.": "Из меню ⋯: в плавающем окне или как фон холста, чтобы рисовать поверх. Видео следует за воспроизведением.",
  "La tavola con la linea del tempo che scorre e la musica, in tempo reale: MP4 su iPad.": "Холст с бегущей линией времени и музыкой, в реальном времени: MP4 на iPad.",
- "PNG della tavola, oppure trasparente con i soli tratti; anche un PNG per livello, fino a 3×.": "PNG холста или прозрачный только со штрихами; также по PNG на слой, до 3×."
+ "PNG della tavola, oppure trasparente con i soli tratti; anche un PNG per livello, fino a 3×.": "PNG холста или прозрачный только со штрихами; также по PNG на слой, до 3×.",
+ "Non riesco a salvare sul dispositivo (spazio pieno?): salva la composizione dal menu ⋯.": "Не получается сохранить на устройстве (память заполнена?): сохрани композицию через меню ⋯.",
+ "Livelli eliminati": "Слои удалены",
+ "Un'esportazione è già in corso.": "Экспорт уже идёт.",
+ "Esportazione non riuscita: prova con meno ripetizioni o una risoluzione più bassa.": "Экспорт не удался: попробуй меньше повторов или более низкое разрешение."
 }

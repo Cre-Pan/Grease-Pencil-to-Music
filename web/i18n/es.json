@@ -505,5 +505,9 @@
  "Immagini e video": "Imágenes y vídeos",
  "Dal menu ⋯: in una finestra mobile o come sfondo della tavola, per disegnarci sopra. Il video segue il play.": "Desde el menú ⋯: en una ventana flotante o como fondo del lienzo, para dibujar encima. El vídeo sigue la reproducción.",
  "La tavola con la linea del tempo che scorre e la musica, in tempo reale: MP4 su iPad.": "El lienzo con la línea de tiempo en movimiento y la música, en tiempo real: MP4 en iPad.",
- "PNG della tavola, oppure trasparente con i soli tratti; anche un PNG per livello, fino a 3×.": "Un PNG del lienzo, o transparente solo con los trazos; también un PNG por capa, hasta 3×."
+ "PNG della tavola, oppure trasparente con i soli tratti; anche un PNG per livello, fino a 3×.": "Un PNG del lienzo, o transparente solo con los trazos; también un PNG por capa, hasta 3×.",
+ "Non riesco a salvare sul dispositivo (spazio pieno?): salva la composizione dal menu ⋯.": "No puedo guardar en el dispositivo (¿almacenamiento lleno?): guarda la composición desde el menú ⋯.",
+ "Livelli eliminati": "Capas eliminadas",
+ "Un'esportazione è già in corso.": "Ya hay una exportación en curso.",
+ "Esportazione non riuscita: prova con meno ripetizioni o una risoluzione più bassa.": "La exportación ha fallado: prueba con menos repeticiones o una resolución más baja."
 }

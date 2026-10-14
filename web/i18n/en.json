@@ -505,5 +505,9 @@
  "Immagini e video": "Images and videos",
  "Dal menu ⋯: in una finestra mobile o come sfondo della tavola, per disegnarci sopra. Il video segue il play.": "From the ⋯ menu: in a floating window or as the canvas background, to draw on top. Videos follow playback.",
  "La tavola con la linea del tempo che scorre e la musica, in tempo reale: MP4 su iPad.": "The canvas with the moving playhead and the music, in real time: MP4 on iPad.",
- "PNG della tavola, oppure trasparente con i soli tratti; anche un PNG per livello, fino a 3×.": "A PNG of the canvas, or transparent with strokes only; also one PNG per layer, up to 3×."
+ "PNG della tavola, oppure trasparente con i soli tratti; anche un PNG per livello, fino a 3×.": "A PNG of the canvas, or transparent with strokes only; also one PNG per layer, up to 3×.",
+ "Non riesco a salvare sul dispositivo (spazio pieno?): salva la composizione dal menu ⋯.": "Can’t save on this device (storage full?): save the composition from the ⋯ menu.",
+ "Livelli eliminati": "Layers deleted",
+ "Un'esportazione è già in corso.": "An export is already running.",
+ "Esportazione non riuscita: prova con meno ripetizioni o una risoluzione più bassa.": "Export failed: try fewer repeats or a lower resolution."
 }

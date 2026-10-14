@@ -68,6 +68,19 @@
   Solo Pencil le dita scorrono la griglia.
 - MIDI: selezione e spostamento delle note, Registra e Ricarica in alto, Livelli e strumento.
 - **Video** in una finestra mobile sincronizzata con il play.
+- Immagini e video in finestre mobili (più di una) e come **sfondo della tavola** da ricalcare
+  (opacità, Riempi / Intero / Allunga; segue zoom e play).
+- Esporta **video** della tavola con la linea del tempo che scorre e la musica; **PNG** con la
+  tavola o trasparente, un PNG per livello, risoluzione fino a 3×.
+- Annulla nei messaggi dopo un'eliminazione; il play mostra quando l'audio si sta preparando.
+- Correzioni (revisione del codice): annulla e ripeti ora riportano anche tempo, scala,
+  battute e suoni; Live col dito non blocca più i gesti; i palmi non interrompono più un tratto
+  della Pencil; la gomma a vuoto non cancella più Ripeti; velocity MIDI sempre valide; metronomo
+  senza consumo di memoria; audio che riparte dopo telefonate e Siri, e anche con il silenzioso
+  (Safari 16.4+); registrazione del microfono avviata una sola volta; esportazioni protette da
+  errori e doppi tocchi; un suono eliminato torna con Annulla; disegnare sull'esempio lo rende
+  tuo (l'import MIDI non lo sostituisce più); nomi dei file nello .zip in UTF-8; avviso se il
+  salvataggio sul dispositivo non riesce.
 - **Lingue**: italiano, inglese, francese, spagnolo, cinese e russo (Impostazioni →
   Interfaccia → Lingua); al primo avvio segue la lingua del dispositivo. I nomi che scrivi
   (livelli, composizione, suoni, onde) non vengono tradotti.

@@ -223,10 +223,17 @@ livelli): tocco = solo quello; tieni premuto = solo quello acceso, gli altri spe
 tutti accesi); trascina in verticale = tutti quelli che tocchi come il primo. Tenere premuto
 un livello, un tuo suono o un'onda apre il suo menu vicino al dito.
 
-**Video**: *⋯ → Importa un video* lo apre in una finestra mobile sopra la tavola, che segue
-play, stop e ogni giro del loop. Si sposta dalla barra, si ridimensiona dall'angolo; l'audio
-del video è spento finché non lo accendi; dove il browser lo permette c'è anche il picture in
-picture di sistema.
+**Immagini e video**: *⋯ → Importa immagine o video…* li apre in finestre mobili sopra la
+tavola (anche più di una); il video segue play, stop e ogni giro del loop. Si spostano dalla
+barra e si ridimensionano dall'angolo; l'audio del video è spento finché non lo accendi; dove
+il browser lo permette c'è anche il picture in picture di sistema. Il pulsante con
+l'immagine (o *⋯ → Sfondo della tavola…*) mette il file **dietro i tratti**, per ricalcarlo:
+opacità e adattamento in *Impostazioni → Tavola*.
+
+**Esporta**: Audio e MIDI (.zip, WAV, MIDI, tracce separate), **Video** della tavola con la
+linea del tempo che scorre e la musica (MP4 su iPad, 720p o 1080p, registrato in tempo reale),
+**Immagine** PNG (con la tavola o trasparente, livelli insieme o un PNG per livello in un
+.zip, 1×–3×), Progetto (.json). Dopo un'eliminazione il messaggio in basso ha **Annulla**.
 
 **MIDI**: in alto a destra *Seleziona* (fai un giro sulle note e trascinale: si spostano i
 tratti da cui vengono), *Registra* e **↻ Ricarica l'audio** (se non senti più niente), più

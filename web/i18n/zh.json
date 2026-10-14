@@ -505,5 +505,9 @@
  "Immagini e video": "图像和视频",
  "Dal menu ⋯: in una finestra mobile o come sfondo della tavola, per disegnarci sopra. Il video segue il play.": "从 ⋯ 菜单：放在浮动窗口中，或作为画布背景在上面绘制。视频跟随播放。",
  "La tavola con la linea del tempo che scorre e la musica, in tempo reale: MP4 su iPad.": "画布、移动的播放线和音乐，实时录制：iPad 上为 MP4。",
- "PNG della tavola, oppure trasparente con i soli tratti; anche un PNG per livello, fino a 3×.": "画布的 PNG，或仅含笔画的透明图；也可每个图层一个 PNG，最高 3×。"
+ "PNG della tavola, oppure trasparente con i soli tratti; anche un PNG per livello, fino a 3×.": "画布的 PNG，或仅含笔画的透明图；也可每个图层一个 PNG，最高 3×。",
+ "Non riesco a salvare sul dispositivo (spazio pieno?): salva la composizione dal menu ⋯.": "无法保存到设备（存储空间已满？）：请从 ⋯ 菜单存储作品。",
+ "Livelli eliminati": "图层已删除",
+ "Un'esportazione è già in corso.": "已有导出正在进行。",
+ "Esportazione non riuscita: prova con meno ripetizioni o una risoluzione più bassa.": "导出失败：请减少重复次数或降低分辨率。"
 }

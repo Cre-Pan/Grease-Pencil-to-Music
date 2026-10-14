@@ -76,7 +76,7 @@ DROP = {"use strict", "SMP:", "WAV:", "Nota saltata:", "Render non riuscito:", "
         "Tastiera MIDI:", "MIDI non leggibile:", "Progetto aperto:", "Progetto non leggibile:", "Come funziona:",
         "· due dita per annullare", "· vuoto", "Fai suonare", "(tieni premuto: solo questo)", "s · tocca per fermare",
         "· {0} tratti ora suonano Piano elettrico", "Strumento:", "Battuta", "Registrazione", "Nascondi", "Mostra", "Silenzia",
-        "Spazio · B · E · S · L", "Do Re Mi", "Italiano", "English", "Français", "Español", "script, style, [data-notr]"}
+        "Spazio · B · E · S · L", "Do Re Mi", "Italiano", "English", "Français", "Español", "script, style, [data-notr]", "Livelli eliminati · due dita per annullare"}
 ADD = ["Pronto: {0}", "Salvato: {0}", "Ora suonano: {0}", "«{0}» è nascosto: rendilo visibile per disegnare.",
        "{0} è fuori dalla tavola: cambia la nota più bassa in Tavola.", "Tastiera MIDI: {0}", "MIDI non leggibile: {0}",
        "Progetto aperto: {0}", "Progetto non leggibile: {0}", "Come funziona: {0}", "due dita per annullare",
