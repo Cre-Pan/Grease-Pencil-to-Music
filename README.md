@@ -24,37 +24,46 @@ disegna su una tavola, e la tavola suona.
 
 1. Nel viewport 3D: **Shift+A → Grease Pencil to Music → Composizione Musicale**.
    Viene creato **un unico oggetto** *Composizione Musicale 1*: la tavola (tastiera,
-   griglia, etichette e testina) sta in gruppi di livelli bloccati dentro l'oggetto stesso,
-   insieme a tre livelli di disegno e ai materiali-strumento. La vista passa a
-   frontale, *Solid → Texture*; si resta in Object Mode (passa a **Draw Mode** per disegnare).
-2. Disegna. Appena stacchi la penna il suono viene rigenerato.
-3. Premi **Spazio**: la testina rossa scorre e senti il disegno, in loop.
+   griglia, etichette e testina) sta in gruppi di livelli bloccati dentro l'oggetto stesso.
+   La composizione parte **vuota**: un livello con un solo strumento (Flauto). La vista
+   passa a frontale, *Solid → Texture*; si resta in Object Mode (passa a **Draw Mode** per
+   disegnare).
+2. In *Proprietà → Dati oggetto → Livelli e strumenti*: **Nuovo livello** aggiunge un
+   livello; dentro ogni livello ci sono i suoi strumenti e **+ Strumento** ne aggiunge
+   altri (sintetizzati, percussioni, Campione, Libreria). Il pulsante accanto a uno
+   strumento lo rende quello con cui disegni.
+3. Disegna. Appena stacchi la penna il suono viene rigenerato.
+4. Premi **Spazio**: la testina rossa scorre e senti il disegno, in loop.
    Nella **Timeline** vedi la forma d'onda e i blocchetti delle note (vedi sotto).
-4. Modifica in **Edit Mode** o **Sculpt Mode**: il suono si aggiorna.
-5. **Shift+D** duplica tutta la composizione: ogni copia è un nuovo "piano di lavoro"
+5. Modifica in **Edit Mode** o **Sculpt Mode**: il suono si aggiorna.
+6. **Shift+D** duplica tutta la composizione: ogni copia è un nuovo "piano di lavoro"
    con le sue regole (strumenti, volumi, muti) e il suo suono.
-6. **Ascolto** (pannello principale): *Tutte insieme*, *Solo l'attiva* oppure
+7. **Ascolto** (pannello principale): *Tutte insieme*, *Solo l'attiva* oppure
    *Una dopo l'altra*.
-7. In **Object Mode**, **S X** allunga o accorcia la composizione e **S Z** mostra più o
+8. In **Object Mode**, **S X** allunga o accorcia la composizione e **S Z** mostra più o
    meno ottave, senza deformare i tratti.
 
 ### Dove sono le impostazioni
 
 | Dove | Cosa |
 |---|---|
-| Proprietà → **Dati oggetto** → Musica | stato, tavola e tempo, lettura, livelli, strumenti, canale del Sequencer |
+| Proprietà → **Dati oggetto** → Musica | stato, tavola e tempo, lettura, **livelli con i loro strumenti**, canone, canale del Sequencer |
 | Proprietà → **Materiale** → Strumento musicale | tipo di strumento, volume, campione, effetti dello strumento |
 | Proprietà → **Output** | export WAV / MP3 / MIDI, mix di tutta la scena |
 | Proprietà → **Scena** | ascolto delle composizioni (canali, ordine, muto) |
 | *File → Import / Export* | MIDI → Grease Pencil; composizione in WAV / MP3 / MIDI |
 | Barra laterale **N → Musica** | versione compatta per quando disegni |
-| Preferences dell'add-on | mappatura degli attributi, valori delle nuove composizioni |
+| Preferences dell'add-on | mappatura degli attributi (con preset), valori delle nuove composizioni, tastiera MIDI |
 
 ### Suonare con la tastiera
 
 *Suona con la tastiera* (pannello N o Dati oggetto): **A W S E D F T G Y H U J K** sono le
 note (come i tasti di un pianoforte), **Z / X** cambiano ottava, **R** registra (e fa partire
 il play): ogni tasto tenuto diventa un tratto sul livello attivo. **Esc** esce.
+
+Una **tastiera MIDI** collegata suona insieme alla tastiera del PC (velocity = volume, pedale
+di sustain); la porta si sceglie nelle Preferences (vuoto = la prima trovata). Con le
+sezioni da keyframe la nota registrata finisce nel disegno della sezione che sta suonando.
 
 ### Suono nella Timeline
 
@@ -75,8 +84,7 @@ Tutto si controlla dalla barra laterale **N → Musica**:
 | Grease Pencil to Music | stato, muto, avvisi, *Auto* (aggiornamento automatico), *Genera suono*, **Ascolto** (insieme / solo l'attiva / una dopo l'altra) |
 | Tavola e tempo | BPM, durata del loop, nota più bassa, ottave, **etichette dei tasti** (solo Do, tasti bianchi, tutte, nessuna), griglia |
 | Lettura | scala e tonica, quantizzazione ritmica, **swing**, nota minima, volume, **Usa modificatori** |
-| Strumenti | lista con **+ / −**: colore, nome, **volume**, occhio = nascosto e muto; sotto, il tipo di strumento |
-| Livelli | lista con **+ / − / ↑ / ↓**: lettura *Quantizzata*, *Ottica* o *Legato*, occhio = nascosto e muto; per il livello attivo volume, forme piene, eco, riverbero, lo-fi |
+| Livelli e strumenti | **Nuovo livello**, ↑ / ↓; ogni livello è un riquadro con lettura, occhio (nascosto e muto), cestino e i suoi **strumenti** (colore, nome, **volume**, occhio); **+ Strumento**; volume, forme piene, canone ed effetti del livello |
 | Esporta | **WAV**, **MP3**, **MIDI** |
 
 ### Come viene letto un tratto
@@ -86,6 +94,16 @@ Tutto si controlla dalla barra laterale **N → Musica**:
 - **Ottica (libera)**: alla McLaren, l'altezza segue la linea in modo continuo, con glissandi.
 - **Legato (morphing)**: le note sono quelle della scala, ma il tratto è un'unica voce che
   scivola da una nota all'altra senza riattaccare (tempo di legato regolabile).
+- **Gesto (tempo del disegno)**: il ritmo è quello della mano. Il tratto parte dove inizia
+  e dura quanto hai impiegato a disegnarlo: una linea verticale tracciata in fretta è una
+  scala rapida, una lenta è un arpeggio lento. I tratti senza tempo di disegno (import MIDI,
+  registrati) vengono letti come *Quantizzata*.
+- **Canone** (per livello): il livello si ripete in 2–4 voci che entrano dopo N battiti,
+  ognuna trasposta di N semitoni rispetto alla precedente; in loop le voci rientrano
+  dall'inizio, come in un canone a ruota.
+- **Sezioni da keyframe** (*Tavola e tempo*): ogni keyframe Grease Pencil apre una sezione
+  (strofa, ritornello…) che ripete il suo disegno fino al keyframe successivo; l'ultima
+  suona un loop. La testina riparte a ogni sezione e la scena dura quanto il brano.
 - **Forma piena** (tratto riempito): *Cluster tonale* suona tutte le note della scala che
   copre; *Banda di rumore* è rumore filtrato tra il bordo inferiore e superiore della forma
   (come il sintetizzatore ANS).
@@ -99,7 +117,9 @@ Melodici: Flauto, Ocarina, 8-bit, Synth, Archi, Chitarra (Karplus-Strong), Campa
 Percussioni: Percussioni (generiche, dipendono dalla riga), Cassa, Rullante, Charleston,
 Piatto, Battimani, Tom (intonato sulla riga), Campanaccio.
 **Campione**: qualsiasi suono di Blender (*Carica suono…* o un suono del Sequencer),
-intonato sulla nota base. Ogni strumento ha anche i suoi effetti (scheda Materiale). Nel MIDI le percussioni usano
+intonato sulla nota base. **Libreria**: un SoundFont (`.sf2`) o uno strumento SFZ (`.sfz`),
+con scelta del preset; librerie libere: GeneralUser GS, FluidR3 (SF2), Versilian VCSL (SFZ,
+CC0) — vedi [RESEARCH.md](RESEARCH.md). Ogni strumento ha anche i suoi effetti (scheda Materiale). Nel MIDI le percussioni usano
 le note General MIDI della batteria.
 
 ### Preferences dell'add-on
@@ -113,12 +133,18 @@ le note General MIDI della batteria.
 | Vertex color | **Nessuno**, Pan stereo (rosso = sinistra, blu = destra), Brillantezza |
 | Morbidezza | **Attacco**, Nessuno |
 
+**Preset**: *Classico* (quello sopra), *Espressivo* (jitter = vibrato, colore = pan),
+*McLaren* (spessore e opacità = volume, colore chiaro = brillante), *Pulito* (ogni tratto
+suona uguale).
+
 *Volume + Vibrato* separa lo spessore in due: l'andamento lento è il volume,
 l'irregolarità veloce (per esempio il jitter del pennello Ink) diventa vibrato.
 
 ## Limiti noti (0.0.x)
 
-- Viene letto solo il keyframe Grease Pencil attivo all'inizio della scena.
+- Senza *Sezioni da keyframe* viene letto solo il keyframe attivo all'inizio della scena.
+- Le librerie SF2/SFZ usano un campione per tasto (niente strati di velocity né inviluppi
+  del SoundFont).
 - Con *Usa modificatori* vengono letti i tratti del frame corrente.
 - Gli effetti visivi (shader effects) non cambiano il suono.
 - La Chitarra non fa glissandi in modalità ottica.
@@ -134,7 +160,7 @@ python -m venv .venv
 python tools/build_zip.py          # -> dist/grease_pencil_to_music-<versione>-windows_x64.zip
 ```
 
-Vedi [DESIGN.md](DESIGN.md) per decisioni e roadmap, [CHANGELOG.md](CHANGELOG.md) per le versioni.
+Vedi [DESIGN.md](DESIGN.md) per decisioni e roadmap, [RESEARCH.md](RESEARCH.md) per le fonti, [CHANGELOG.md](CHANGELOG.md) per le versioni.
 
 ## Licenza
 

@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.0.5
+
+Novità
+- **Composizione vuota**: una nuova composizione parte con un solo livello e un solo
+  strumento (Preferences per partire con più livelli o con un set di strumenti).
+- **Livelli e strumenti nella stessa interfaccia**: *Nuovo livello* crea un livello; ogni
+  livello è un riquadro (apri/chiudi) con lettura, occhio, cestino e dentro i **suoi
+  strumenti**; *+ Strumento* aggiunge uno strumento a quel livello. Rinominare un livello
+  si porta dietro i suoi strumenti.
+- **Strumento "Libreria"**: suona SoundFont 2 (`.sf2`) e strumenti SFZ (`.sfz`) con scelta
+  del preset (lettore incluso, nessuna dipendenza). Librerie libere consigliate in
+  RESEARCH.md.
+- **Tastiere MIDI**: *Suona con la tastiera* ascolta anche una tastiera MIDI collegata
+  (velocity = volume, pedale di sustain, registrazione). Porta nelle Preferences.
+- **Sezioni da keyframe**: ogni keyframe Grease Pencil diventa una sezione del brano che
+  ripete il suo disegno fino al keyframe successivo; testina e durata della scena seguono.
+- **Lettura "Gesto"**: il ritmo è la velocità della mano (tempo di disegno dei punti).
+- **Canone** per livello: 2–4 voci, entrata in battiti, trasposizione in semitoni.
+- **Preset di mappatura** nelle Preferences: Classico, Espressivo, McLaren, Pulito.
+- **RESEARCH.md**: fonti della ricerca (progetti simili, add-on, librerie di strumenti,
+  librerie Python) e idee per il futuro.
+
+Correzioni
+- Cambiando l'**inizio della scena** o gli **fps** le strip e la testina si risistemano da
+  sole (prima restavano al vecchio frame finché non si ridisegnava).
+- Aprendo un altro file non resta lo stato del file precedente (scala in corso, suono
+  in cache con lo stesso nome di oggetto).
+- L'avviso "modificatori non contati" non può più bloccare Blender quando gira senza
+  interfaccia (render da riga di comando).
+- *Suona con la tastiera*: porta MIDI e timer vengono liberati anche se Blender chiude
+  l'operatore (caricamento di un file); il volume della velocity non dà più errore.
+- Import MIDI più robusto con livelli senza keyframe; un SoundFont incompleto dà un
+  messaggio chiaro invece di un errore Python; lettura SFZ di file con opcode prima di
+  ogni intestazione.
+
 ## 0.0.4
 
 Correzioni

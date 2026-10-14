@@ -63,7 +63,8 @@ class SoundFont:
                     self.samples = np.frombuffer(data[sa:sb], dtype="<i2")
                 elif kind == b"pdta":
                     self.records[sub.decode("ascii", "replace")] = data[sa:sb]
-        if self.samples is None or "phdr" not in self.records:
+        missing = {"phdr", "pbag", "pgen", "inst", "ibag", "igen", "shdr"} - set(self.records)
+        if self.samples is None or missing:
             raise LibraryError("SoundFont incompleto")
         self.presets = self._read("phdr", "<20sHHHIII")
         self.pbags = self._read("pbag", "<HH")

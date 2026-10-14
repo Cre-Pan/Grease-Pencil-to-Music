@@ -899,3 +899,34 @@ def test_mapping_presets(addon):
         bpy.ops.gp2m.mapping_preset(preset="CLASSIC")
     assert prefs.applied_preset() == "CLASSIC"
     assert p.map_thickness == "VOLUME" and p.map_opacity == "BRIGHTNESS"
+
+
+def test_scene_start_and_frame_rate_changes_follow(comp):
+    """Moving the scene start or changing fps re-places strips and keyframe sections."""
+    handlers, engine = sub("handlers"), sub("engine")
+    scene = bpy.context.scene
+    old_start, old_fps = scene.frame_start, scene.render.fps
+    comp.gp2m.length = 2.0
+    add_stroke(comp, 0, line(comp, 0.5, 1.0, 60))
+    add_stroke(comp, 0, line(comp, 0.5, 1.0, 64), frame=old_start + 48)
+    comp.gp2m.use_sections = True
+    engine.regenerate(comp)
+    handlers._scene_timing.clear()
+    bpy.context.view_layer.update()  # remembers the current timing
+    try:
+        scene.frame_start = old_start + 10
+        scene.render.fps = 25
+        bpy.context.view_layer.update()
+        assert comp.name in handlers._dirty and handlers._cleanup_needed[0]
+        handlers._last_change[0] = 0.0
+        handlers._tick()
+        strip = engine.find_strip(scene, comp)
+        assert strip.content_start == scene.frame_start
+        result = engine.regenerate(comp)
+        # Keyframe at old_start + 48 = 38 frames after the new start, at 25 fps.
+        assert result.sections == (0.0, pytest.approx(38 / 25))
+    finally:
+        scene.frame_start, scene.render.fps = old_start, old_fps
+        bpy.context.view_layer.update()
+        handlers._last_change[0] = 0.0
+        handlers._tick()

@@ -504,6 +504,12 @@ def test_sf2_rejects_other_files(tmp_path):
     path.write_bytes(b"RIFF\0\0\0\0WAVE")
     with pytest.raises(libraries.LibraryError):
         libraries.read_sf2(path)
+    # A SoundFont missing one of its tables: a clear error, not a KeyError.
+    good = tmp_path / "good.sf2"
+    sf2_fixture.write_sf2(good)
+    path.write_bytes(good.read_bytes().replace(b"igen", b"junk"))
+    with pytest.raises(libraries.LibraryError):
+        libraries.read_sf2(path)
 
 
 def test_sfz_regions_inheritance_and_note_names(tmp_path):

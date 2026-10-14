@@ -7,7 +7,6 @@
 * OPACITY: the material color alpha follows the volume.
 """
 
-import bpy
 
 from . import board, prefs
 

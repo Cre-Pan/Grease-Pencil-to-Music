@@ -22,6 +22,7 @@ _cleanup_needed = [False]
 _object_signature = [None]
 _was_playing = [False]
 _scaled = set()  # compositions whose object scale changed
+_scene_timing = {}  # scene name -> (frame_start, fps, fps_base)
 _msgbus_owner = object()
 
 
@@ -205,13 +206,15 @@ def _check_stack(obj):
 def _draw_stack_popup(menu, _context):
     layout = menu.layout
     layout.label(text="Modificatori ed effetti non cambiano il suono:")
-    layout.label(text="attiva 'Usa modificatori' nel pannello N → Musica per sentirli.")
+    layout.label(text="attiva 'Usa modificatori' (Proprietà → Dati oggetto → Musica → Lettura).")
 
 
 def _show_popups():
     if not _popup_queue:
         return
     _popup_queue.clear()
+    if bpy.app.background:  # no UI: a popup would crash Blender
+        return
     wm = bpy.context.window_manager
     if wm is None or not wm.windows:
         return
@@ -246,6 +249,8 @@ def on_depsgraph_update(_scene, depsgraph):
         elif isinstance(original, bpy.types.Material):
             mark_material_dirty(original)
         elif isinstance(original, (bpy.types.Scene, bpy.types.Collection)):
+            if isinstance(original, bpy.types.Scene):
+                _check_scene_timing(original)
             # Cheap check first: only look for leftovers when objects changed.
             signature = _signature()
             if signature != _object_signature[0]:
@@ -254,10 +259,35 @@ def on_depsgraph_update(_scene, depsgraph):
                 _ensure_timer()
 
 
+def _timing(scene):
+    return (scene.frame_start, scene.render.fps, round(scene.render.fps_base, 6))
+
+
+def _check_scene_timing(scene):
+    """A new scene start or frame rate moves strips, playheads and keyframe sections."""
+    timing = _timing(scene)
+    previous = _scene_timing.get(scene.name)
+    _scene_timing[scene.name] = timing
+    if previous is not None and previous != timing:
+        for obj in compositions():
+            if engine.scene_of(obj) == scene:
+                if previous[0] != timing[0] or obj.gp2m.use_sections:
+                    mark_dirty(obj)
+        _cleanup_needed[0] = True  # arranges every scene
+        _ensure_timer()
+
+
 @persistent
 def on_load_post(*_args):
     _dirty.clear()
     _stack_counts.clear()
+    _scaled.clear()
+    _scale_base.clear()
+    _scale_seen.clear()
+    engine._state.clear()  # runtime state of the previous file (keyed by object name)
+    _scene_timing.clear()
+    for scene in bpy.data.scenes:
+        _scene_timing[scene.name] = _timing(scene)
     _object_signature[0] = _signature()
     for obj in compositions():
         _stack_counts[obj.name] = _stack_count(obj)

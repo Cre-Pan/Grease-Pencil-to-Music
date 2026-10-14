@@ -90,7 +90,7 @@ def import_midi(context, path, comp=None, fit=True):
     if tracks:  # the empty "Livello 1..3" of a new composition are not needed
         for name in empty_defaults:
             layer = gp.layers.get(name)
-            if layer is not None and not layer.frames[0].drawing.strokes:
+            if layer is not None and not any(len(f.drawing.strokes) for f in layer.frames):
                 gp.layers.remove(layer)
     layers = board.user_layers(gp)
     if layers:

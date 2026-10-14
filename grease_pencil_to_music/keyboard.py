@@ -18,7 +18,7 @@ from collections import OrderedDict
 import bpy
 import numpy as np
 
-from . import board, engine, interpret, midi_input, reader, synth  # noqa: F401
+from . import board, engine, interpret, reader, synth
 from .operators import active_composition
 
 KEYMAP = {"A": 0, "W": 1, "S": 2, "E": 3, "D": 4, "F": 5, "T": 6, "G": 7, "Y": 8, "H": 9,
@@ -144,7 +144,7 @@ def record_stroke(comp, scene, pitch, t0, t1, material_index):
 
 
 class GP2M_OT_play_keyboard(bpy.types.Operator):
-    """Suona lo strumento attivo con la tastiera del computer o una tastiera MIDI (R registra mentre la scena è in play)"""
+    """Suona lo strumento attivo con la tastiera del PC o una tastiera MIDI (R registra)"""
 
     bl_idname = "gp2m.play_keyboard"
     bl_label = "Suona con la tastiera"
@@ -187,7 +187,7 @@ class GP2M_OT_play_keyboard(bpy.types.Operator):
         self.midi = self._open_midi()
         self.timer = None
         if self.midi is not None:
-            self.timer = context.window_manager.event_timer_add(0.005, window=context.window)
+            self.timer = context.window_manager.event_timer_add(0.01, window=context.window)
         context.window_manager.modal_handler_add(self)
         self._header(context)
         return {"RUNNING_MODAL"}
@@ -205,6 +205,10 @@ class GP2M_OT_play_keyboard(bpy.types.Operator):
             self.midi = None
         if context.area is not None:
             context.area.header_text_set(None)
+
+    def cancel(self, context):
+        """Blender stops the operator (file loaded, window closed): free port and timer."""
+        self._finish(context)
 
     def _press(self, context, comp, key, pitch, volume=1.0):
         if key in self.held:
