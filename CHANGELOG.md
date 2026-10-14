@@ -10,6 +10,17 @@
   livello; miniature, Duplica, Su, Giù.
 - Gesti: due dita annulla, tre ripeti, quattro play/stop.
 - Installabile sulla schermata Home e utilizzabile offline (`docs/app`, GitHub Pages).
+- Livelli: scorri a sinistra per eliminare (fino in fondo elimina subito), a destra per
+  selezionarne più di uno e poi Unisci, Silenzia o Elimina.
+- Tocco a due dita più affidabile (anche con le dita che non toccano insieme); un tocco col
+  dito suona solo quando diventa davvero un tratto.
+- Beat: pad quadrati.
+- I tuoi suoni: registra con il microfono o importa un file audio (anche da GarageBand); la
+  nota base viene riconosciuta, il suono diventa uno strumento ed entra nel progetto .json.
+- Export per GarageBand: tracce separate (un WAV per livello e per il beat), WAV e MIDI
+  singoli fuori da claude.ai. Import MIDI fino a 32 battute, salta le battute vuote iniziali
+  e aggiunge livelli alla composizione se c'è già musica.
+- Template dell'icona (`tools/icon_template.py`) e icona personalizzata da `web/icon.png`.
 
 ## 0.0.5
 

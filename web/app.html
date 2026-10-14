@@ -243,7 +243,27 @@ input[type="range"]::-moz-range-thumb {
 /* Layers */
 .layer { border-radius: 16px; transition: background 0.2s; }
 .layer + .layer { margin-top: 6px; }
-.layer-row { display: flex; align-items: center; gap: 10px; padding: 7px 6px 7px 7px; border-radius: 16px; cursor: pointer; }
+.swipe { position: relative; border-radius: 16px; overflow: hidden; }
+.swipe-bg { position: absolute; inset: 0; display: flex; border-radius: inherit; }
+.swipe-bg button { display: flex; align-items: center; gap: 6px; padding: 0 18px; font-weight: 600; font-size: 14px; color: var(--on-tint); }
+.swipe-pick { background: var(--green); flex: 1 1 auto; justify-content: flex-start; }
+.swipe-del { background: var(--red); flex: 1 1 auto; justify-content: flex-end; }
+.swipe[data-dir="left"] .swipe-pick, .swipe[data-dir="right"] .swipe-del { display: none; }
+.swipe:not([data-dir]) .swipe-bg { visibility: hidden; }
+.layer-row {
+  position: relative; display: flex; align-items: center; gap: 10px; padding: 7px 6px 7px 7px; border-radius: 16px; cursor: pointer;
+  background: var(--pop); touch-action: pan-y; transition: transform 0.36s var(--spring);
+}
+.layer.active .swipe, .layer.active .layer-row { background: var(--blue); }
+.layer-row.dragging { transition: none; }
+.layer.picked .thumb { box-shadow: 0 0 0 2.5px var(--green); }
+.pick-badge { position: absolute; left: 3px; top: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--green); color: var(--on-tint); display: grid; place-items: center; }
+.pick-badge svg { width: 11px; height: 11px; }
+.pick-bar {
+  position: sticky; bottom: -16px; margin: 12px -16px -16px; padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  background: var(--pop); border-top: 0.5px solid var(--sep);
+}
+.pick-bar span { flex: 1 1 auto; font-size: 13px; font-weight: 600; color: var(--fg-2); }
 .thumb { width: 54px; height: 36px; border-radius: 8px; flex: 0 0 auto; box-shadow: 0 0 0 0.5px var(--sep); }
 .chev { width: 14px; height: 14px; flex: 0 0 auto; opacity: 0.7; transition: transform 0.32s var(--spring); }
 .layer.open .chev { transform: rotate(180deg); }
@@ -281,6 +301,31 @@ input[type="range"]::-moz-range-thumb {
 .inst[aria-pressed="true"] { background: var(--fill); box-shadow: inset 0 0 0 2px var(--blue); }
 .swatch { width: 38px; height: 38px; border-radius: 50%; box-shadow: inset 0 -6px 12px rgba(0, 0, 0, 0.12); }
 .swatch.drum { border-radius: 11px; }
+.swatch.tool { background: var(--fill); display: grid; place-items: center; color: var(--blue); box-shadow: none; }
+.swatch.tool svg { width: 20px; height: 20px; }
+.swatch.rec-dot { display: grid; place-items: center; }
+.swatch.rec-dot::after { content: ""; width: 16px; height: 16px; border-radius: 50%; background: var(--red); }
+.swatch.sample { display: grid; place-items: center; color: rgba(255, 255, 255, 0.92); }
+.swatch.sample svg { width: 22px; height: 22px; }
+.inst label, label.inst { cursor: pointer; }
+.inst input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.inst { position: relative; }
+.inst-empty { grid-column: 1 / -1; font-size: 13px; color: var(--fg-2); padding: 2px 6px; line-height: 1.4; }
+
+/* Sound sheet (record or import a custom sound) */
+.rec-center { display: grid; place-items: center; padding: 10px 0 4px; }
+.rec-big {
+  width: 78px; height: 78px; border-radius: 50%; display: grid; place-items: center; box-shadow: inset 0 0 0 4px var(--fill-2);
+  transition: transform 0.2s var(--spring);
+}
+.rec-big:active { transform: scale(0.92); }
+.rec-big i { width: 58px; height: 58px; border-radius: 50%; background: var(--red); transition: all 0.3s var(--spring); }
+.rec-big.on i { width: 30px; height: 30px; border-radius: 8px; }
+.rec-time { text-align: center; font-family: var(--font-round); font-variant-numeric: tabular-nums; font-weight: 600; margin: 8px 0; }
+.meter { height: 6px; border-radius: 3px; background: var(--fill); overflow: hidden; margin: 0 4px 12px; }
+.meter i { display: block; height: 100%; width: 0; background: var(--green); transition: width 0.05s linear; }
+.sheet-stage { display: grid; gap: 12px; }
+#recWave { width: 100%; height: 84px; border-radius: 14px; background: var(--group); }
 
 /* Cards and buttons */
 .card { background: var(--card); border-radius: 24px; box-shadow: var(--shadow); }
@@ -333,7 +378,7 @@ label.btn input { position: absolute; width: 1px; height: 1px; opacity: 0; point
 .mute[aria-pressed="true"] { background: var(--red); color: var(--on-tint); }
 .pads { display: flex; gap: 5px; touch-action: none; }
 .pad {
-  --c: var(--blue); width: 34px; height: 40px; border-radius: 11px; background: var(--pad-off);
+  --c: var(--blue); width: 38px; height: 38px; border-radius: 11px; background: var(--pad-off);
   transition: background 0.12s, transform 0.18s var(--spring), box-shadow 0.18s; flex: 0 0 auto;
 }
 .pad.q { margin-left: 7px; }
@@ -420,7 +465,7 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   .export-grid { grid-template-columns: minmax(0, 1fr); }
   .beat-row { grid-template-columns: 96px 32px auto; }
   .beat-name { font-size: 13px; padding: 7px 6px; }
-  .pad { width: 28px; height: 36px; }
+  .pad { width: 30px; height: 30px; border-radius: 9px; }
   .keys-card { height: 140px; }
   .tempo span { min-width: 54px; }
   .clock { min-width: 52px; }
@@ -505,8 +550,11 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
           <div class="group">
             <div class="item"><span>Ripetizioni del loop</span><div class="stepper"><button id="repDown" aria-label="Meno ripetizioni">−</button><span id="repLabel">1</span><button id="repUp" aria-label="Più ripetizioni">+</button></div></div>
             <div class="item"><label for="exBeat">Includi il beat</label><input class="switch" type="checkbox" id="exBeat" checked></div>
+            <div class="item"><label for="exStems">Tracce separate <small class="v">un WAV per livello, per GarageBand</small></label><input class="switch" type="checkbox" id="exStems"></div>
           </div>
           <button class="btn primary" id="exZip">Esporta .zip</button>
+          <div class="btn-row" id="exSingles" hidden><button class="btn" id="exWav">Solo WAV</button><button class="btn" id="exMid">Solo MIDI</button></div>
+          <p class="note-line">In GarageBand per iPad: salva in File, poi nel Browser dei loop apri la scheda File e trascina il WAV o il MIDI su una traccia.</p>
         </div>
         <div class="card ex-card">
           <h3>Immagine e progetto</h3>
@@ -592,7 +640,7 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   <section class="popover" id="popBoard" hidden aria-label="Tavola">
     <div class="pop-head"><h2>Tavola</h2></div>
     <div class="group">
-      <div class="item col"><div class="item" style="padding:0;min-height:0"><span>Durata</span><span class="v" id="valBars"></span></div><input id="inBars" type="range" min="1" max="16" step="1" aria-label="Battute"></div>
+      <div class="item col"><div class="item" style="padding:0;min-height:0"><span>Durata</span><span class="v" id="valBars"></span></div><input id="inBars" type="range" min="1" max="32" step="1" aria-label="Battute"></div>
       <div class="item"><span>Scala</span><span style="display:flex;gap:6px"><select id="inRoot" aria-label="Tonica"></select><select id="inScale" aria-label="Scala"></select></span></div>
       <div class="item col"><span>Griglia ritmica</span><div class="seg" id="segGrid"><button data-v="0">Libera</button><button data-v="1">1/4</button><button data-v="0.5">1/8</button><button data-v="0.25">1/16</button></div></div>
     </div>
@@ -614,7 +662,7 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
       </button>
     </div>
     <div id="layerList"></div>
-    <p class="layer-hint">Tocca un livello per sceglierlo, toccalo di nuovo per le impostazioni. Tieni premuto l'occhio o l'altoparlante per vedere o sentire solo quel livello.</p>
+    <p class="layer-hint">Tocca un livello per sceglierlo, di nuovo per le impostazioni. Scorri a sinistra per eliminarlo, a destra per selezionarne più di uno. Tieni premuto l'occhio o l'altoparlante per vedere o sentire solo quel livello.</p>
   </section>
 
   <section class="popover" id="popInst" hidden aria-label="Strumenti">
@@ -623,6 +671,30 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
     <div class="inst-grid" id="instMel"></div>
     <div class="label">Percussioni</div>
     <div class="inst-grid" id="instDrum"></div>
+    <div class="label">I tuoi suoni</div>
+    <div class="inst-grid" id="instSmp"></div>
+  </section>
+
+  <section class="popover" id="popRec" hidden aria-label="Nuovo suono">
+    <div class="pop-head"><h2 id="recTitle">Nuovo suono</h2>
+      <button class="plus" id="recClose" aria-label="Chiudi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="sheet-stage" id="recStage1">
+      <div class="rec-center"><button class="rec-big" id="recBtn" aria-label="Registra"><i></i></button></div>
+      <div class="rec-time" id="recTime">Tocca per registrare · massimo 8 s</div>
+      <div class="meter"><i id="recMeter"></i></div>
+      <p class="help">Canta una nota, batti le mani, registra un oggetto: diventa uno strumento intonato sulle righe. Oppure importa un file audio (WAV, MP3, M4A, anche esportato da GarageBand con Condividi → Salva su File).</p>
+      <label class="btn" for="fileAudio">Importa file audio<input type="file" id="fileAudio" accept="audio/*,.wav,.mp3,.m4a,.aif,.aiff,.caf"></label>
+    </div>
+    <div class="sheet-stage" id="recStage2" hidden>
+      <canvas id="recWave" aria-label="Forma d'onda del suono"></canvas>
+      <div class="group">
+        <div class="item"><label for="smpName">Nome</label><input type="text" id="smpName" style="width:60%"></div>
+        <div class="item"><span>Nota base <small class="v" id="rootHint"></small></span><div class="stepper"><button id="rootDown" aria-label="Nota base giù">‹</button><span id="rootLabel"></span><button id="rootUp" aria-label="Nota base su">›</button></div></div>
+      </div>
+      <div class="btn-row"><button class="btn" id="smpListen">Ascolta</button><button class="btn" id="smpRetry">Rifai</button><button class="btn danger" id="smpDelete" hidden>Elimina</button></div>
+      <button class="btn primary" id="smpSave">Usa come strumento</button>
+    </div>
   </section>
 
   <div class="toast" id="toast" hidden></div>
@@ -714,6 +786,7 @@ let state = null;
 const ui = {
   view: "draw", tool: "brush", inst: "EPIANO", size: 0.5, opacity: 1, naming: "IT", stabilize: 0.3,
   playing: false, open: null, openBtn: null, metronome: false, recording: false, kbBase: 60, repeats: 1, exportBeat: true,
+  stems: false, picked: new Set(), swipeOpen: null, layerOpen: null,
 };
 let history = [], future = [];
 let uid = 1;
@@ -737,7 +810,7 @@ function applyPreset(beat, key) {
 function blankState() {
   const layer = newLayer("Livello 1");
   return { name: "Senza titolo", example: false, bpm: 100, bars: 4, low: 48, octaves: 3, scale: "MAJOR", root: 0, grid: 0.25,
-    layers: [layer], active: layer.id, strokes: [], beat: blankBeat() };
+    layers: [layer], active: layer.id, strokes: [], beat: blankBeat(), samples: [] };
 }
 
 function exampleState() {
@@ -745,7 +818,7 @@ function exampleState() {
   const pad = newLayer("Atmosfera", "OPTICAL", { volume: 0.7, pan: -0.15, reverb: 0.55 });
   const melody = newLayer("Melodia", "QUANTIZED", { volume: 0.85, pan: 0.12, reverb: 0.3 });
   const s = { name: "Prima melodia", example: true, bpm: 92, bars: 4, low: 36, octaves: 4, scale: "MAJOR", root: 0, grid: 0.25,
-    layers: [bass, pad, melody], active: melody.id, strokes: [], beat: blankBeat() };
+    layers: [bass, pad, melody], active: melody.id, strokes: [], beat: blankBeat(), samples: [] };
   applyPreset(s.beat, "HIPHOP");
   const add = (layer, inst, path, w, op = 1) => s.strokes.push(makeStroke(layer.id, inst, path, w, op, s.bpm));
   const notes = [[0, 1, 72], [1, 1, 76], [4, 1, 76], [5, 1, 72], [6, 2, 69], [8, 1, 69], [9, 1, 72], [10, 1.5, 77],
@@ -787,13 +860,16 @@ const saveSoon = () => { clearTimeout(saveTimer); saveTimer = setTimeout(save, 5
 function sanitize(s) {
   if (!s || !Array.isArray(s.layers) || !s.layers.length) return null;
   const out = { ...blankState(), ...s };
+  out.samples = (Array.isArray(s.samples) ? s.samples : []).filter(m => m && typeof m.id === "string" && m.id.startsWith("SMP:"))
+    .map((m, i) => ({ id: m.id, name: String(m.name || "Suono"), root: clamp(Math.round(+m.root || 60), 24, 96), color: SYS[m.color] ? m.color : SAMPLE_COLORS[i % SAMPLE_COLORS.length] }));
+  for (const m of out.samples) registerSample(m);
   // "muted" is the sound, "visible" the drawing; older projects hid both with the eye.
   out.layers = s.layers.map(l => ({ ...newLayer(l.name || "Livello"), ...l, mode: MODE[l.mode] ? l.mode : "QUANTIZED",
     muted: "muted" in l ? !!l.muted : l.visible === false }));
   const ids = new Set(out.layers.map(l => l.id));
   out.strokes = (s.strokes || []).filter(st => st && INST[st.inst] && ids.has(st.layer) && Array.isArray(st.pts) && st.pts.length);
   if (!ids.has(out.active)) out.active = out.layers[0].id;
-  out.bars = clamp(Math.round(out.bars || 4), 1, 16);
+  out.bars = clamp(Math.round(out.bars || 4), 1, 32);
   out.bpm = clamp(Math.round(+out.bpm || 100), 40, 220);
   out.octaves = clamp(Math.round(out.octaves || 3), 1, 5);
   out.low = clamp(Math.round(out.low ?? 48), 12, 96);
@@ -1251,6 +1327,18 @@ function scheduleVoice(ctx, dest, v, when, track) {
       osc("pulse").connect(lowpass(1800 + bright * 8000, 0.5, env));
       break;
     }
+    case "sample": {
+      const buf = sampleBuffers.get(v.inst);
+      if (!buf) { stopAt = e; break; }
+      const src = ctx.createBufferSource(); src.buffer = buf; nodes.push(src);
+      const rate0 = Math.pow(2, ((v.curve ? v.curve[0] : v.midi) - inst.root) / 12);
+      if (v.curve) setFreq(src.playbackRate, v, s, m => Math.pow(2, (m - inst.root) / 12));
+      else src.playbackRate.value = rate0;
+      src.connect(lowpass(900 + bright * 14000, 0.5, env));
+      env.gain.setValueAtTime(0, s); env.gain.linearRampToValueAtTime(0.85, s + 0.004); env.gain.setTargetAtTime(0, e, 0.05);
+      stopAt = Math.min(e + 0.3, s + buf.duration / rate0 + 0.02);
+      break;
+    }
     case "bass": {
       stopAt = adsr(env.gain, s, e, 0.004, 0.3, 0.85, inst.rel, 0.3);
       const sh = ctx.createWaveShaper(); sh.curve = driveCurve; sh.connect(env);
@@ -1335,12 +1423,107 @@ function scheduleDrum(ctx, dest, id, s, a, track) {
   if (track) track.push(...nodes.map(x => x[0]));
 }
 
+/* ---------- your own sounds: recorded or imported samples ---------- */
+
+const SAMPLE_COLORS = ["pink", "mint", "orange", "purple", "teal", "green", "indigo", "yellow"];
+const MAX_SAMPLE = 8;  // seconds
+const sampleBuffers = new Map();
+let samplesVersion = 0;
+function registerSample(m) { INST[m.id] = { id: m.id, name: m.name, c: m.color, kind: "sample", gm: 0, rel: 0.12, root: m.root }; }
+
+/* Sample audio lives in IndexedDB (per device); the project keeps name, root and colour. */
+const sampleStore = (() => {
+  let dbp = null;
+  const open = () => dbp || (dbp = new Promise((res, rej) => {
+    const r = indexedDB.open("gp2m-web", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("samples");
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  }));
+  const run = async (mode, fn) => {
+    const db = await open();
+    return new Promise((res, rej) => { const q = fn(db.transaction("samples", mode).objectStore("samples")); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+  };
+  return {
+    get: k => run("readonly", st => st.get(k)).catch(() => null),
+    set: (k, v) => run("readwrite", st => st.put(v, k)).catch(() => null),
+    del: k => run("readwrite", st => st.delete(k)).catch(() => null),
+  };
+})();
+function toInt16(f) { const out = new Int16Array(f.length); for (let i = 0; i < f.length; i++) out[i] = clamp(f[i], -1, 1) * 32767; return out; }
+function bufferFrom(f32) {
+  const b = new AudioBuffer({ length: Math.max(1, f32.length), numberOfChannels: 1, sampleRate: SR });
+  b.getChannelData(0).set(f32);
+  return b;
+}
+function fromInt16(ab) { const i16 = new Int16Array(ab), f = new Float32Array(i16.length); for (let i = 0; i < i16.length; i++) f[i] = i16[i] / 32767; return f; }
+async function loadSampleAudio() {
+  let loaded = 0;
+  for (const m of state.samples) {
+    if (sampleBuffers.has(m.id)) continue;
+    const ab = await sampleStore.get(m.id);
+    if (ab) { sampleBuffers.set(m.id, bufferFrom(fromInt16(ab))); loaded++; }
+  }
+  if (loaded) { samplesVersion++; changed(); }
+}
+async function toMonoSR(buf) {
+  const ctx = new OfflineAudioContext(1, Math.max(1, Math.ceil(Math.min(buf.duration, 30) * SR)), SR);
+  const src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination); src.start();
+  return (await ctx.startRendering()).getChannelData(0);
+}
+/* Trim the silence around the sound, keep at most 8 s, normalise, soften the edges. */
+function trimNormalize(d) {
+  let peak = 0;
+  for (const v of d) peak = Math.max(peak, Math.abs(v));
+  if (peak < 0.003) return null;
+  const th = peak * 0.04;
+  let a = 0, b = d.length - 1;
+  while (a < b && Math.abs(d[a]) < th) a++;
+  while (b > a && Math.abs(d[b]) < th) b--;
+  a = Math.max(0, a - Math.round(SR * 0.01));
+  b = Math.min(d.length, b + Math.round(SR * 0.08), a + MAX_SAMPLE * SR);
+  const out = d.slice(a, b), k = 0.9 / peak;
+  const fin = Math.min(out.length, Math.round(SR * 0.003)), fout = Math.min(out.length, Math.round(SR * 0.02));
+  for (let i = 0; i < out.length; i++) out[i] *= k;
+  for (let i = 0; i < fin; i++) out[i] *= i / fin;
+  for (let i = 0; i < fout; i++) out[out.length - 1 - i] *= i / fout;
+  return out;
+}
+/* The note of a sung or played sound (autocorrelation), or null when it has no clear pitch. */
+function detectPitch(d) {
+  const N = 2048;
+  if (d.length < N * 2) return null;
+  let best = 0, at = 0;
+  for (let i = 0; i + N < Math.min(d.length, SR * 1.5); i += 512) {
+    let e = 0;
+    for (let j = 0; j < N; j += 4) e += d[i + j] * d[i + j];
+    if (e > best) { best = e; at = i; }
+  }
+  const w = d.subarray(at, at + N);
+  let energy = 0;
+  for (const v of w) energy += v * v;
+  const minLag = Math.floor(SR / 1100), maxLag = Math.floor(SR / 55), corr = new Float32Array(maxLag + 2);
+  let top = 0;
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    let c = 0;
+    for (let j = 0; j < N - lag; j++) c += w[j] * w[j + lag];
+    corr[lag] = c / energy;
+    if (corr[lag] > top) top = corr[lag];
+  }
+  if (top < 0.45) return null;
+  for (let lag = minLag + 1; lag < maxLag; lag++) {  // the first strong peak: avoids octave errors
+    if (corr[lag] >= top * 0.88 && corr[lag] >= corr[lag - 1] && corr[lag] >= corr[lag + 1]) {
+      return clamp(Math.round(69 + 12 * Math.log2(SR / lag / 440)), 24, 96);
+    }
+  }
+  return null;
+}
+
 /* ---------- rendering: one buffer per layer (cached), then a mix ---------- */
 
 const renderCache = new Map();
 function cacheGet(key) { if (!renderCache.has(key)) return null; const v = renderCache.get(key); renderCache.delete(key); renderCache.set(key, v); return v; }
 function cachePut(key, v) { renderCache.set(key, v); while (renderCache.size > 40) renderCache.delete(renderCache.keys().next().value); }
-const baseKey = () => [state.bpm, state.bars, state.scale, state.root, state.grid];
+const baseKey = () => [state.bpm, state.bars, state.scale, state.root, state.grid, samplesVersion];
 
 async function renderParts(voices, hits) {
   const ctx = new OfflineAudioContext(2, Math.ceil((loopSec() + TAIL) * SR), SR);
@@ -1399,17 +1582,21 @@ async function mixdown(parts) {
   return ctx.startRendering();
 }
 
-async function renderAll(withBeat = true) {
+async function collectParts(withBeat) {
   const parts = [];
   for (const layer of state.layers.slice()) {
     if (layer.muted) continue;
     const buf = await layerBuffer(layer);
-    if (buf) parts.push({ buf, vol: layer.volume, pan: layer.pan || 0, send: layer.reverb ?? 0.25 });
+    if (buf) parts.push({ name: layer.name, buf, vol: layer.volume, pan: layer.pan || 0, send: layer.reverb ?? 0.25 });
   }
   if (withBeat && state.beat.on) {
     const bb = await beatBuffer();
-    if (bb) parts.push({ buf: bb, vol: state.beat.volume, pan: 0, send: 0.07 });
+    if (bb) parts.push({ name: "Beat", buf: bb, vol: state.beat.volume, pan: 0, send: 0.07 });
   }
+  return parts;
+}
+async function renderAll(withBeat = true) {
+  const parts = await collectParts(withBeat);
   const full = await mixdown(parts);
   const loopN = Math.round(loopSec() * SR);
   const out = new AudioBuffer({ length: loopN, numberOfChannels: 2, sampleRate: SR });
@@ -1747,16 +1934,22 @@ function instrumentForProgram(p, key) {
   return "SAW";
 }
 
+/* A new composition from the file, or new layers when the current one already has music.
+   Leading empty bars are skipped (a region exported from bar 9 starts at bar 1). */
 function importMidi(bytes, fileName) {
   const { bpm, tracks } = parseMidi(bytes);
   if (!tracks.length) throw new Error("nessuna nota nel file");
   remember();
+  const first = Math.min(...tracks.flatMap(t => t.notes.map(n => n[0])));
+  const shift = Math.floor(first / 4) * 4;
+  for (const t of tracks) for (const n of t.notes) { n[0] -= shift; n[1] -= shift; }
+  if (!state.example && state.strokes.length) return appendMidi(tracks, fileName);
   const every = tracks.flatMap(t => t.notes);
   const melodic = tracks.filter(t => t.program >= 0).flatMap(t => t.notes.map(n => n[2]));
   const s = blankState();
   s.name = fileName.replace(/\.midi?$/i, "") || "MIDI";
   s.bpm = clamp(Math.round(bpm), 40, 220);
-  s.bars = clamp(Math.ceil(Math.max(...every.map(n => n[1])) / 4), 1, 16);
+  s.bars = clamp(Math.ceil(Math.max(...every.map(n => n[1])) / 4), 1, 32);
   if (melodic.length) {
     s.low = clamp(Math.floor(Math.min(...melodic) / 12) * 12, 12, 96);
     s.octaves = clamp(Math.ceil((Math.max(...melodic) + 1 - s.low) / 12), 1, 5);
@@ -1781,9 +1974,30 @@ function importMidi(bytes, fileName) {
   }
   if (!s.layers.length) s.layers.push(newLayer("Livello 1"));
   s.active = s.layers[s.layers.length - 1].id;
+  s.samples = state.samples;
   Object.assign(state, s);
   afterBigChange();
   return every.length;
+}
+function appendMidi(tracks, fileName) {
+  const top = state.low + state.octaves * 12, end = loopBeats();
+  let count = 0, outside = 0;
+  for (const t of tracks) {
+    if (state.layers.length >= 12) break;
+    const layer = newLayer(t.name || fileName.replace(/\.midi?$/i, "") || "MIDI");
+    state.layers.push(layer);
+    for (const [b0, b1, key, vel] of t.notes) {
+      const inst = instrumentForProgram(t.program, key);
+      const row = t.program < 0 ? state.low + 2 : key;
+      if (b0 >= end || row < state.low || row > top) { outside++; continue; }
+      state.strokes.push(makeStroke(layer.id, inst, [[b0 + 0.02, row + 0.5], [Math.max(Math.min(b1, end) - 0.04, b0 + 0.04), row + 0.5]], 0.25 + 0.55 * vel / 127, 1, state.bpm));
+      count++;
+    }
+    state.active = layer.id;
+  }
+  afterBigChange();
+  if (outside) setTimeout(() => toast(`${outside} note fuori dalla tavola: allarga le ottave o le battute in Tavola`), 2500);
+  return count;
 }
 
 function afterBigChange() {
@@ -1839,24 +2053,42 @@ async function saveFile(filename, data) {
   }
 }
 const fileBase = () => (state.name || "composizione").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "composizione";
-const projectJson = () => JSON.stringify({ app: "grease-pencil-to-music-web", version: 2, state });
-
+function toBase64(bytes) { let s = ""; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s); }
+function fromBase64(b64) { const s = atob(b64), out = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i); return out.buffer; }
+/* The project, with your own sounds inside so it opens the same on another device. */
+function projectJson() {
+  const sounds = {};
+  for (const m of state.samples) { const b = sampleBuffers.get(m.id); if (b) sounds[m.id] = toBase64(new Uint8Array(toInt16(b.getChannelData(0)).buffer)); }
+  return JSON.stringify({ app: "grease-pencil-to-music-web", version: 3, state, sounds });
+}
+/* The loop repeated `reps` times; the last repetition keeps its tail. */
+function tiled(full, loopN, reps) {
+  const out = new AudioBuffer({ length: loopN * reps + full.length - loopN, numberOfChannels: 2, sampleRate: SR });
+  for (let ch = 0; ch < 2; ch++) {
+    const src = full.getChannelData(ch), dst = out.getChannelData(ch);
+    for (let k = 0; k < reps; k++) for (let i = 0; i < src.length; i++) dst[k * loopN + i] += src[i];
+  }
+  return out;
+}
 async function exportZip() {
   toast("Preparo il file…");
   const r = await renderAll(ui.exportBeat);
-  const reps = ui.repeats, loopN = r.loop.length, tailN = r.full.length - loopN;
-  const out = new AudioBuffer({ length: loopN * reps + tailN, numberOfChannels: 2, sampleRate: SR });
-  for (let ch = 0; ch < 2; ch++) {
-    const src = r.full.getChannelData(ch), dst = out.getChannelData(ch);
-    for (let k = 0; k < reps; k++) for (let i = 0; i < src.length; i++) dst[k * loopN + i] += src[i];
-  }
-  const base = fileBase();
-  const blob = zipBlob([
-    { name: base + ".wav", data: wavBytes(out) },
+  const reps = ui.repeats, loopN = r.loop.length, base = fileBase();
+  const files = [
+    { name: base + ".wav", data: wavBytes(tiled(r.full, loopN, reps)) },
     { name: base + ".mid", data: midiBytes(r.notes, reps) },
     { name: base + ".json", data: new TextEncoder().encode(projectJson()) },
-  ]);
-  await saveFile(base + ".zip", blob);
+  ];
+  if (ui.stems) {
+    const used = new Set();
+    for (const part of await collectParts(ui.exportBeat)) {
+      let name = part.name.replace(/[\\/:*?"<>|]+/g, "-").trim() || "Livello";
+      while (used.has(name)) name += " 2";
+      used.add(name);
+      files.push({ name: `tracce/${name}.wav`, data: wavBytes(tiled(await mixdown([part]), loopN, reps)) });
+    }
+  }
+  await saveFile(base + ".zip", zipBlob(files));
 }
 
 /* ---------- Disegna: the board ---------- */
@@ -2014,6 +2246,7 @@ function drawBoard() {
 /* ---------- Disegna: pen input ---------- */
 
 let strokeStart = 0, penSeen = false, erasing = false, smooth = null, gesture = null;
+let pendingTap = null;  // a finger tap that may still become the first finger of a two-finger tap
 const touches = new Map();
 const eraserRadius = () => Math.max(12, ui.size * rowPx());
 const inBoard = (x, y) => geo && x >= geo.left - 4 && x <= geo.right + 4 && y >= geo.top - 4 && y <= geo.bottom + 4;
@@ -2069,6 +2302,15 @@ canvas.addEventListener("pointerdown", e => {
     touches.set(e.pointerId, pointerXY(e));
     if (!gesture) gesture = { start: e.timeStamp, max: 0, moved: false };
     gesture.max = Math.max(gesture.max, touches.size);
+    if (pendingTap) {
+      clearTimeout(pendingTap.timer);
+      const tap = pendingTap; pendingTap = null;
+      if (e.timeStamp - tap.time < 70 && !stylusRecent()) {  // a sloppy two-finger tap: the second finger came just after
+        gesture.max = Math.max(gesture.max, 2); gesture.start -= 120;
+        return;
+      }
+      tap.commit();  // a quick series of finger dots: keep the first one
+    }
     if (touches.size >= 2 && current) { current = null; thereminStop(); requestFrame(); }
     if ((penSeen && !stylusRecent()) || touches.size >= 2) return;  // palm rejection once a pen is used
   }
@@ -2079,8 +2321,8 @@ canvas.addEventListener("pointerdown", e => {
   try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* pointer already gone */ }
   if (ui.tool === "eraser") { remember(); erasing = true; eraseAt(x, y); return; }
   strokeStart = e.timeStamp; smooth = null;
-  current = { id: newId("s"), layer: layer.id, inst: ui.inst, op: +ui.opacity.toFixed(3), pts: [toPoint(e, true)], pointer: e.pointerId, pred: null };
-  soundWhileDrawing(e, true);
+  current = { id: newId("s"), layer: layer.id, inst: ui.inst, op: +ui.opacity.toFixed(3), pts: [toPoint(e, true)], pointer: e.pointerId, pred: null, finger: !isPen(e) && e.pointerType === "touch", x0: x, y0: y, heard: false };
+  if (!current.finger) { soundWhileDrawing(e, true); current.heard = true; }
   requestFrame();
 });
 
@@ -2088,7 +2330,7 @@ canvas.addEventListener("pointermove", e => {
   const pos = pointerXY(e);
   if (e.pointerType === "touch" && touches.has(e.pointerId)) {
     const t = touches.get(e.pointerId);
-    if (gesture && Math.hypot(pos.x - t.x, pos.y - t.y) > 12) gesture.moved = true;
+    if (gesture && Math.hypot(pos.x - t.x, pos.y - t.y) > 18) gesture.moved = true;
   }
   hover = e.pointerType === "touch" ? null : pos;
   if (erasing) { eraseAt(pos.x, pos.y); return; }
@@ -2097,7 +2339,8 @@ canvas.addEventListener("pointermove", e => {
   for (const ce of (events.length ? events : [e])) current.pts.push(toPoint(ce, true, e.pressure));
   const preds = e.getPredictedEvents ? e.getPredictedEvents() : [];
   current.pred = preds.length ? preds.slice(0, 3).map(pe => toPoint(pe, false, e.pressure)) : null;
-  soundWhileDrawing(e, false);
+  if (!current.heard && Math.hypot(pos.x - current.x0, pos.y - current.y0) > 6) { soundWhileDrawing(e, true); current.heard = true; }
+  else if (current.heard) soundWhileDrawing(e, false);
   inputHint(e);
   requestFrame();
 });
@@ -2106,7 +2349,7 @@ function finish(e) {
   if (e.pointerType === "touch") {
     touches.delete(e.pointerId);
     if (gesture && touches.size === 0) {
-      const quick = e.timeStamp - gesture.start < 350 && !gesture.moved;
+      const quick = e.timeStamp - gesture.start < 450 && !gesture.moved;
       if (quick && gesture.max === 2) { undo(); toast("Annullato"); }
       if (quick && gesture.max === 3) { redo(); toast("Ripristinato"); }
       if (quick && gesture.max >= 4) { if (ui.playing) stop(); else play(); }
@@ -2118,8 +2361,19 @@ function finish(e) {
   thereminStop();
   const st = current;
   current = null;
-  if (e.type === "pointerup") { smooth = null; st.pts.push(toPoint(e, false)); }
-  delete st.pointer; delete st.pred;
+  if (e.type === "pointercancel") { requestFrame(); return; }
+  smooth = null; st.pts.push(toPoint(e, false));
+  const tap = st.finger && !st.heard && e.timeStamp - strokeStart < 250;
+  delete st.pointer; delete st.pred; delete st.finger; delete st.x0; delete st.y0; delete st.heard;
+  if (tap) {  // wait a moment: a second finger turns it into an undo gesture
+    const commit = () => { commitStroke(st); previewNote(st.inst, snapScale(Math.floor(st.pts[0][1])), 0.7, st.op); };
+    pendingTap = { time: e.timeStamp, commit, timer: setTimeout(() => { pendingTap = null; commit(); }, 90) };
+    requestFrame();
+    return;
+  }
+  commitStroke(st);
+}
+function commitStroke(st) {
   remember(); state.strokes.push(st);
   const c = inkCanvas.getContext("2d");
   c.save(); c.setTransform(dpr, 0, 0, dpr, 0, 0); clipBoard(c); paintStroke(c, st); c.restore();
@@ -2479,6 +2733,9 @@ $("#exName").addEventListener("change", e => { state.name = e.target.value.trim(
 $("#repDown").onclick = () => { ui.repeats = clamp(ui.repeats - 1, 1, 8); syncExport(); };
 $("#repUp").onclick = () => { ui.repeats = clamp(ui.repeats + 1, 1, 8); syncExport(); };
 $("#exBeat").addEventListener("change", e => { ui.exportBeat = e.target.checked; });
+$("#exStems").addEventListener("change", e => { ui.stems = e.target.checked; });
+$("#exWav").onclick = async () => { const r = await renderAll(ui.exportBeat); saveFile(fileBase() + ".wav", wavBytes(tiled(r.full, r.loop.length, ui.repeats))); };
+$("#exMid").onclick = async () => { const r = await renderAll(ui.exportBeat); saveFile(fileBase() + ".mid", midiBytes(r.notes, ui.repeats)); };
 $("#exZip").onclick = exportZip;
 $("#exJson").onclick = () => saveFile(fileBase() + ".json", projectJson());
 $("#exPng").onclick = async () => {
@@ -2497,6 +2754,13 @@ $("#fileJson").addEventListener("change", async e => {
     const data = JSON.parse(await f.text());
     const s = sanitize(data.state || data);
     if (!s) throw new Error("non è un progetto");
+    for (const [id, b64] of Object.entries(data.sounds || {})) {
+      if (!s.samples.some(m => m.id === id)) continue;
+      const ab = fromBase64(b64);
+      sampleBuffers.set(id, bufferFrom(fromInt16(ab)));
+      await sampleStore.set(id, ab);
+    }
+    samplesVersion++;
     remember(); Object.assign(state, s); afterBigChange(); toast("Progetto aperto: " + state.name);
   } catch (err) { toast("Progetto non leggibile: " + err.message); }
 });
@@ -2561,7 +2825,7 @@ function openPopover(btnId, popId = POPS[btnId]) {
   closePopovers();
   if (wasOpen) return;
   const pop = $("#" + popId), btn = $("#" + btnId), app = $("#app").getBoundingClientRect(), r = btn.getBoundingClientRect();
-  if (popId === "popLayers") { ui.layerOpen = null; renderLayers(); }
+  if (popId === "popLayers") { ui.layerOpen = null; ui.swipeOpen = null; ui.picked = new Set(); renderLayers(); }
   if (popId === "popBoard") syncBoardForm();
   if (popId === "popActions") $("#actNewConfirm").hidden = true;
   if (popId === "popInst") renderInstruments();
@@ -2576,6 +2840,8 @@ function openPopover(btnId, popId = POPS[btnId]) {
   ui.open = popId; ui.openBtn = btnId;
 }
 function closePopovers() {
+  if (rec) stopRecording();
+  $("#popRec").hidden = true;
   for (const popId of Object.values(POPS)) $("#" + popId).hidden = true;
   for (const btnId of Object.keys(POPS).concat(["midiInst"])) $("#" + btnId).setAttribute("aria-expanded", "false");
   ui.open = null; ui.openBtn = null;
@@ -2642,6 +2908,83 @@ function drawThumb(cv, strokes) {
 }
 
 function refreshPanels() { if (ui.open === "popLayers") renderLayers(); }
+const ICON_CHECK = '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.3l2.3 2.3 4.7-5"/></svg>';
+const ICON_TRASH = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/></svg>';
+const SWIPE_OPEN = 96;
+let swipedAt = 0;
+function deleteLayers(ids) {
+  const keep = state.layers.filter(l => !ids.includes(l.id));
+  if (!keep.length) { toast("Serve almeno un livello."); renderLayers(); return; }
+  const names = state.layers.filter(l => ids.includes(l.id)).map(l => l.name);
+  remember();
+  const at = state.layers.findIndex(l => ids.includes(l.id));
+  state.layers = keep;
+  state.strokes = state.strokes.filter(s => !ids.includes(s.layer));
+  if (!keep.some(l => l.id === state.active)) state.active = keep[clamp(at - 1, 0, keep.length - 1)].id;
+  ui.swipeOpen = null; ui.layerOpen = null;
+  for (const id of ids) ui.picked.delete(id);
+  changed({ ink: true }); renderLayers();
+  toast((names.length === 1 ? `Eliminato «${names[0]}»` : `Eliminati ${names.length} livelli`) + " · due dita per annullare");
+}
+function attachSwipe(wrap, row, layer) {
+  let g = null;
+  row.addEventListener("pointerdown", e => {
+    if (e.target.closest(".lbtn")) return;
+    g = { x: e.clientX, y: e.clientY, id: e.pointerId, dx: 0, on: false, base: ui.swipeOpen === layer.id ? -SWIPE_OPEN : 0 };
+  });
+  row.addEventListener("pointermove", e => {
+    if (!g || e.pointerId !== g.id) return;
+    const dx = e.clientX - g.x, dy = e.clientY - g.y;
+    if (!g.on) {
+      if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { g = null; return; }  // scrolling the list
+      if (Math.abs(dx) < 10) return;
+      g.on = true; row.classList.add("dragging");
+      try { row.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    }
+    g.dx = clamp(g.base + dx, -row.offsetWidth * 0.95, 120);
+    row.style.transform = `translateX(${g.dx}px)`;
+    wrap.dataset.dir = g.dx < 0 ? "left" : "right";
+  });
+  const end = () => {
+    if (!g) return;
+    const done = g; g = null;
+    if (!done.on) return;
+    row.classList.remove("dragging"); swipedAt = performance.now();
+    if (done.dx < -row.offsetWidth * 0.6) { deleteLayers([layer.id]); return; }  // full swipe, like Mail
+    if (done.dx < -48) { ui.swipeOpen = layer.id; row.style.transform = `translateX(${-SWIPE_OPEN}px)`; return; }
+    if (done.dx > 64) { if (ui.picked.has(layer.id)) ui.picked.delete(layer.id); else ui.picked.add(layer.id); }
+    ui.swipeOpen = null; row.style.transform = "";
+    setTimeout(renderLayers, 260);
+  };
+  row.addEventListener("pointerup", end);
+  row.addEventListener("pointercancel", end);
+}
+function pickBar() {
+  const bar = document.createElement("div"); bar.className = "pick-bar";
+  const label = document.createElement("span"); label.textContent = ui.picked.size === 1 ? "1 livello" : `${ui.picked.size} livelli`;
+  bar.append(label);
+  const ids = () => state.layers.filter(l => ui.picked.has(l.id)).map(l => l.id);
+  const btn = (text, fn, cls = "") => { const b = document.createElement("button"); b.className = "mini-btn " + cls; b.textContent = text; b.onclick = fn; bar.append(b); return b; };
+  btn("Unisci", () => {
+    const sel = ids();
+    if (sel.length < 2) { toast("Seleziona almeno due livelli da unire."); return; }
+    remember();
+    const target = sel[sel.length - 1];
+    for (const st of state.strokes) if (sel.includes(st.layer)) st.layer = target;
+    state.layers = state.layers.filter(l => l.id === target || !sel.includes(l.id));
+    state.active = target; ui.picked.clear();
+    changed({ ink: true }); renderLayers(); toast("Livelli uniti");
+  });
+  btn("Silenzia", () => {
+    remember();
+    const sel = ids(), allMuted = state.layers.filter(l => sel.includes(l.id)).every(l => l.muted);
+    for (const l of state.layers) if (sel.includes(l.id)) l.muted = !allMuted;
+    changed(); renderLayers();
+  });
+  btn("Elimina", () => deleteLayers(ids()), "danger");
+  btn("Fine", () => { ui.picked.clear(); renderLayers(); });
+  return bar;
+}
 function renderLayers() {
   const list = $("#layerList");
   list.textContent = "";
@@ -2651,11 +2994,23 @@ function renderLayers() {
     const insts = [...new Set(strokes.map(s => s.inst))];
     const box = document.createElement("div");
     box.className = "layer" + (active ? " active" : "") + (open ? " open" : "") + (layer.visible ? "" : " off");
+    if (ui.picked.has(layer.id)) box.classList.add("picked");
+    const wrap = document.createElement("div"); wrap.className = "swipe";
+    const bg = document.createElement("div"); bg.className = "swipe-bg";
+    const pickBtn = document.createElement("button"); pickBtn.className = "swipe-pick"; pickBtn.tabIndex = -1;
+    pickBtn.innerHTML = ICON_CHECK.replace('viewBox', 'width="16" height="16" viewBox') + (ui.picked.has(layer.id) ? "Deseleziona" : "Seleziona");
+    const delBtn = document.createElement("button"); delBtn.className = "swipe-del"; delBtn.innerHTML = ICON_TRASH + "Elimina";
+    delBtn.onclick = ev => { ev.stopPropagation(); deleteLayers([layer.id]); };
+    bg.append(pickBtn, delBtn);
     const row = document.createElement("div");
     row.className = "layer-row";
     row.setAttribute("role", "button");
     row.setAttribute("aria-expanded", String(open));
+    if (ui.swipeOpen === layer.id) { row.style.transform = `translateX(${-SWIPE_OPEN}px)`; wrap.dataset.dir = "left"; }
+    const thumbBox = document.createElement("div"); thumbBox.style.position = "relative"; thumbBox.style.flex = "0 0 auto";
     const thumb = document.createElement("canvas"); thumb.className = "thumb"; drawThumb(thumb, strokes);
+    thumbBox.append(thumb);
+    if (ui.picked.has(layer.id)) thumbBox.insertAdjacentHTML("beforeend", `<span class="pick-badge">${ICON_CHECK}</span>`);
     const main = document.createElement("div"); main.className = "layer-main";
     const nm = document.createElement("div"); nm.className = "layer-name"; nm.textContent = layer.name;
     const sub = document.createElement("div"); sub.className = "layer-sub";
@@ -2673,18 +3028,24 @@ function renderLayers() {
     eye.setAttribute("aria-pressed", String(layer.visible));
     eye.setAttribute("aria-label", (layer.visible ? "Nascondi " : "Mostra ") + layer.name + " (tieni premuto: solo questo)");
     pressable(eye, () => { remember(); layer.visible = !layer.visible; changed({ ink: true }); renderLayers(); }, () => solo(layer, "see"));
-    row.append(thumb, main);
+    row.append(thumbBox, main);
     if (active) row.insertAdjacentHTML("beforeend", ICON_CHEV);
     row.append(spk, eye);
     row.onclick = () => {
+      if (performance.now() - swipedAt < 350) return;
+      if (ui.swipeOpen) { ui.swipeOpen = null; renderLayers(); return; }
       if (!active) { state.active = layer.id; ui.layerOpen = null; saveSoon(); }
       else ui.layerOpen = open ? null : layer.id;
       renderLayers();
     };
-    box.append(row);
+    attachSwipe(wrap, row, layer);
+    wrap.append(bg, row);
+    box.append(wrap);
     if (open) box.append(layerDetail(layer));
     list.append(box);
   }
+  if (ui.picked.size) list.append(pickBar());
+  $(".layer-hint").hidden = ui.picked.size > 0;
 }
 function miniRange(label, id, min, max, step, value, fmt, onInput) {
   const wrap = document.createElement("label"); wrap.className = "mini-range"; wrap.htmlFor = id;
@@ -2757,7 +3118,198 @@ function renderInstruments() {
       box.append(b);
     }
   }
+  renderSamples();
 }
+const ICON_WAVE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 7v10M21 12h0"/></svg>';
+const ICON_IMPORT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/></svg>';
+function renderSamples() {
+  const box = $("#instSmp");
+  box.textContent = "";
+  for (const m of state.samples) {
+    const b = document.createElement("button");
+    b.className = "inst"; b.setAttribute("aria-pressed", String(m.id === ui.inst));
+    b.setAttribute("aria-label", `${m.name} (tieni premuto per modificare)`);
+    const sw = document.createElement("span"); sw.className = "swatch sample"; sw.style.background = colorOf(m.id); sw.innerHTML = ICON_WAVE;
+    const nm = document.createElement("span"); nm.textContent = m.name;
+    b.append(sw, nm);
+    pressable(b, () => {
+      ui.inst = m.id; setTool("brush"); renderInstruments(); syncChrome(); syncMidiChip(); saveSoon();
+      previewNote(m.id, m.root, 0.8, 1);
+    }, () => editSample(m.id));
+    box.append(b);
+  }
+  const rec = document.createElement("button");
+  rec.className = "inst"; rec.innerHTML = '<span class="swatch tool rec-dot"></span><span>Registra</span>';
+  rec.onclick = e => { e.stopPropagation(); openSoundSheet(); };
+  box.append(rec);
+  const imp = document.createElement("label");
+  imp.className = "inst"; imp.htmlFor = "fileAudio2";
+  imp.innerHTML = `<span class="swatch tool">${ICON_IMPORT}</span><span>Importa</span><input type="file" id="fileAudio2" accept="audio/*,.wav,.mp3,.m4a,.aif,.aiff,.caf">`;
+  imp.querySelector("input").addEventListener("change", importAudioInput);
+  box.append(imp);
+  if (!state.samples.length) {
+    const p = document.createElement("p"); p.className = "inst-empty";
+    p.textContent = "Registra la tua voce o un oggetto, o importa un suono: diventa uno strumento da disegnare. Tieni premuto un suono per modificarlo.";
+    box.append(p);
+  }
+}
+
+/* The sheet: record or import, then name, base note and save. */
+let review = null, rec = null;
+function openSoundSheet() {
+  closePopovers();
+  const pop = $("#popRec"), app = $("#app").getBoundingClientRect();
+  $("#recStage1").hidden = false; $("#recStage2").hidden = true;
+  $("#recTitle").textContent = "Nuovo suono";
+  $("#recTime").textContent = "Tocca per registrare · massimo 8 s";
+  $("#recMeter").style.width = "0";
+  $("#recBtn").classList.remove("on");
+  pop.hidden = false;
+  pop.style.left = Math.max(12, (app.width - pop.offsetWidth) / 2) + "px";
+  pop.style.top = Math.max(70, (app.height - pop.offsetHeight) / 2 - 20) + "px";
+  pop.style.bottom = ""; pop.style.setProperty("--origin", "center");
+  ui.open = "popRec"; ui.openBtn = null;
+}
+function placeSheet() {
+  const pop = $("#popRec"), app = $("#app").getBoundingClientRect();
+  pop.style.top = Math.max(70, (app.height - pop.offsetHeight) / 2 - 20) + "px";
+}
+async function startRecording() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === "undefined") {
+    toast("La registrazione non è disponibile qui: importa un file audio."); return;
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+  } catch (e) {
+    toast(inArtifact ? "Il microfono non è disponibile in questa vista: usa l'app installata o importa un file." : "Microfono non consentito: attivalo in Impostazioni → Safari → Microfono.");
+    return;
+  }
+  const ctx = audio(), node = ctx.createMediaStreamSource(stream), an = ctx.createAnalyser();
+  an.fftSize = 1024; node.connect(an);
+  const recorder = new MediaRecorder(stream), chunks = [];
+  recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  recorder.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop()); node.disconnect();
+    if (ui.open !== "popRec") return;
+    try {
+      const blob = new Blob(chunks, { type: recorder.mimeType || "audio/mp4" });
+      await reviewAudio(await ctx.decodeAudioData(await blob.arrayBuffer()), "Registrazione " + (state.samples.length + 1));
+    } catch (e) { toast("Registrazione non leggibile: riprova."); $("#recBtn").classList.remove("on"); }
+  };
+  recorder.start();
+  rec = { recorder, an, start: performance.now() };
+  $("#recBtn").classList.add("on");
+  recTick();
+}
+function stopRecording() {
+  if (!rec) return;
+  const r = rec; rec = null;
+  if (r.recorder.state !== "inactive") r.recorder.stop();
+  $("#recBtn").classList.remove("on");
+}
+function recTick() {
+  if (!rec) return;
+  const t = (performance.now() - rec.start) / 1000;
+  $("#recTime").textContent = t.toFixed(1).replace(".", ",") + " s · tocca per fermare";
+  const arr = new Float32Array(rec.an.fftSize);
+  rec.an.getFloatTimeDomainData(arr);
+  let pk = 0;
+  for (const v of arr) pk = Math.max(pk, Math.abs(v));
+  $("#recMeter").style.width = Math.min(100, Math.sqrt(pk) * 110) + "%";
+  if (t >= MAX_SAMPLE) { stopRecording(); return; }
+  requestAnimationFrame(recTick);
+}
+$("#recBtn").onclick = () => { if (rec) stopRecording(); else startRecording(); };
+$("#recClose").onclick = () => closePopovers();
+async function importAudioInput(e) {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = "";
+  if (!f) return;
+  if (ui.open !== "popRec") openSoundSheet();
+  try {
+    const buf = await audio().decodeAudioData(await f.arrayBuffer());
+    await reviewAudio(buf, f.name.replace(/\.[^.]+$/, "").slice(0, 28) || "Suono");
+  } catch (err) { toast("Questo file audio non si apre: prova WAV, MP3 o M4A."); }
+}
+$("#fileAudio").addEventListener("change", importAudioInput);
+async function reviewAudio(buf, name) {
+  const data = trimNormalize(await toMonoSR(buf));
+  if (!data) { toast("Il suono è vuoto o troppo basso."); return; }
+  const detected = detectPitch(data);
+  review = { data, name, root: detected ?? 60, detected, editing: null };
+  showReview();
+}
+function editSample(id) {
+  const m = state.samples.find(x => x.id === id), b = sampleBuffers.get(id);
+  if (!m) return;
+  openSoundSheet();
+  if (!b) { toast("L'audio di questo suono non è su questo dispositivo: registralo o importalo di nuovo."); }
+  review = { data: b ? b.getChannelData(0).slice() : new Float32Array(1), name: m.name, root: m.root, detected: null, editing: id };
+  showReview();
+}
+function showReview() {
+  $("#recStage1").hidden = true; $("#recStage2").hidden = false;
+  $("#recTitle").textContent = review.editing ? "Modifica suono" : "Nuovo suono";
+  $("#smpName").value = review.name;
+  $("#smpDelete").hidden = !review.editing;
+  $("#smpRetry").hidden = !!review.editing;
+  $("#smpSave").textContent = review.editing ? "Salva" : "Usa come strumento";
+  syncRoot();
+  placeSheet();
+  const cv = $("#recWave"), r = cv.getBoundingClientRect(), d = Math.min(devicePixelRatio || 1, 2);
+  cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d);
+  const c = cv.getContext("2d"); c.scale(d, d);
+  const cols = Math.floor((r.width - 12) / 3), per = Math.max(1, Math.floor(review.data.length / cols));
+  c.fillStyle = SYS.red[darkMode ? 1 : 0];
+  for (let i = 0; i < cols; i++) {
+    let pk = 0;
+    for (let j = i * per; j < (i + 1) * per && j < review.data.length; j += 8) pk = Math.max(pk, Math.abs(review.data[j]));
+    const h = Math.max(1.5, pk * (r.height - 16));
+    roundRect(c, 6 + i * 3, r.height / 2 - h / 2, 2, h, 1); c.fill();
+  }
+}
+function syncRoot() {
+  $("#rootLabel").textContent = noteName(review.root);
+  $("#rootHint").textContent = review.detected != null ? (review.detected === review.root ? "rilevata" : "") : (review.editing ? "" : "nessuna nota chiara: Do4");
+}
+$("#rootDown").onclick = () => { review.root = clamp(review.root - 1, 24, 96); syncRoot(); };
+$("#rootUp").onclick = () => { review.root = clamp(review.root + 1, 24, 96); syncRoot(); };
+$("#smpListen").onclick = () => {
+  const ctx = audio(), src = ctx.createBufferSource();
+  src.buffer = bufferFrom(review.data); src.connect(liveOut); src.start();
+};
+$("#smpRetry").onclick = () => { openSoundSheet(); };
+$("#smpSave").onclick = async () => {
+  const name = $("#smpName").value.trim() || review.name;
+  let meta = review.editing && state.samples.find(m => m.id === review.editing);
+  if (meta) { meta.name = name; meta.root = review.root; }
+  else {
+    meta = { id: "SMP:" + newId("x"), name, root: review.root, color: SAMPLE_COLORS[state.samples.length % SAMPLE_COLORS.length] };
+    state.samples.push(meta);
+    sampleBuffers.set(meta.id, bufferFrom(review.data));
+    await sampleStore.set(meta.id, toInt16(review.data).buffer);
+  }
+  registerSample(meta);
+  samplesVersion++;
+  ui.inst = meta.id;
+  closePopovers(); setTool("brush"); syncChrome(); syncMidiChip(); changed({ ink: true });
+  toast(`«${name}» è uno strumento: disegna con lui`);
+};
+$("#smpDelete").onclick = async () => {
+  const id = review.editing, m = state.samples.find(x => x.id === id);
+  if (!m) return;
+  remember();
+  let moved = 0;
+  for (const st of state.strokes) if (st.inst === id) { st.inst = "EPIANO"; moved++; }
+  state.samples = state.samples.filter(x => x.id !== id);
+  sampleBuffers.delete(id); await sampleStore.del(id);
+  if (ui.inst === id) ui.inst = "EPIANO";
+  samplesVersion++;
+  closePopovers(); syncChrome(); syncMidiChip(); changed({ ink: true });
+  toast(`Eliminato «${m.name}»` + (moved ? ` · ${moved} tratti ora suonano Piano elettrico` : ""));
+};
+
 function syncMidiChip() {
   const chip = $("#midiInst");
   chip.querySelector("i").style.background = colorOf(ui.inst);
@@ -2841,10 +3393,10 @@ $("#actNew").onclick = () => { $("#actNewConfirm").hidden = false; };
 $("#actNewConfirm").onclick = () => {
   remember();
   const keep = { bpm: state.bpm, bars: state.bars, low: state.low, octaves: state.octaves, scale: state.scale, root: state.root, grid: state.grid };
-  Object.assign(state, blankState(), keep);
+  Object.assign(state, blankState(), keep, { samples: state.samples });
   closePopovers(); afterBigChange(); toast("Tela nuova · tocca con due dita per annullare");
 };
-$("#actExample").onclick = () => { remember(); Object.assign(state, exampleState()); closePopovers(); afterBigChange(); toast("Esempio caricato"); };
+$("#actExample").onclick = () => { remember(); Object.assign(state, exampleState(), { samples: state.samples }); closePopovers(); afterBigChange(); toast("Esempio caricato"); };
 
 function themeChoice() { try { return localStorage.getItem(THEME_KEY) || "system"; } catch (e) { return "system"; } }
 function applyTheme(choice) {
@@ -2905,6 +3457,7 @@ const SIZE_MIN = 0.12, SIZE_MAX = 1.2;
 vslider($("#sizeSlider"), () => (ui.size - SIZE_MIN) / (SIZE_MAX - SIZE_MIN), v => { ui.size = SIZE_MIN + v * (SIZE_MAX - SIZE_MIN); requestFrame(); }, "Spessore", v => Math.round(v * 100) + "%");
 vslider($("#opSlider"), () => (ui.opacity - 0.15) / 0.85, v => { ui.opacity = 0.15 + v * 0.85; }, "Opacità", v => Math.round((0.15 + v * 0.85) * 100) + "%");
 syncChrome(); syncMidiChip(); updateUndo(); updateTransport();
+loadSampleAudio();
 const hashView = { disegna: "draw", beat: "beat", midi: "midi", esporta: "export" }[(location.hash || "").slice(1)];
 showView(hashView || ui.view, true);
 new ResizeObserver(() => {
@@ -2915,6 +3468,7 @@ new ResizeObserver(() => {
 }).observe($("#app"));
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(movePill);
 downloadsCap = inArtifact ? window.claude.use("downloads").catch(() => null) : Promise.resolve(null);
+$("#exSingles").hidden = inArtifact;  // .wav and .mid alone cannot be saved from claude.ai
 downloadsCap.then(dl => { if (!dl && inArtifact) { for (const id of ["#exZip", "#exPng", "#exJson"]) $(id).disabled = true; $("#exNote").hidden = false; } });
 // Installed on the Home Screen: works offline (service worker) and keeps its data.
 if (!inArtifact && "serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
@@ -2924,5 +3478,5 @@ if (!inArtifact && "serviceWorker" in navigator && (location.protocol === "https
 // No page zoom from pinches on the interface (Safari).
 document.addEventListener("gesturestart", e => e.preventDefault());
 
-window.__gp2m = { state: () => state, ui, renderAll, allNotes, midiBytes, wavBytes, zipBlob, parseMidi, importMidi, beatHits, showView, loop, ensureLoop };
+window.__gp2m = { state: () => state, ui, renderAll, reviewAudio, detectPitch, sampleBuffers, deleteLayers, collectParts, tiled, allNotes, midiBytes, wavBytes, zipBlob, parseMidi, importMidi, beatHits, showView, loop, ensureLoop };
 </script>

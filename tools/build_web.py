@@ -65,8 +65,29 @@ self.addEventListener("fetch", event => {{
 """
 
 
+CUSTOM_ICON = ROOT / "web" / "icon.png"  # your own logo (square, e.g. 1024 x 1024)
+
+
+def custom_icon(size, maskable=False):
+    """Icons from web/icon.png; the maskable one keeps the logo inside the safe zone."""
+    from PIL import Image
+    img = Image.open(CUSTOM_ICON).convert("RGB")
+    side = min(img.size)
+    img = img.crop(((img.width - side) // 2, (img.height - side) // 2,
+                    (img.width + side) // 2, (img.height + side) // 2))
+    if not maskable:
+        return img.resize((size, size), Image.LANCZOS)
+    canvas = Image.new("RGB", (size, size), img.getpixel((2, 2)))
+    inner = int(size * 0.8)
+    canvas.paste(img.resize((inner, inner), Image.LANCZOS), ((size - inner) // 2,) * 2)
+    return canvas
+
+
 def icon(size, maskable=False):
-    """The app icon: Apple-style gradient, faint staff and a drawn musical line."""
+    """The app icon: Apple-style gradient, faint staff and a drawn musical line
+    (or web/icon.png when it exists, see tools/icon_template.py)."""
+    if CUSTOM_ICON.exists():
+        return custom_icon(size, maskable)
     from PIL import Image, ImageDraw
     big = 1024
     img = Image.new("RGB", (big, big))

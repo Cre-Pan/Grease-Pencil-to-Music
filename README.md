@@ -160,6 +160,13 @@ Per installarla come app sulla schermata Home, che funziona anche offline:
 Il sorgente è `web/app.html`; `python tools/build_web.py` rigenera `docs/app/` (pagina,
 manifest, icone e service worker).
 
+**Icona personalizzata**: `web/icon-template.png` (e `.svg`) è una griglia di costruzione a
+sezione aurea, nello stile della griglia delle icone Apple, con in rosso la maschera
+arrotondata che applica iPadOS. Disegna il logo su una tela quadrata 1024 o 2048 px con il
+template come livello in alto, esporta un PNG quadrato senza angoli arrotondati come
+`web/icon.png` e rilancia `tools/build_web.py`. I template ufficiali sono negli
+[Apple Design Resources](https://developer.apple.com/design/resources/).
+
 ## Limiti noti (0.0.x)
 
 - Senza *Sezioni da keyframe* viene letto solo il keyframe attivo all'inizio della scena.
