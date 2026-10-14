@@ -509,5 +509,14 @@
  "Non riesco a salvare sul dispositivo (spazio pieno?): salva la composizione dal menu ⋯.": "Impossible d’enregistrer sur l’appareil (stockage plein ?) : enregistre la composition depuis le menu ⋯.",
  "Livelli eliminati": "Calques supprimés",
  "Un'esportazione è già in corso.": "Une exportation est déjà en cours.",
- "Esportazione non riuscita: prova con meno ripetizioni o una risoluzione più bassa.": "L’exportation a échoué : essaie moins de répétitions ou une résolution plus basse."
+ "Esportazione non riuscita: prova con meno ripetizioni o una risoluzione più bassa.": "L’exportation a échoué : essaie moins de répétitions ou une résolution plus basse.",
+ "Cambia nota a ogni riga che attraversa, agganciata alla scala e alla griglia; ogni nota attacca da capo.": "Change de note à chaque ligne traversée, calée sur la gamme et la grille ; chaque note attaque à nouveau.",
+ "Quantizzata legata": "Quantifiée liée",
+ "Le note della scala e della griglia, ma legate: scivolano l'una nell'altra senza riattacco, anche da un tratto al successivo (se distano meno di un battito).": "Les notes de la gamme et de la grille, mais liées : elles glissent l’une dans l’autre sans nouvelle attaque, même d’un trait au suivant (à moins d’un temps d’écart).",
+ "Ottica legata": "Optique liée",
+ "Come Ottica, ma i tratti vicini (meno di un battito) diventano una sola voce: la linea continua anche nelle pause, senza riattacco.": "Comme Optique, mais les traits proches (moins d’un temps) deviennent une seule voix : la ligne continue même dans les silences, sans nouvelle attaque.",
+ "Ogni livello ha la sua lettura, con la sigla nella riga: Q quantizzata, QL quantizzata legata, O ottica, OL ottica legata, G gesto. Tienilo premuto per il menu.": "Chaque calque a son interprétation, avec son sigle dans la ligne : Q quantifiée, QL quantifiée liée, O optique, OL optique liée, G geste. Maintiens-le pour le menu.",
+ "Lettura": "Interprétation",
+ "Lettura precedente": "Interprétation précédente",
+ "Lettura successiva": "Interprétation suivante"
 }

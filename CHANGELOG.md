@@ -81,6 +81,10 @@
   errori e doppi tocchi; un suono eliminato torna con Annulla; disegnare sull'esempio lo rende
   tuo (l'import MIDI non lo sostituisce più); nomi dei file nello .zip in UTF-8; avviso se il
   salvataggio sul dispositivo non riesce.
+- Cinque letture per livello, con icona e sigla nella riga del livello (come i metodi di fusione
+  di Procreate): **Q** quantizzata, **QL** quantizzata legata, **O** ottica, **OL** ottica legata
+  (nuova), **G** gesto. Legata = i tratti vicini (meno di un battito) diventano una sola voce che
+  scivola, senza riattacco. Si scelgono in una riga che si scorre in su e in giù.
 - **Lingue**: italiano, inglese, francese, spagnolo, cinese e russo (Impostazioni →
   Interfaccia → Lingua); al primo avvio segue la lingua del dispositivo. I nomi che scrivi
   (livelli, composizione, suoni, onde) non vengono tradotti.

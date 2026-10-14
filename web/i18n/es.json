@@ -509,5 +509,14 @@
  "Non riesco a salvare sul dispositivo (spazio pieno?): salva la composizione dal menu ⋯.": "No puedo guardar en el dispositivo (¿almacenamiento lleno?): guarda la composición desde el menú ⋯.",
  "Livelli eliminati": "Capas eliminadas",
  "Un'esportazione è già in corso.": "Ya hay una exportación en curso.",
- "Esportazione non riuscita: prova con meno ripetizioni o una risoluzione più bassa.": "La exportación ha fallado: prueba con menos repeticiones o una resolución más baja."
+ "Esportazione non riuscita: prova con meno ripetizioni o una risoluzione più bassa.": "La exportación ha fallado: prueba con menos repeticiones o una resolución más baja.",
+ "Cambia nota a ogni riga che attraversa, agganciata alla scala e alla griglia; ogni nota attacca da capo.": "Cambia de nota en cada línea que cruza, ajustada a la escala y a la cuadrícula; cada nota ataca de nuevo.",
+ "Quantizzata legata": "Cuantizada ligada",
+ "Le note della scala e della griglia, ma legate: scivolano l'una nell'altra senza riattacco, anche da un tratto al successivo (se distano meno di un battito).": "Las notas de la escala y de la cuadrícula, pero ligadas: se deslizan una en otra sin nuevo ataque, incluso de un trazo al siguiente (si están a menos de un pulso).",
+ "Ottica legata": "Óptica ligada",
+ "Come Ottica, ma i tratti vicini (meno di un battito) diventano una sola voce: la linea continua anche nelle pause, senza riattacco.": "Como Óptica, pero los trazos cercanos (a menos de un pulso) se convierten en una sola voz: la línea sigue incluso en las pausas, sin nuevo ataque.",
+ "Ogni livello ha la sua lettura, con la sigla nella riga: Q quantizzata, QL quantizzata legata, O ottica, OL ottica legata, G gesto. Tienilo premuto per il menu.": "Cada capa tiene su lectura, con la sigla en la fila: Q cuantizada, QL cuantizada ligada, O óptica, OL óptica ligada, G gesto. Mantenla pulsada para el menú.",
+ "Lettura": "Lectura",
+ "Lettura precedente": "Lectura anterior",
+ "Lettura successiva": "Lectura siguiente"
 }

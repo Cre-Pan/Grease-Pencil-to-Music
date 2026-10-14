@@ -509,5 +509,14 @@
  "Non riesco a salvare sul dispositivo (spazio pieno?): salva la composizione dal menu ⋯.": "无法保存到设备（存储空间已满？）：请从 ⋯ 菜单存储作品。",
  "Livelli eliminati": "图层已删除",
  "Un'esportazione è già in corso.": "已有导出正在进行。",
- "Esportazione non riuscita: prova con meno ripetizioni o una risoluzione più bassa.": "导出失败：请减少重复次数或降低分辨率。"
+ "Esportazione non riuscita: prova con meno ripetizioni o una risoluzione più bassa.": "导出失败：请减少重复次数或降低分辨率。",
+ "Cambia nota a ogni riga che attraversa, agganciata alla scala e alla griglia; ogni nota attacca da capo.": "每穿过一行就换一个音，吸附到音阶和网格；每个音都重新起音。",
+ "Quantizzata legata": "量化连奏",
+ "Le note della scala e della griglia, ma legate: scivolano l'una nell'altra senza riattacco, anche da un tratto al successivo (se distano meno di un battito).": "音阶和网格上的音，但彼此连奏：音与音之间滑动、不重新起音，相隔不到一拍的笔画之间也是如此。",
+ "Ottica legata": "光学连奏",
+ "Come Ottica, ma i tratti vicini (meno di un battito) diventano una sola voce: la linea continua anche nelle pause, senza riattacco.": "与光学相同，但相近的笔画（相隔不到一拍）合成一个声部：线条在停顿中也持续，不重新起音。",
+ "Ogni livello ha la sua lettura, con la sigla nella riga: Q quantizzata, QL quantizzata legata, O ottica, OL ottica legata, G gesto. Tienilo premuto per il menu.": "每个图层都有自己的读取方式，行中显示缩写：Q 量化、QL 量化连奏、O 光学、OL 光学连奏、G 手势。按住图层可打开菜单。",
+ "Lettura": "读取方式",
+ "Lettura precedente": "上一个读取方式",
+ "Lettura successiva": "下一个读取方式"
 }

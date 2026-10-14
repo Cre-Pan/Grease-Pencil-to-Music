@@ -509,5 +509,14 @@
  "Non riesco a salvare sul dispositivo (spazio pieno?): salva la composizione dal menu ⋯.": "Не получается сохранить на устройстве (память заполнена?): сохрани композицию через меню ⋯.",
  "Livelli eliminati": "Слои удалены",
  "Un'esportazione è già in corso.": "Экспорт уже идёт.",
- "Esportazione non riuscita: prova con meno ripetizioni o una risoluzione più bassa.": "Экспорт не удался: попробуй меньше повторов или более низкое разрешение."
+ "Esportazione non riuscita: prova con meno ripetizioni o una risoluzione più bassa.": "Экспорт не удался: попробуй меньше повторов или более низкое разрешение.",
+ "Cambia nota a ogni riga che attraversa, agganciata alla scala e alla griglia; ogni nota attacca da capo.": "Меняет ноту на каждой пересекаемой строке, с привязкой к ладу и сетке; каждая нота звучит с новой атакой.",
+ "Quantizzata legata": "Квантованное легато",
+ "Le note della scala e della griglia, ma legate: scivolano l'una nell'altra senza riattacco, anche da un tratto al successivo (se distano meno di un battito).": "Ноты лада и сетки, но связанные: они перетекают друг в друга без новой атаки, даже от штриха к штриху (если между ними меньше доли).",
+ "Ottica legata": "Оптическое легато",
+ "Come Ottica, ma i tratti vicini (meno di un battito) diventano una sola voce: la linea continua anche nelle pause, senza riattacco.": "Как Оптическое, но близкие штрихи (меньше доли друг от друга) становятся одним голосом: линия продолжается и в паузах, без новой атаки.",
+ "Ogni livello ha la sua lettura, con la sigla nella riga: Q quantizzata, QL quantizzata legata, O ottica, OL ottica legata, G gesto. Tienilo premuto per il menu.": "У каждого слоя своё чтение, с буквами в строке: Q квантованное, QL квантованное легато, O оптическое, OL оптическое легато, G жест. Удерживай слой для меню.",
+ "Lettura": "Чтение",
+ "Lettura precedente": "Предыдущее чтение",
+ "Lettura successiva": "Следующее чтение"
 }
