@@ -88,7 +88,12 @@
 - **Video**: formati Tavola, 16:9, 1:1 e 9:16; inquadratura *Segue il tempo* (la tavola
   scorre sotto il cursore, le ripetizioni una dopo l'altra, la tastiera ferma a sinistra);
   **pallini sul cursore** dove la musica viene letta, con un anello dove comincia un tratto;
-  titolo, tempo e barra di avanzamento; anteprima nella scheda Esporta.
+  titolo, tempo e barra di avanzamento; anteprima nella scheda Esporta. I pallini compaiono
+  anche sulla tavola durante il play. Nel video che segue il tempo il lato destro della tavola
+  è stondato come sullo schermo e le giunzioni tra i loop sono continue (ora si vedono anche i
+  numeri delle battute).
+- Toccando il logo: *Open-source project made by Alessandro Pannoli* con il link a
+  Instagram [@cre.pan](https://www.instagram.com/cre.pan/).
 - **Icone nuove**: app (il logo con i trattini colorati), favicon del browser e del sito (il
   logo da solo), logo nero/bianco in alto a sinistra che segue il tema.
 - **Lingue**: italiano, inglese, francese, spagnolo, cinese e russo (Impostazioni →
