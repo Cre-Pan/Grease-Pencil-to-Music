@@ -518,5 +518,14 @@
  "Ogni livello ha la sua lettura, con la sigla nella riga: Q quantizzata, QL quantizzata legata, O ottica, OL ottica legata, G gesto. Tienilo premuto per il menu.": "Cada capa tiene su lectura, con la sigla en la fila: Q cuantizada, QL cuantizada ligada, O óptica, OL óptica ligada, G gesto. Mantenla pulsada para el menú.",
  "Lettura": "Lectura",
  "Lettura precedente": "Lectura anterior",
- "Lettura successiva": "Lectura siguiente"
+ "Lettura successiva": "Lectura siguiente",
+ "Anteprima del video": "Vista previa del vídeo",
+ "Formato": "Formato",
+ "Inquadratura": "Encuadre",
+ "Tutta la tavola": "Todo el tablero",
+ "Segue il tempo": "Sigue el tiempo",
+ "Pallini sul cursore": "Puntos en el cursor",
+ "dove la linea del tempo legge il disegno": "donde el cursor lee el dibujo",
+ "Titolo e avanzamento": "Título y progreso",
+ "BPM ·": "BPM ·"
 }

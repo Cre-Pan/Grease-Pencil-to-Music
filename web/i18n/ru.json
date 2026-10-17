@@ -518,5 +518,14 @@
  "Ogni livello ha la sua lettura, con la sigla nella riga: Q quantizzata, QL quantizzata legata, O ottica, OL ottica legata, G gesto. Tienilo premuto per il menu.": "У каждого слоя своё чтение, с буквами в строке: Q квантованное, QL квантованное легато, O оптическое, OL оптическое легато, G жест. Удерживай слой для меню.",
  "Lettura": "Чтение",
  "Lettura precedente": "Предыдущее чтение",
- "Lettura successiva": "Следующее чтение"
+ "Lettura successiva": "Следующее чтение",
+ "Anteprima del video": "Предпросмотр видео",
+ "Formato": "Формат",
+ "Inquadratura": "Кадрирование",
+ "Tutta la tavola": "Весь холст",
+ "Segue il tempo": "Следует за временем",
+ "Pallini sul cursore": "Точки на курсоре",
+ "dove la linea del tempo legge il disegno": "там, где курсор читает рисунок",
+ "Titolo e avanzamento": "Название и прогресс",
+ "BPM ·": "BPM ·"
 }

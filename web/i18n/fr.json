@@ -518,5 +518,14 @@
  "Ogni livello ha la sua lettura, con la sigla nella riga: Q quantizzata, QL quantizzata legata, O ottica, OL ottica legata, G gesto. Tienilo premuto per il menu.": "Chaque calque a son interprétation, avec son sigle dans la ligne : Q quantifiée, QL quantifiée liée, O optique, OL optique liée, G geste. Maintiens-le pour le menu.",
  "Lettura": "Interprétation",
  "Lettura precedente": "Interprétation précédente",
- "Lettura successiva": "Interprétation suivante"
+ "Lettura successiva": "Interprétation suivante",
+ "Anteprima del video": "Aperçu de la vidéo",
+ "Formato": "Format",
+ "Inquadratura": "Cadrage",
+ "Tutta la tavola": "Toute la planche",
+ "Segue il tempo": "Suit le temps",
+ "Pallini sul cursore": "Points sur la tête de lecture",
+ "dove la linea del tempo legge il disegno": "là où la tête de lecture lit le dessin",
+ "Titolo e avanzamento": "Titre et progression",
+ "BPM ·": "BPM ·"
 }

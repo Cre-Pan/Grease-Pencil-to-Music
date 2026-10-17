@@ -518,5 +518,14 @@
  "Ogni livello ha la sua lettura, con la sigla nella riga: Q quantizzata, QL quantizzata legata, O ottica, OL ottica legata, G gesto. Tienilo premuto per il menu.": "Each layer has its own reading, with its letters in the row: Q quantized, QL quantized legato, O optical, OL optical legato, G gesture. Hold it for the menu.",
  "Lettura": "Reading",
  "Lettura precedente": "Previous reading",
- "Lettura successiva": "Next reading"
+ "Lettura successiva": "Next reading",
+ "Anteprima del video": "Video preview",
+ "Formato": "Format",
+ "Inquadratura": "Framing",
+ "Tutta la tavola": "Whole board",
+ "Segue il tempo": "Follows the time",
+ "Pallini sul cursore": "Dots on the playhead",
+ "dove la linea del tempo legge il disegno": "where the playhead reads the drawing",
+ "Titolo e avanzamento": "Title and progress",
+ "BPM ·": "BPM ·"
 }

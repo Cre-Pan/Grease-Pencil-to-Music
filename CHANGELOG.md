@@ -85,6 +85,12 @@
   di Procreate): **Q** quantizzata, **QL** quantizzata legata, **O** ottica, **OL** ottica legata
   (nuova), **G** gesto. Legata = i tratti vicini (meno di un battito) diventano una sola voce che
   scivola, senza riattacco. Si scelgono in una riga che si scorre in su e in giù.
+- **Video**: formati Tavola, 16:9, 1:1 e 9:16; inquadratura *Segue il tempo* (la tavola
+  scorre sotto il cursore, le ripetizioni una dopo l'altra, la tastiera ferma a sinistra);
+  **pallini sul cursore** dove la musica viene letta, con un anello dove comincia un tratto;
+  titolo, tempo e barra di avanzamento; anteprima nella scheda Esporta.
+- **Icone nuove**: app (il logo con i trattini colorati), favicon del browser e del sito (il
+  logo da solo), logo nero/bianco in alto a sinistra che segue il tema.
 - **Lingue**: italiano, inglese, francese, spagnolo, cinese e russo (Impostazioni →
   Interfaccia → Lingua); al primo avvio segue la lingua del dispositivo. I nomi che scrivi
   (livelli, composizione, suoni, onde) non vengono tradotti.

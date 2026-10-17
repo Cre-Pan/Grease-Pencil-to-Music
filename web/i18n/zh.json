@@ -518,5 +518,14 @@
  "Ogni livello ha la sua lettura, con la sigla nella riga: Q quantizzata, QL quantizzata legata, O ottica, OL ottica legata, G gesto. Tienilo premuto per il menu.": "每个图层都有自己的读取方式，行中显示缩写：Q 量化、QL 量化连奏、O 光学、OL 光学连奏、G 手势。按住图层可打开菜单。",
  "Lettura": "读取方式",
  "Lettura precedente": "上一个读取方式",
- "Lettura successiva": "下一个读取方式"
+ "Lettura successiva": "下一个读取方式",
+ "Anteprima del video": "视频预览",
+ "Formato": "画幅",
+ "Inquadratura": "取景",
+ "Tutta la tavola": "整个画板",
+ "Segue il tempo": "跟随时间",
+ "Pallini sul cursore": "播放线上的圆点",
+ "dove la linea del tempo legge il disegno": "显示播放线读取画面的位置",
+ "Titolo e avanzamento": "标题和进度",
+ "BPM ·": "BPM ·"
 }

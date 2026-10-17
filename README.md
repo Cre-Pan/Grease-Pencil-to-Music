@@ -221,7 +221,7 @@ semitoni), poi Duplica, Strumento attuale, Elimina o Fine.
 con il play; muovi la Pencil solo in alto e in basso per la nota, premi di più per suonare più
 forte, alzala per una pausa. Ogni giro del loop diventa un nuovo tratto.
 
-**In alto**: a sinistra il menu ⋯ (Nuova, Salva, Apri composizione, Importa un video, Carica
+**In alto**: a sinistra il logo (nero o bianco col tema), il menu ⋯ (Nuova, Salva, Apri composizione, Importa un video, Carica
 l'esempio), le Impostazioni e il nome (toccalo per rinominare); a parte il **?**, che spiega
 ogni cosa della schermata in cui sei. A destra tre isole: strumenti, **Livelli** e il colore
 (lo strumento). Se manca spazio le sezioni mostrano solo le icone e le isole si mettono in
@@ -244,7 +244,13 @@ l'immagine (o *⋯ → Sfondo della tavola…*) mette il file **dietro i tratti*
 opacità e adattamento in *Impostazioni → Tavola*.
 
 **Esporta**: Audio e MIDI (.zip, WAV, MIDI, tracce separate), **Video** della tavola con la
-linea del tempo che scorre e la musica (MP4 su iPad, 720p o 1080p, registrato in tempo reale),
+linea del tempo che scorre e la musica (MP4 su iPad, 720p o 1080p, registrato in tempo reale):
+formato **Tavola, 16:9, 1:1 o 9:16** (per YouTube, post e storie), inquadratura **Tutta la
+tavola** o **Segue il tempo** (la tavola scorre sotto il cursore come uno spartito, i loop uno
+dopo l'altro, la tastiera resta a sinistra; compare solo dove la tavola intera sarebbe troppo
+piccola), **pallini sul cursore** dove la linea del tempo legge il disegno (col colore dello
+strumento, e un anello che si apre dove comincia un tratto), **titolo e avanzamento**;
+un'anteprima mostra il fotogramma prima di registrare.
 **Immagine** PNG (con la tavola o trasparente, livelli insieme o un PNG per livello in un
 .zip, 1×–3×), Progetto (.json). Dopo un'eliminazione il messaggio in basso ha **Annulla**.
 
