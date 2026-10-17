@@ -528,5 +528,6 @@
  "dove la linea del tempo legge il disegno": "where the playhead reads the drawing",
  "Titolo e avanzamento": "Title and progress",
  "BPM ·": "BPM ·",
- "Informazioni": "About"
+ "Informazioni": "About",
+ "Il suono non si aggiorna: tocca ↻ per ricaricare l'audio.": "The sound isn't updating: tap ↻ to reload the audio."
 }

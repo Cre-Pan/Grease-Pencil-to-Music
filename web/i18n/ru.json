@@ -528,5 +528,6 @@
  "dove la linea del tempo legge il disegno": "там, где курсор читает рисунок",
  "Titolo e avanzamento": "Название и прогресс",
  "BPM ·": "BPM ·",
- "Informazioni": "О программе"
+ "Informazioni": "О программе",
+ "Il suono non si aggiorna: tocca ↻ per ricaricare l'audio.": "Звук не обновляется: нажмите ↻, чтобы перезагрузить аудио."
 }

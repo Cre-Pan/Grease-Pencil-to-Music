@@ -92,6 +92,13 @@
   anche sulla tavola durante il play. Nel video che segue il tempo il lato destro della tavola
   è stondato come sullo schermo e le giunzioni tra i loop sono continue (ora si vedono anche i
   numeri delle battute).
+- **Correzione: il disegno nuovo a volte non suonava.** Se un render dell'audio non finiva
+  (succede su iPadOS: memoria, interruzioni), bloccava tutti i successivi fino al ricaricamento
+  della pagina; ora ogni render ha un tempo massimo, uno bloccato viene abbandonato e rifatto,
+  e dopo tre errori di fila compare l'invito a toccare ↻. Ogni render finito entra subito nel
+  play (prima, disegnando di continuo, si sentiva solo quando ti fermavi). Ogni tratto ora
+  viene generato da solo e tenuto da parte: un tratto nuovo costa un render breve invece di
+  tutto il livello (circa la metà del tempo in un disegno con molti tratti).
 - Toccando il logo: *Open-source project made by Alessandro Pannoli* con il link a
   Instagram [@cre.pan](https://www.instagram.com/cre.pan/).
 - **Icone nuove**: app (il logo con i trattini colorati), favicon del browser e del sito (il
