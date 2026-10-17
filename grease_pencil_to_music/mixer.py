@@ -110,7 +110,7 @@ class _Errors:
 
     def add(self, error, what):
         if not self.count:
-            print(f"[Grease Pencil to Music] {what} skipped: {error!r}")
+            print(f"[Doodle Music] {what} skipped: {error!r}")
         self.count += 1
 
 

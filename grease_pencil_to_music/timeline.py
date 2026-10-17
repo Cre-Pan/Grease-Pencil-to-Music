@@ -375,7 +375,7 @@ def _draw():
     except Exception as error:  # never break Blender's drawing
         if not _reported[0]:
             _reported[0] = True
-            print(f"[Grease Pencil to Music] timeline draw failed: {error!r}")
+            print(f"[Doodle Music] timeline draw failed: {error!r}")
 
 
 def tag_redraw():

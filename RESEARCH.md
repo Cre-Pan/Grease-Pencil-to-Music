@@ -1,6 +1,6 @@
 # Ricerca
 
-Appunti delle ricerche fatte per Grease Pencil to Music: progetti simili, librerie di
+Appunti delle ricerche fatte per Doodle Music: progetti simili, librerie di
 strumenti, librerie Python e idee. Ogni scelta del progetto qui sotto rimanda alla sua
 fonte.
 

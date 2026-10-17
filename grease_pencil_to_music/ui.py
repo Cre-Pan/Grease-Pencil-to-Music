@@ -5,7 +5,7 @@
   Material (instrument, sample, effects), Output (export), Scene (listening).
 * File > Import / Export menus.
 * 3D View sidebar "Musica": a compact panel for drawing time.
-* Shift+A > Grease Pencil to Music.
+* Shift+A > Doodle Music.
 """
 
 import bpy
@@ -362,7 +362,7 @@ class GP2M_PT_output(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "output"
-    bl_label = "Grease Pencil to Music"
+    bl_label = "Doodle Music"
 
     def draw_header(self, _context):
         self.layout.label(icon="FILE_SOUND")
@@ -426,7 +426,7 @@ class _CompositionPanel(_Panel):
 
 
 class GP2M_PT_main(_Panel, bpy.types.Panel):
-    bl_label = "Grease Pencil to Music"
+    bl_label = "Doodle Music"
 
     def draw(self, context):
         layout = self.layout
@@ -434,7 +434,7 @@ class GP2M_PT_main(_Panel, bpy.types.Panel):
         if comp is None:
             layout.label(text="Nessuna composizione selezionata.")
             layout.operator("gp2m.add_composition", icon="ADD")
-            layout.label(text="(oppure Shift+A → Grease Pencil to Music)")
+            layout.label(text="(oppure Shift+A → Doodle Music)")
             layout.operator("gp2m.import_midi", icon="IMPORT")
             return
         layout.label(text=comp.name, icon="OUTLINER_OB_GREASEPENCIL")
@@ -456,7 +456,7 @@ class GP2M_PT_layers(_CompositionPanel, bpy.types.Panel):
 
 class VIEW3D_MT_gp2m_add(bpy.types.Menu):
     bl_idname = "VIEW3D_MT_gp2m_add"
-    bl_label = "Grease Pencil to Music"
+    bl_label = "Doodle Music"
 
     def draw(self, _context):
         self.layout.operator("gp2m.add_composition", text="Composizione Musicale",

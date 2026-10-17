@@ -557,7 +557,7 @@ def _rebuild_pending():
             try:
                 rebuild(obj)
             except Exception as error:  # keep Blender responsive
-                print(f"[Grease Pencil to Music] rebuild failed: {error!r}")
+                print(f"[Doodle Music] rebuild failed: {error!r}")
     return None
 
 

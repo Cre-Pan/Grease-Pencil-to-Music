@@ -99,6 +99,15 @@
   play (prima, disegnando di continuo, si sentiva solo quando ti fermavi). Ogni tratto ora
   viene generato da solo e tenuto da parte: un tratto nuovo costa un render breve invece di
   tutto il livello (circa la metà del tempo in un disegno con molti tratti).
+- **Doodle Music**: il progetto, l'app e l'add-on cambiano nome (prima *Grease Pencil to Music*);
+  i disegni salvati restano. Icona del logo su sfondo bianco anche nella scheda del browser
+  quando l'app è aperta da sola.
+- Mentre disegni, la nota si risente solo quando il tratto passa a un'altra nota (prima la
+  chitarra e gli altri strumenti pizzicati si ripetevano anche su un tratto dritto).
+- Durante il play resta solo il pallino sul cursore (l'anello che si allarga è solo nel video).
+- Il pulsante del logo resta un cerchio in ogni formato della finestra.
+- Squeeze della Pencil = play/pausa, doppio tocco = pennello ↔ gomma, per quando la web app
+  gira dentro un'app che li inoltra (Safari non li passa alle pagine).
 - Toccando il logo: *Open-source project made by Alessandro Pannoli* con il link a
   Instagram [@cre.pan](https://www.instagram.com/cre.pan/).
 - **Icone nuove**: app (il logo con i trattini colorati), favicon del browser e del sito (il
@@ -106,6 +115,12 @@
 - **Lingue**: italiano, inglese, francese, spagnolo, cinese e russo (Impostazioni →
   Interfaccia → Lingua); al primo avvio segue la lingua del dispositivo. I nomi che scrivi
   (livelli, composizione, suoni, onde) non vengono tradotti.
+
+## 0.0.7
+
+- Nuovo nome: **Doodle Music** (menu Shift+A, pannelli, Preferences). L'identificativo
+  dell'estensione resta `grease_pencil_to_music`, così si aggiorna sopra la 0.0.6 e i file
+  .blend restano compatibili.
 
 ## 0.0.6
 

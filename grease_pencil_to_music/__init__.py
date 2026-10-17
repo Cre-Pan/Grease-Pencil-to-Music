@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Grease Pencil to Music.
+"""Doodle Music.
 
 Draw on a musical board with Grease Pencil and hear it: X is time, Z is pitch,
 the material is the instrument; thickness, opacity and vertex color shape the

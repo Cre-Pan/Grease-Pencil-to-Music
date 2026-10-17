@@ -18,8 +18,8 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "web" / "app.html"
 OUT = ROOT / "docs" / "app"
-NAME = "Grease Pencil to Music"
-SHORT = "GP Music"
+NAME = "Doodle Music"
+SHORT = "Doodle Music"
 
 HEAD = """<!doctype html>
 <html lang="it">
@@ -134,6 +134,7 @@ def build(out=OUT):
     body = SOURCE.read_text(encoding="utf-8")
     body = re.sub(r"^\s*<title>.*?</title>\s*", "", body, count=1, flags=re.S)
     body = re.sub(r'^\s*<meta name="claude:[^>]*>\s*', "", body, count=1)
+    body = re.sub(r'^\s*<link rel="icon"[^>]*>\s*', "", body, count=1)  # the head has its own favicons
     out.mkdir(parents=True, exist_ok=True)
     page = HEAD.format(name=NAME, short=SHORT) + body + "\n</body>\n</html>\n"
     (out / "index.html").write_text(page, encoding="utf-8")
@@ -162,7 +163,7 @@ def build(out=OUT):
     (docs / "index.html").write_text(
         '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=app/">'
         '<link rel="icon" type="image/png" href="favicon.png">'
-        '<title>Grease Pencil to Music</title><a href="app/">Apri la web app</a>\n', encoding="utf-8")
+        '<title>Doodle Music</title><a href="app/">Apri la web app</a>\n', encoding="utf-8")
     return out
 
 

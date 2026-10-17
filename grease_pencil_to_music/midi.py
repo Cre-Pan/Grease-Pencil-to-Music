@@ -48,7 +48,7 @@ def build_midi(tracks, bpm):
     seconds_to_ticks = PPQ * bpm / 60.0
     tempo = int(round(60_000_000 / max(bpm, 1e-6)))
     conductor = [
-        (0, 0, _meta_text(0x03, "Grease Pencil to Music")),
+        (0, 0, _meta_text(0x03, "Doodle Music")),
         (0, 1, b"\xff\x51\x03" + tempo.to_bytes(3, "big")),
         (0, 2, b"\xff\x58\x04\x04\x02\x18\x08"),
     ]

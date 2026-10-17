@@ -113,7 +113,7 @@ def library_key(material):
             else:
                 zones = _soundfont(path).zones(preset)
         except Exception as error:
-            print(f"[Grease Pencil to Music] libreria non letta: {error!r}")
+            print(f"[Doodle Music] libreria non letta: {error!r}")
             return synth.LIBRARY_PREFIX
         synth.register_zones(key, zones)
         _loaded[key] = True

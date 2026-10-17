@@ -174,7 +174,7 @@ def _tick():
             for obj in board.make_independent(compositions()):
                 _dirty.add(obj.name)
         except Exception as error:
-            print(f"[Grease Pencil to Music] cleanup failed: {error!r}")
+            print(f"[Doodle Music] cleanup failed: {error!r}")
         # Duplicated (Shift+D) or renamed compositions need their own strip.
         for obj in compositions():
             if engine.find_strip(engine.scene_of(obj), obj) is None:
@@ -220,7 +220,7 @@ def _show_popups():
         return
     try:
         with bpy.context.temp_override(window=wm.windows[0]):
-            wm.popup_menu(_draw_stack_popup, title="Grease Pencil to Music", icon="INFO")
+            wm.popup_menu(_draw_stack_popup, title="Doodle Music", icon="INFO")
     except Exception:
         pass  # the warning is also shown in the N panel
 

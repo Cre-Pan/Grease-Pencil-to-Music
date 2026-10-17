@@ -1,4 +1,6 @@
-# Grease Pencil to Music
+# Doodle Music
+
+*(prima si chiamava Grease Pencil to Music)*
 
 Add-on per **Blender 5.2** che trasforma i disegni Grease Pencil in musica.
 Si ispira al *suono disegnato* di Norman McLaren e Daphne Oram (Oramics): si
@@ -22,7 +24,7 @@ disegna su una tavola, e la tavola suona.
 
 ## Uso
 
-1. Nel viewport 3D: **Shift+A → Grease Pencil to Music → Composizione Musicale**.
+1. Nel viewport 3D: **Shift+A → Doodle Music → Composizione Musicale**.
    Viene creato **un unico oggetto** *Composizione Musicale 1*: la tavola (tastiera,
    griglia, etichette e testina) sta in gruppi di livelli bloccati dentro l'oggetto stesso.
    La composizione parte **vuota**: un livello con un solo strumento (Flauto). La vista
@@ -85,7 +87,7 @@ Tutto si controlla dalla barra laterale **N → Musica**:
 
 | Pannello | Cosa contiene |
 |---|---|
-| Grease Pencil to Music | stato, muto, avvisi, *Auto* (aggiornamento automatico), *Genera suono*, **Ascolto** (insieme / solo l'attiva / una dopo l'altra) |
+| Doodle Music | stato, muto, avvisi, *Auto* (aggiornamento automatico), *Genera suono*, **Ascolto** (insieme / solo l'attiva / una dopo l'altra) |
 | Tavola e tempo | BPM, durata del loop, nota più bassa, ottave, **etichette dei tasti** (solo Do, tasti bianchi, tutte, nessuna), griglia |
 | Lettura | scala e tonica, quantizzazione ritmica, **swing**, nota minima, volume, **Usa modificatori** |
 | Livelli e strumenti | **Nuovo livello**, ↑ / ↓; ogni livello è un riquadro con lettura, occhio (nascosto e muto), cestino e i suoi **strumenti** (colore, nome, **volume**, occhio); **+ Strumento**; volume, forme piene, canone ed effetti del livello |
@@ -299,6 +301,12 @@ Onde disegnate* ed entrano nel progetto .json.
 | Livello, suono o onda tenuti premuti | menu vicino al dito |
 | M / altoparlante / occhio: tocco · tieni · trascina | solo questo · solo questo acceso · tutti come il primo |
 | Lazo: cerchia, poi trascina | sposta i tratti scelti |
+| Apple Pencil: squeeze / doppio tocco | play-pausa / pennello ↔ gomma (solo dentro un'app che li inoltra: Safari non li passa alle pagine web, vedi sotto) |
+
+**Squeeze e doppio tocco della Pencil**: iPadOS li dà solo alle app native (UIPencilInteraction),
+non alle pagine web né alle PWA. La web app è pronta: un guscio nativo (WKWebView) che li riceve
+chiama `window.doodlePencil("squeeze")` o `window.doodlePencil("doubleTap")`, oppure manda alla
+pagina il messaggio `{ doodlePencil: "squeeze" }`.
 
 ## Limiti noti (0.0.x)
 
