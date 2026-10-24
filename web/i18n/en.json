@@ -529,5 +529,21 @@
  "Titolo e avanzamento": "Title and progress",
  "BPM ·": "BPM ·",
  "Informazioni": "About",
- "Il suono non si aggiorna: tocca ↻ per ricaricare l'audio.": "The sound isn't updating: tap ↻ to reload the audio."
+ "Il suono non si aggiorna: tocca ↻ per ricaricare l'audio.": "The sound isn't updating: tap ↻ to reload the audio.",
+ "A W S E D F T G Y H U J K · Z X ottava": "A W S E D F T G Y H U J K · Z X octave",
+ "Preferenze": "Preferences",
+ "Preferenze…": "Preferences…",
+ "Doodle Music": "Doodle Music",
+ "Open-source project made by Alessandro Pannoli.": "Open-source project made by Alessandro Pannoli.",
+ "@cre.pan": "@cre.pan",
+ "Nuova": "New",
+ "Apri…": "Open…",
+ "Non riesco a salvare sul dispositivo (spazio pieno?): salva la composizione dal menu File.": "I can't save on this device (storage full?): save the composition from the File menu.",
+ "Sfondo della tavola: opacità e adattamento in File → Preferenze → Tavola": "Canvas background: opacity and fit in File → Preferences → Canvas",
+ "Sfondo rimosso": "Background removed",
+ "Tastiera": "Keyboard",
+ "Tocca i tasti a sinistra della tavola per sentire le note con lo strumento scelto; scorri per un glissando.": "Tap the keys on the left of the canvas to hear the notes with the chosen instrument; slide for a glissando.",
+ "Dal menu File: in una finestra mobile o come sfondo della tavola, per disegnarci sopra (e da lì si rimuove). Il video segue il play.": "From the File menu: in a floating window or as the canvas background, to draw over it (and remove it from there). Video follows playback.",
+ "Salva e Apri sono nel menu File, con le Preferenze.": "Save and Open are in the File menu, with Preferences.",
+ "Cambia lo sfondo…": "Change background…"
 }

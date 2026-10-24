@@ -529,5 +529,21 @@
  "Titolo e avanzamento": "Título y progreso",
  "BPM ·": "BPM ·",
  "Informazioni": "Información",
- "Il suono non si aggiorna: tocca ↻ per ricaricare l'audio.": "El sonido no se actualiza: toca ↻ para recargar el audio."
+ "Il suono non si aggiorna: tocca ↻ per ricaricare l'audio.": "El sonido no se actualiza: toca ↻ para recargar el audio.",
+ "A W S E D F T G Y H U J K · Z X ottava": "A W S E D F T G Y H U J K · Z X octava",
+ "Preferenze": "Preferencias",
+ "Preferenze…": "Preferencias…",
+ "Doodle Music": "Doodle Music",
+ "Open-source project made by Alessandro Pannoli.": "Open-source project made by Alessandro Pannoli.",
+ "@cre.pan": "@cre.pan",
+ "Nuova": "Nuevo",
+ "Apri…": "Abrir…",
+ "Non riesco a salvare sul dispositivo (spazio pieno?): salva la composizione dal menu File.": "No puedo guardar en el dispositivo (¿espacio lleno?): guarda la composición desde el menú Archivo.",
+ "Sfondo della tavola: opacità e adattamento in File → Preferenze → Tavola": "Fondo del tablero: opacidad y ajuste en Archivo → Preferencias → Tablero",
+ "Sfondo rimosso": "Fondo eliminado",
+ "Tastiera": "Teclado",
+ "Tocca i tasti a sinistra della tavola per sentire le note con lo strumento scelto; scorri per un glissando.": "Toca las teclas a la izquierda del tablero para oír las notas con el instrumento elegido; desliza para un glissando.",
+ "Dal menu File: in una finestra mobile o come sfondo della tavola, per disegnarci sopra (e da lì si rimuove). Il video segue il play.": "Desde el menú Archivo: en una ventana flotante o como fondo del tablero, para dibujar encima (y quitarlo desde ahí). El vídeo sigue la reproducción.",
+ "Salva e Apri sono nel menu File, con le Preferenze.": "Guardar y Abrir están en el menú Archivo, con las Preferencias.",
+ "Cambia lo sfondo…": "Cambiar el fondo…"
 }

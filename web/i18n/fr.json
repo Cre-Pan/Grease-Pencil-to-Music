@@ -529,5 +529,21 @@
  "Titolo e avanzamento": "Titre et progression",
  "BPM ·": "BPM ·",
  "Informazioni": "À propos",
- "Il suono non si aggiorna: tocca ↻ per ricaricare l'audio.": "Le son ne se met pas à jour : touchez ↻ pour recharger l'audio."
+ "Il suono non si aggiorna: tocca ↻ per ricaricare l'audio.": "Le son ne se met pas à jour : touchez ↻ pour recharger l'audio.",
+ "A W S E D F T G Y H U J K · Z X ottava": "A W S E D F T G Y H U J K · Z X octave",
+ "Preferenze": "Préférences",
+ "Preferenze…": "Préférences…",
+ "Doodle Music": "Doodle Music",
+ "Open-source project made by Alessandro Pannoli.": "Open-source project made by Alessandro Pannoli.",
+ "@cre.pan": "@cre.pan",
+ "Nuova": "Nouveau",
+ "Apri…": "Ouvrir…",
+ "Non riesco a salvare sul dispositivo (spazio pieno?): salva la composizione dal menu File.": "Impossible d'enregistrer sur l'appareil (espace plein ?) : enregistrez la composition depuis le menu Fichier.",
+ "Sfondo della tavola: opacità e adattamento in File → Preferenze → Tavola": "Fond de la planche : opacité et ajustement dans Fichier → Préférences → Planche",
+ "Sfondo rimosso": "Fond supprimé",
+ "Tastiera": "Clavier",
+ "Tocca i tasti a sinistra della tavola per sentire le note con lo strumento scelto; scorri per un glissando.": "Touchez les touches à gauche de la planche pour entendre les notes avec l'instrument choisi ; glissez pour un glissando.",
+ "Dal menu File: in una finestra mobile o come sfondo della tavola, per disegnarci sopra (e da lì si rimuove). Il video segue il play.": "Depuis le menu Fichier : dans une fenêtre flottante ou en fond de planche, pour dessiner dessus (et le retirer de là). La vidéo suit la lecture.",
+ "Salva e Apri sono nel menu File, con le Preferenze.": "Enregistrer et Ouvrir sont dans le menu Fichier, avec les Préférences.",
+ "Cambia lo sfondo…": "Changer le fond…"
 }

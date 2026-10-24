@@ -529,5 +529,21 @@
  "Titolo e avanzamento": "Название и прогресс",
  "BPM ·": "BPM ·",
  "Informazioni": "О программе",
- "Il suono non si aggiorna: tocca ↻ per ricaricare l'audio.": "Звук не обновляется: нажмите ↻, чтобы перезагрузить аудио."
+ "Il suono non si aggiorna: tocca ↻ per ricaricare l'audio.": "Звук не обновляется: нажмите ↻, чтобы перезагрузить аудио.",
+ "A W S E D F T G Y H U J K · Z X ottava": "A W S E D F T G Y H U J K · Z X октава",
+ "Preferenze": "Настройки",
+ "Preferenze…": "Настройки…",
+ "Doodle Music": "Doodle Music",
+ "Open-source project made by Alessandro Pannoli.": "Open-source project made by Alessandro Pannoli.",
+ "@cre.pan": "@cre.pan",
+ "Nuova": "Новый",
+ "Apri…": "Открыть…",
+ "Non riesco a salvare sul dispositivo (spazio pieno?): salva la composizione dal menu File.": "Не удаётся сохранить на устройстве (нет места?): сохраните композицию через меню «Файл».",
+ "Sfondo della tavola: opacità e adattamento in File → Preferenze → Tavola": "Фон холста: прозрачность и вписывание в Файл → Настройки → Холст",
+ "Sfondo rimosso": "Фон удалён",
+ "Tastiera": "Клавиатура",
+ "Tocca i tasti a sinistra della tavola per sentire le note con lo strumento scelto; scorri per un glissando.": "Нажимайте клавиши слева от холста, чтобы услышать ноты выбранного инструмента; проведите для глиссандо.",
+ "Dal menu File: in una finestra mobile o come sfondo della tavola, per disegnarci sopra (e da lì si rimuove). Il video segue il play.": "Из меню «Файл»: в плавающем окне или как фон холста, чтобы рисовать поверх (там же убирается). Видео следует за воспроизведением.",
+ "Salva e Apri sono nel menu File, con le Preferenze.": "«Сохранить» и «Открыть» — в меню «Файл», вместе с настройками.",
+ "Cambia lo sfondo…": "Сменить фон…"
 }

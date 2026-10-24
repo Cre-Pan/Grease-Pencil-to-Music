@@ -529,5 +529,21 @@
  "Titolo e avanzamento": "标题和进度",
  "BPM ·": "BPM ·",
  "Informazioni": "关于",
- "Il suono non si aggiorna: tocca ↻ per ricaricare l'audio.": "声音没有更新：轻点 ↻ 重新载入音频。"
+ "Il suono non si aggiorna: tocca ↻ per ricaricare l'audio.": "声音没有更新：轻点 ↻ 重新载入音频。",
+ "A W S E D F T G Y H U J K · Z X ottava": "A W S E D F T G Y H U J K · Z X 八度",
+ "Preferenze": "偏好设置",
+ "Preferenze…": "偏好设置…",
+ "Doodle Music": "Doodle Music",
+ "Open-source project made by Alessandro Pannoli.": "Open-source project made by Alessandro Pannoli.",
+ "@cre.pan": "@cre.pan",
+ "Nuova": "新建",
+ "Apri…": "打开…",
+ "Non riesco a salvare sul dispositivo (spazio pieno?): salva la composizione dal menu File.": "无法保存到设备（空间已满？）：请从“文件”菜单保存作品。",
+ "Sfondo della tavola: opacità e adattamento in File → Preferenze → Tavola": "画板背景：在 文件 → 偏好设置 → 画板 中调整不透明度和适配",
+ "Sfondo rimosso": "背景已移除",
+ "Tastiera": "键盘",
+ "Tocca i tasti a sinistra della tavola per sentire le note con lo strumento scelto; scorri per un glissando.": "轻点画板左侧的琴键，用所选乐器试听音符；滑动可做滑音。",
+ "Dal menu File: in una finestra mobile o come sfondo della tavola, per disegnarci sopra (e da lì si rimuove). Il video segue il play.": "在“文件”菜单中：放入浮动窗口或作为画板背景来描画（也在那里移除）。视频跟随播放。",
+ "Salva e Apri sono nel menu File, con le Preferenze.": "“保存”和“打开”在“文件”菜单中，偏好设置也在那里。",
+ "Cambia lo sfondo…": "更换背景…"
 }

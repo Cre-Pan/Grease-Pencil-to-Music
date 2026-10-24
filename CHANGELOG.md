@@ -99,6 +99,20 @@
   play (prima, disegnando di continuo, si sentiva solo quando ti fermavi). Ogni tratto ora
   viene generato da solo e tenuto da parte: un tratto nuovo costa un render breve invece di
   tutto il livello (circa la metà del tempo in un disegno con molti tratti).
+- **Interfaccia più essenziale**: via i testi fissi (riga in basso a destra, «di N battute»,
+  spiegazioni nei livelli, nel Beat, nell'Onda, in Esporta e nelle Preferenze). Le spiegazioni
+  compaiono solo dove appoggi il mouse o la Apple Pencil sospesa sopra lo schermo; col solo
+  tocco l'interfaccia resta minimale e il **?** spiega tutto.
+- **Hover** (mouse o Pencil sospesa, iPad Pro / Air): i nomi delle sezioni tornano quando ci
+  passi sopra; **File**, **Livelli** e lo strumento si aprono da soli dopo un attimo e si
+  richiudono quando ti allontani (toccarli li tiene aperti); il tasto della tastiera sotto la
+  penna si illumina.
+- **Menu File** al posto di ⋯ e dell'icona delle impostazioni: Nuova, Apri, Salva, Importa
+  immagine o video, Sfondo della tavola, **Rimuovi lo sfondo**, **Preferenze…** (anche ⌘,),
+  Carica l'esempio.
+- **La tastiera a sinistra della tavola suona**: tocca un tasto per sentire la nota con lo
+  strumento scelto, scorri per un glissando; non disegna niente (anche con un dito in modalità
+  Solo Pencil).
 - **Doodle Music**: il progetto, l'app e l'add-on cambiano nome (prima *Grease Pencil to Music*);
   i disegni salvati restano. Icona del logo su sfondo bianco anche nella scheda del browser
   quando l'app è aperta da sola.

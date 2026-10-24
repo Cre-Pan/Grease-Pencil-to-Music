@@ -224,8 +224,8 @@ con il play; muovi la Pencil solo in alto e in basso per la nota, premi di più 
 forte, alzala per una pausa. Ogni giro del loop diventa un nuovo tratto.
 
 **In alto**: a sinistra il logo (nero o bianco col tema; toccalo per le informazioni sul
-progetto), il menu ⋯ (Nuova, Salva, Apri composizione, Importa un video, Carica
-l'esempio), le Impostazioni e il nome (toccalo per rinominare); a parte il **?**, che spiega
+progetto), il menu **File** (Nuova, Apri, Salva, immagini e video, sfondo e Rimuovi lo sfondo,
+**Preferenze…** anche con ⌘,, esempio) e il nome (toccalo per rinominare); a parte il **?**, che spiega
 ogni cosa della schermata in cui sei. A destra tre isole: strumenti, **Livelli** e il colore
 (lo strumento). Se manca spazio le sezioni mostrano solo le icone e le isole si mettono in
 colonna.
