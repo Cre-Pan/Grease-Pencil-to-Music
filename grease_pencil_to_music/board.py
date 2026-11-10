@@ -497,6 +497,47 @@ def has_board(comp):
     return comp.data.layer_groups.get(BOARD_GROUP) is not None
 
 
+# Board layer -> materials its strokes may use.
+_LAYER_MATERIALS = {
+    "GP2M Sfondo": {"GP2M Sfondo", "GP2M Banda tasti neri"},
+    "GP2M Griglia": {"GP2M Linea battito", "GP2M Linea secondo"},
+    "GP2M Righe": {"GP2M Linea Do", "GP2M Linea nota"},
+    "GP2M Tasti": {"GP2M Tasto bianco", "GP2M Tasto nero"},
+    "GP2M Etichette": {"GP2M Etichetta tasti", "GP2M Etichetta tempo"},
+    HEAD_LAYER: {"GP2M Testina"},
+}
+
+
+def board_materials_ok(comp):
+    """False when board strokes point at the wrong material slots.
+
+    Undo in Draw/Edit/Sculpt Mode restores the drawings but not the material
+    slots: after adding (or removing) an instrument, which shifts the board
+    slots, Ctrl+Z leaves the board strokes on the neighbouring materials and
+    keyboard and grid turn black.
+    """
+    import numpy as np
+    gp = comp.data
+    names = [m.name if m is not None else "" for m in gp.materials]
+    for layer in gp.layers:
+        allowed = _LAYER_MATERIALS.get(layer.name)
+        if allowed is None or not is_board_layer(layer):
+            continue
+        for frame in layer.frames:
+            drawing = frame.drawing
+            count = len(drawing.strokes)
+            if not count:
+                continue
+            attr = drawing.attributes.get("material_index")
+            indices = np.zeros(count, dtype=np.int32)
+            if attr is not None:
+                attr.data.foreach_get("value", indices)
+            for index in np.unique(indices):
+                if not 0 <= index < len(names) or names[index] not in allowed:
+                    return False
+    return True
+
+
 def rebuild(comp, scene=None):
     """(Re)create board, labels and playhead inside the composition."""
     scene = scene or bpy.context.scene
