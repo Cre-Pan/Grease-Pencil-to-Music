@@ -130,6 +130,33 @@
   Interfaccia → Lingua); al primo avvio segue la lingua del dispositivo. I nomi che scrivi
   (livelli, composizione, suoni, onde) non vengono tradotti.
 
+## 0.0.8
+
+Blender 5.3
+- Richiede **Blender 5.3** (tutti i test passano sulla 5.3.0).
+- **?** nell'intestazione dei pannelli (Musica, Lettura, Strumento musicale, Output e barra
+  laterale *Musica*): l'aiuto di quella parte in testo formattato (`label_markdown`, nuovo
+  nella 5.3), come il **?** della web app. Via i testi fissi dai pannelli: restano i tooltip.
+- Messaggi lunghi su più righe (`label_multiline`, 5.3): l'errore di generazione si legge per
+  intero e non viene più tagliato a 120 caratteri; l'avviso dei keyframe va a capo.
+- Blender 5.3 ha tolto la durata dei frame Grease Pencil: una pausa è un keyframe vuoto
+  (*Insert Blank Frame*); con *Sezioni da keyframe* diventa una sezione muta (con test).
+- I tratti chiusi con l'opzione **Ciclico** dei nuovi strumenti di disegno della 5.3 suonano
+  anche il tratto di ritorno (già letto dall'add-on, ora spiegato nel **?** della Lettura).
+- La barra laterale *Musica* funziona con la nuova ricerca della 5.3 (Ctrl+F), senza
+  modifiche.
+
+Allineamento con la web app
+- **Progetto della web app (.json)**: *File → Import* lo apre come composizione (tratti,
+  livelli con lettura, volume e riverbero, pennelli, tempo del disegno, suoni registrati come
+  Campione, Beat come livello di colpi); *File → Export* (o *Output → Web app*) salva la
+  composizione da aprire sull'iPad.
+- *Shift+A → Doodle Music → Composizione dalla web app…*.
+
+Correzioni
+- **Eliminare uno strumento spostava i tratti degli strumenti successivi su un altro
+  strumento** (due slot più in basso): Blender li sposta già da solo quando toglie lo slot.
+
 ## 0.0.7
 
 - Nuovo nome: **Doodle Music** (menu Shift+A, pannelli, Preferences). L'identificativo

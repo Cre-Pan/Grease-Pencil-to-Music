@@ -300,6 +300,14 @@ class MockLayout:
     def label(self, **_kwargs):
         pass
 
+    def label_multiline(self, **kwargs):  # Blender 5.3
+        assert "label_multiline" in bpy.types.UILayout.bl_rna.functions
+        self.log.append(("multiline", kwargs.get("text", "")))
+
+    def label_markdown(self, text, **_kwargs):  # Blender 5.3
+        assert "label_markdown" in bpy.types.UILayout.bl_rna.functions
+        self.log.append(("markdown", text))
+
     def separator(self, **_kwargs):
         pass
 
@@ -372,6 +380,10 @@ def test_panels_menus_and_preferences_draw(comp):
         if issubclass(panel, bpy.types.Panel) and panel is not ui.GP2M_PT_material:
             assert panel.poll(bpy.context) if hasattr(panel, "poll") else True
             panel.draw(_Drawer(log), bpy.context)
+        if hasattr(panel, "draw_header_preset"):
+            panel.draw_header_preset(_Drawer(log), bpy.context)
+    for panel in sub("help").classes:
+        panel.draw(_Drawer(log), bpy.context)
     # The Material panel needs context.material (Properties editor only).
     material = comp.material_slots[0].material
     for ident in ("SAMPLE", "LIBRARY"):
@@ -395,7 +407,10 @@ def test_panels_menus_and_preferences_draw(comp):
             "VIEW3D_MT_gp2m_add", "GP2M_MT_add_instrument", "gp2m.use_instrument",
             "gp2m.add_layer", "gp2m.remove_layer", "hide", "gp2m_library_path",
             "gp2m_sample", "gp2m_sample_root", "gp2m.load_sample", "gp2m.play_keyboard",
-            "channel", "new_bpm", "volume_feedback", "gp2m.import_midi"} <= drawn
+            "channel", "new_bpm", "volume_feedback", "gp2m.import_midi", "gp2m.export_web",
+            "GP2M_PT_help_main", "GP2M_PT_help_reading", "GP2M_PT_help_instrument",
+            "GP2M_PT_help_export"} <= drawn
+    assert sum(1 for entry in log if entry[0] == "markdown") == len(sub("help").classes)
 
 
 def test_deleting_a_composition_removes_its_sound(addon):
@@ -466,6 +481,21 @@ def test_filled_shape_is_a_cluster(comp):
     props.find_layer_settings(comp.data, "Livello 1").fill_mode = "NOISE"
     noise = engine.regenerate(comp)
     assert noise.voice_count == 1 and np.abs(noise.audio).max() > 0.01
+
+
+def test_removing_an_instrument_keeps_the_others_on_their_strokes(comp):
+    """Blender already shifts the strokes of the following slots when a slot goes."""
+    operators = sub("operators")
+    mats = comp.data.materials
+    later = add_stroke(comp, 0, line(comp, 0.5, 1.0, 60), material_index=3)
+    removed = add_stroke(comp, 0, line(comp, 1.5, 2.0, 60), material_index=1)
+    instrument = mats[3].gp2m_instrument
+    operators.remove_material_slot(comp, 1)
+    drawing = sub("board").user_layers(comp.data)[0].frames[0].drawing
+    strokes = list(drawing.strokes)
+    assert mats[strokes[-2].material_index].gp2m_instrument == instrument
+    assert strokes[-1].material_index == 0
+    del later, removed
 
 
 def test_instrument_and_layer_list_operators(comp):
@@ -766,6 +796,24 @@ def test_keyboard_recording_and_notes(comp):
     assert keyboard.composition_seconds(comp, scene, scene.frame_start) == 0.0
 
 
+def test_blank_keyframe_is_a_silent_section(comp):
+    """Blender 5.3 has no frame durations: a pause is a blank keyframe (empty drawing)."""
+    engine = sub("engine")
+    scene = bpy.context.scene
+    fps = scene.render.fps / scene.render.fps_base
+    start = scene.frame_start
+    comp.gp2m.length = 2.0
+    add_stroke(comp, 0, line(comp, 0.5, 1.0, 60))
+    layer = sub("board").user_layers(comp.data)[0]
+    layer.frames.new(start + round(4 * fps))  # what "Insert Blank Frame" makes
+    add_stroke(comp, 0, line(comp, 0.5, 1.0, 67), frame=start + round(6 * fps))
+    comp.gp2m.use_sections = True
+    result = engine.regenerate(comp)
+    assert result.sections == (0.0, 4.0, 6.0)
+    assert [(n.pitch, round(n.start, 2)) for n in result.notes] == [
+        (60, 0.5), (60, 2.5), (67, 6.5)]  # nothing between 4 and 6 s
+
+
 def test_keyframe_sections(comp):
     """Every keyframe starts a section that loops its drawing until the next one."""
     engine, board, keyboard = sub("engine"), sub("board"), sub("keyboard")
@@ -1001,3 +1049,134 @@ def test_scene_start_and_frame_rate_changes_follow(comp):
         bpy.context.view_layer.update()
         handlers._last_change[0] = 0.0
         handlers._tick()
+
+
+# --- Web app project (.json) ----------------------------------------------------------------
+
+def _web_project_json():
+    """A small project as the web app saves it (version 3)."""
+    import base64
+    import json
+    tone = (np.sin(np.arange(4410) * 2 * np.pi * 440 / 44100) * 0.5 * 32767).astype("<i2")
+    stroke = lambda sid, layer, inst, pts, **kw: {"id": sid, "layer": layer, "inst": inst,  # noqa: E731
+                                                  "op": 1, "pts": pts, **kw}
+    melody = [[b / 10, 72.5, 0.6, int(b * 60)] for b in range(0, 21)]  # 2 beats on C5
+    state = {
+        "name": "Dall'iPad", "bpm": 120, "bars": 2, "low": 48, "octaves": 3, "scale": "MINOR",
+        "root": 2, "grid": 0.5,
+        "layers": [
+            {"id": "la", "name": "Melodia", "mode": "OPTICAL_LEGATO", "visible": True,
+             "muted": False, "volume": 0.6, "pan": 0, "reverb": 0.4},
+            {"id": "lb", "name": "Voce", "mode": "GESTURE", "visible": False, "muted": True,
+             "volume": 0.9, "pan": 0, "reverb": 0},
+        ],
+        "strokes": [
+            stroke("s1", "la", "EPIANO", melody),
+            stroke("s2", "la", "GUITAR", [[4, 60.5, 0.5, 0], [5, 64.5, 0.5, 400]], brush="air"),
+            stroke("s3", "la", "PAD", [[0, 55, 0.3, 0], [2, 55, 0.3, 50], [2, 58, 0.3, 90],
+                                       [0, 58, 0.3, 130]], brush="fill"),
+            stroke("s4", "lb", "SMP:xyz", [[1, 67.5, 0.5, 0], [3, 67.5, 0.5, 500]]),
+            stroke("s5", "lb", "WAV:w1", [[6, 62.5, 0.5, 0], [7, 62.5, 0.5, 300]]),
+        ],
+        "beat": {"on": True, "steps": 16, "swing": 0, "volume": 0.7, "ab": False,
+                 "tracks": {"KICK": {"mute": False, "p": [2, 0, 0, 0] * 8, "pB": [0] * 32},
+                            "HAT": {"mute": False, "p": [0, 0, 1, 0] * 8, "pB": [0] * 32}}},
+        "samples": [{"id": "SMP:xyz", "name": "La mia voce", "root": 69}],
+        "waves": [{"id": "WAV:w1", "name": "Onda 1", "strokes": []}],
+    }
+    return json.dumps({"app": "grease-pencil-to-music-web", "version": 3, "state": state,
+                       "sounds": {"SMP:xyz": base64.b64encode(tone.tobytes()).decode()}})
+
+
+def test_web_project_opens_as_composition(addon, tmp_path):
+    board, engine = sub("board"), sub("engine")
+    path = tmp_path / "progetto.json"
+    path.write_text(_web_project_json(), encoding="utf-8")
+    assert bpy.ops.gp2m.import_web(filepath=str(path)) == {"FINISHED"}
+    comp = bpy.context.view_layer.objects.active
+    try:
+        s = comp.gp2m
+        assert comp.name.startswith("Dall'iPad")
+        assert s.bpm == 120 and s.length == pytest.approx(4.0)  # 2 bars of 4/4 at 120
+        assert (s.scale, s.root, s.time_grid) == ("MINOR", "D", "1_8")
+        gp = comp.data
+        names = [layer.name for layer in board.user_layers(gp)]
+        assert names == ["Melodia", "Voce", "Beat"]  # the empty default layers are gone
+        melodia, voce, beat = (gp.layers[n] for n in names)
+        assert melodia.opacity == pytest.approx(0.6) and not melodia.hide
+        assert voce.hide  # muted in the web app = hidden (not heard) in Blender
+        settings = sub("props").find_layer_settings
+        assert settings(gp, "Melodia").mode == "OPTICAL_LEGATO"
+        assert settings(gp, "Melodia").reverb_mix == pytest.approx(0.4)
+        assert settings(gp, "Voce").mode == "GESTURE"
+        drawing = melodia.frames[0].drawing
+        assert len(drawing.strokes) == 3
+        first = drawing.strokes[0]
+        # Beat 0..2 at 120 BPM = 0..1 s; pitch 72.5 = the middle of the C5 row.
+        xs = [p.position.x for p in first.points]
+        assert xs[0] == pytest.approx(0.0) and xs[-1] == pytest.approx(1.0 * s.seconds_width)
+        assert first.points[0].position.z == pytest.approx(row_z(comp, 72))
+        assert first.points[0].radius == pytest.approx(0.3 * s.row_height)
+        assert drawing.attributes["delta_time"].data[20].value == pytest.approx(1.2)
+        mats = gp.materials
+        assert mats[first.material_index].gp2m_instrument in ("EPIANO", "BELL")
+        assert mats[drawing.strokes[1].material_index].gp2m_instrument == "PLUCK"
+        assert drawing.strokes[1].softness == pytest.approx(0.8)  # airbrush: slow attack
+        fill = drawing.strokes[2]
+        assert fill.fill_id != 0 and fill.cyclic
+        sample_mat = mats[voce.frames[0].drawing.strokes[0].material_index]
+        assert sample_mat.gp2m_instrument == "SAMPLE"
+        assert sample_mat.gp2m_sample is not None and sample_mat.gp2m_sample_root == 69
+        assert sample_mat.gp2m_sample.packed_file is not None
+        assert all(mats[st.material_index].gp2m_layer == "Beat"
+                   for st in beat.frames[0].drawing.strokes)
+        assert len(beat.frames[0].drawing.strokes) == 8 + 8  # kicks and hats on every beat, 2 bars
+        assert settings(gp, "Beat").mode == "OPTICAL"
+        result = engine.regenerate(comp, force=True)
+        assert len(result.notes) > 20
+    finally:
+        engine._state.pop(comp.name, None)
+
+
+def test_composition_saves_for_the_web_app(addon, tmp_path):
+    import json
+    web_project = sub("web_project")
+    source = tmp_path / "in.json"
+    source.write_text(_web_project_json(), encoding="utf-8")
+    bpy.ops.gp2m.import_web(filepath=str(source))
+    comp = bpy.context.view_layer.objects.active
+    out = tmp_path / "out.json"
+    try:
+        assert bpy.ops.gp2m.export_web(filepath=str(out)) == {"FINISHED"}
+        data = json.loads(out.read_text(encoding="utf-8"))
+        assert data["app"] == web_project.APP_ID and data["version"] == 3
+        state = data["state"]
+        assert (state["bpm"], state["bars"], state["scale"], state["root"], state["grid"]) \
+            == (120, 2, "MINOR", 2, 0.5)
+        assert [layer["name"] for layer in state["layers"]] == ["Melodia", "Voce", "Beat"]
+        assert state["layers"][0]["mode"] == "OPTICAL_LEGATO"
+        assert state["layers"][1]["muted"] is True
+        melody = next(st for st in state["strokes"] if st["layer"] == state["layers"][0]["id"])
+        assert melody["inst"] in ("EPIANO", "BELL")
+        assert melody["pts"][0][:3] == pytest.approx([0.0, 72.5, 0.6], abs=1e-3)
+        assert melody["pts"][-1][0] == pytest.approx(2.0, abs=1e-3)
+        assert melody["pts"][-1][3] == 1200
+        brushes = {st["brush"] for st in state["strokes"]}
+        assert {"fill", "air", "smooth"} <= brushes
+        # The recorded sound goes back into the file.
+        assert len(state["samples"]) == 1 and state["samples"][0]["root"] == 69
+        sid = state["samples"][0]["id"]
+        assert sid in data["sounds"] and any(st["inst"] == sid for st in state["strokes"])
+        # And the file opens again.
+        project = web_project.parse(out.read_text(encoding="utf-8"),
+                                    set(sub("synth").INSTRUMENT_BY_ID))
+        assert len(project.layers) == 3 and len(project.sounds) == 1
+    finally:
+        sub("engine")._state.pop(comp.name, None)
+
+
+def test_web_project_rejects_other_files(addon, tmp_path):
+    path = tmp_path / "altro.json"
+    path.write_text('{"hello": 1}', encoding="utf-8")
+    with pytest.raises(RuntimeError):
+        bpy.ops.gp2m.import_web(filepath=str(path))

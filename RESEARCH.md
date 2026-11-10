@@ -87,7 +87,7 @@ sceglie il file nella scheda Materiale.
 
 ## Librerie Python valutate
 
-Blender 5.2 usa Python 3.13. Un'estensione può includere wheel binarie
+Blender 5.2 e 5.3 usano Python 3.13. Un'estensione può includere wheel binarie
 ([manuale: Python wheels](https://docs.blender.org/manual/uk/5.0/advanced/extensions/python_wheels.html)),
 ma servono wheel `cp313` per Windows x64.
 

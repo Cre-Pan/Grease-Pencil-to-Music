@@ -8,11 +8,11 @@ sound. Inspired by the drawn sound of Norman McLaren and Daphne Oram.
 
 import bpy
 
-from . import (handlers, keyboard, midi_import, midi_input,  # noqa: F401
-               operators, prefs, props, timeline, ui)
+from . import (handlers, help, keyboard, midi_import, midi_input,  # noqa: F401
+               operators, prefs, props, timeline, ui, web_io)
 
-_classes = (props.classes + prefs.classes + operators.classes + midi_import.classes
-            + keyboard.classes + timeline.classes + ui.classes)
+_classes = (props.classes + prefs.classes + help.classes + operators.classes + midi_import.classes
+            + keyboard.classes + timeline.classes + ui.classes + web_io.classes)
 
 
 def register():
@@ -21,6 +21,7 @@ def register():
     props.register_properties()
     ui.register()
     midi_import.register()
+    web_io.register()
     handlers.register()
     timeline.register()
 
@@ -28,6 +29,7 @@ def register():
 def unregister():
     timeline.unregister()
     handlers.unregister()
+    web_io.unregister()
     midi_import.unregister()
     ui.unregister()
     props.unregister_properties()

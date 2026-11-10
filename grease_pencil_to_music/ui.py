@@ -10,7 +10,7 @@
 
 import bpy
 
-from . import board, engine, music, prefs, props, reader
+from . import board, engine, help, music, prefs, props, reader
 from .operators import active_composition
 
 
@@ -123,7 +123,7 @@ def draw_status(layout, comp):
         box = layout.box()
         box.alert = True
         box.label(text="Errore nella generazione:", icon="ERROR")
-        box.label(text=st["error"][:120])
+        box.label_multiline(text=st["error"], max_lines=6)
     stats = st.get("stats")
     if stats:
         layout.label(text=f"{stats['notes']} note · {stats['seconds'] * 1000:.0f} ms",
@@ -136,8 +136,8 @@ def draw_status(layout, comp):
                          icon="ERROR")
         if stats["multi_keyframes"]:
             box = layout.box()
-            box.label(text="Viene letto solo il keyframe all'inizio della scena:", icon="INFO")
-            box.label(text=", ".join(stats["multi_keyframes"]))
+            box.label_multiline(text="Viene letto solo il keyframe all'inizio della scena: "
+                                + ", ".join(stats["multi_keyframes"]), icon="INFO")
             box.prop(comp.gp2m, "use_sections")
     if reader.has_unsupported_stack(comp):
         box = layout.box()
@@ -251,10 +251,6 @@ def draw_instrument_details(layout, material):
         box.label(text="Libreria (SoundFont .sf2 o .sfz)", icon="ASSET_MANAGER")
         box.prop(material, "gp2m_library_path", text="File")
         box.prop(material, "gp2m_library_preset")
-        col = box.column(align=True)
-        col.scale_y = 0.8
-        col.label(text="Librerie libere: GeneralUser GS, FluidR3 (SF2),")
-        col.label(text="Versilian VCSL (SFZ, CC0)")
     box = layout.box()
     box.label(text="Effetti dello strumento", icon="MODIFIER")
     draw_effects(box, material.gp2m_fx)
@@ -278,6 +274,7 @@ def draw_export(layout):
     row = layout.row(align=True)
     for fmt in ("WAV", "MP3", "MIDI"):
         row.operator("gp2m.export", text=fmt, icon="EXPORT").format = fmt
+    layout.operator("gp2m.export_web", text="Web app (.json)", icon="URL")
 
 
 # --- Properties editor ------------------------------------------------------------------------
@@ -298,6 +295,9 @@ class GP2M_PT_data(_DataPanel, bpy.types.Panel):
     def draw_header(self, _context):
         self.layout.label(icon="FILE_SOUND")
 
+    def draw_header_preset(self, _context):
+        help.button(self.layout, "MAIN")
+
     def draw(self, context):
         comp = active_composition(context)
         draw_status(self.layout, comp)
@@ -316,6 +316,9 @@ class GP2M_PT_data_reading(_DataPanel, bpy.types.Panel):
     bl_label = "Lettura"
     bl_parent_id = "GP2M_PT_data"
 
+    def draw_header_preset(self, _context):
+        help.button(self.layout, "READING")
+
     def draw(self, context):
         draw_reading(self.layout, active_composition(context).gp2m)
 
@@ -326,8 +329,6 @@ class GP2M_PT_data_layers(_DataPanel, bpy.types.Panel):
 
     def draw(self, context):
         draw_layers_and_instruments(self.layout, active_composition(context))
-        self.layout.label(text="Tipo, campione ed effetti di uno strumento: scheda Materiale",
-                          icon="MATERIAL")
 
 
 class GP2M_PT_data_play(_DataPanel, bpy.types.Panel):
@@ -354,6 +355,9 @@ class GP2M_PT_material(bpy.types.Panel):
     def draw_header(self, _context):
         self.layout.label(icon="FILE_SOUND")
 
+    def draw_header_preset(self, _context):
+        help.button(self.layout, "INSTRUMENT")
+
     def draw(self, context):
         draw_instrument_details(self.layout, context.material)
 
@@ -366,6 +370,9 @@ class GP2M_PT_output(bpy.types.Panel):
 
     def draw_header(self, _context):
         self.layout.label(icon="FILE_SOUND")
+
+    def draw_header_preset(self, _context):
+        help.button(self.layout, "EXPORT")
 
     def draw(self, context):
         layout = self.layout
@@ -428,21 +435,22 @@ class _CompositionPanel(_Panel):
 class GP2M_PT_main(_Panel, bpy.types.Panel):
     bl_label = "Doodle Music"
 
+    def draw_header_preset(self, _context):
+        help.button(self.layout, "MAIN")
+
     def draw(self, context):
         layout = self.layout
         comp = active_composition(context)
         if comp is None:
             layout.label(text="Nessuna composizione selezionata.")
             layout.operator("gp2m.add_composition", icon="ADD")
-            layout.label(text="(oppure Shift+A → Doodle Music)")
             layout.operator("gp2m.import_midi", icon="IMPORT")
+            layout.operator("gp2m.import_web", icon="URL")
             return
         layout.label(text=comp.name, icon="OUTLINER_OB_GREASEPENCIL")
         draw_status(layout, comp)
         draw_actions(layout, comp)
         layout.row().prop(context.scene.gp2m_play, "mode", expand=True)
-        layout.label(text="Altre impostazioni: Proprietà → Dati oggetto / Materiale",
-                     icon="PROPERTIES")
 
 
 class GP2M_PT_layers(_CompositionPanel, bpy.types.Panel):
@@ -462,6 +470,7 @@ class VIEW3D_MT_gp2m_add(bpy.types.Menu):
         self.layout.operator("gp2m.add_composition", text="Composizione Musicale",
                              icon="OUTLINER_OB_GREASEPENCIL")
         self.layout.operator("gp2m.import_midi", text="Composizione da MIDI…", icon="IMPORT")
+        self.layout.operator("gp2m.import_web", text="Composizione dalla web app…", icon="URL")
 
 
 def draw_add_menu(self, _context):
