@@ -146,6 +146,8 @@
   per pianoforti, marimba/xilofono, bassi, pad e per le note GM della batteria corrispondenti.
 - Le nuove composizioni partono in scala **Maggiore** (come la web app): ogni nota cade in
   scala. Si cambia in *Lettura* o nelle Preferences; le composizioni esistenti non cambiano.
+  L'import MIDI in una nuova composizione usa la scala cromatica, così le note del file
+  restano esatte.
 
 ## 0.0.7
 

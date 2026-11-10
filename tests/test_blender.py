@@ -36,6 +36,7 @@ def addon(tmp_path_factory):
     # Most tests want a richer starting point than the default (1 layer, 1 instrument).
     preferences.new_layers = 3
     preferences.new_instruments = "ALL"
+    preferences.new_scale = "CHROMATIC"  # the tests read every semitone
     package = sys.modules[MODULE]
     yield package
     bpy.ops.preferences.addon_disable(module=MODULE)
@@ -108,7 +109,7 @@ def test_add_composition_is_one_object(comp):
     assert comp.data.layers.active.name == "Livello 1"
     instruments = [slot.material.gp2m_instrument for slot in comp.material_slots
                    if not board.is_board_material(slot.material)]
-    assert len(instruments) == 15 and {"PLUCK", "KICK", "SNARE", "HIHAT"} <= set(instruments)
+    assert len(instruments) == 22 and {"PLUCK", "KICK", "SNARE", "HIHAT"} <= set(instruments)
     labels = comp.data.layers.get("GP2M Etichette").frames[0].drawing
     assert len(labels.strokes) > 10
     # Empty composition: a silent strip already exists and the scene loops 8 s.
@@ -466,6 +467,20 @@ def test_filled_shape_is_a_cluster(comp):
     props.find_layer_settings(comp.data, "Livello 1").fill_mode = "NOISE"
     noise = engine.regenerate(comp)
     assert noise.voice_count == 1 and np.abs(noise.audio).max() > 0.01
+
+
+def test_harmony_and_finished_sound(comp):
+    engine, props = sub("engine"), sub("props")
+    comp.gp2m.scale = "MAJOR"
+    add_stroke(comp, 0, [(1.0, row_z(comp, 60)), (2.0, row_z(comp, 60))], radius=0.3)
+    plain = engine.regenerate(comp)
+    assert [n.pitch for n in plain.notes] == [60]
+    props.find_layer_settings(comp.data, "Livello 1").harmony = "TRIAD"
+    chord = engine.regenerate(comp)
+    assert sorted(n.pitch for n in chord.notes) == [60, 64, 67]
+    assert comp.gp2m.use_master and np.abs(chord.audio).max() <= 0.9
+    comp.gp2m.use_master = False
+    assert engine.regenerate(comp).key != chord.key
 
 
 def test_instrument_and_layer_list_operators(comp):
