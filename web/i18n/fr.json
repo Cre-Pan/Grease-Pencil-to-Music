@@ -545,5 +545,13 @@
  "Tocca i tasti a sinistra della tavola per sentire le note con lo strumento scelto; scorri per un glissando.": "Touchez les touches à gauche de la planche pour entendre les notes avec l'instrument choisi ; glissez pour un glissando.",
  "Dal menu File: in una finestra mobile o come sfondo della tavola, per disegnarci sopra (e da lì si rimuove). Il video segue il play.": "Depuis le menu Fichier : dans une fenêtre flottante ou en fond de planche, pour dessiner dessus (et le retirer de là). La vidéo suit la lecture.",
  "Salva e Apri sono nel menu File, con le Preferenze.": "Enregistrer et Ouvrir sont dans le menu Fichier, avec les Préférences.",
- "Cambia lo sfondo…": "Changer le fond…"
+ "Cambia lo sfondo…": "Changer le fond…",
+ "Nessuna": "Aucune",
+ "Terza sopra": "Tierce au-dessus",
+ "Sesta sotto": "Sixte en dessous",
+ "Accordo": "Accord",
+ "Quinta": "Quinte",
+ "Ottava sotto": "Octave en dessous",
+ "Armonia": "Harmonie",
+ "Aggiunge voci che accompagnano le note disegnate, sempre dentro la scala": "Ajoute des voix qui accompagnent les notes dessinées, toujours dans la gamme"
 }

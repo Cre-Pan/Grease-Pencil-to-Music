@@ -89,3 +89,140 @@ def apply_chain(buffer, sample_rate, settings, bpm):
                 settings.delay_mix)
     out = reverb(out, sample_rate, settings.reverb_mix, settings.reverb_size)
     return out
+
+
+# --- Master bus: the "finished sound" -----------------------------------------------
+#
+# The same chain as the web app (masterChain): a hall send, a gentle "glue"
+# compressor, a soft saturator and a brickwall limiter, plus a low cut that
+# removes rumble and DC. Whatever is drawn, the mix stays full, round and never
+# clips. Gains are computed on short blocks and smoothed with attack/release, so
+# only the block loop runs in Python.
+
+MASTER_BLOCK = 64  # samples per gain step of the dynamics
+MASTER_MAKEUP = 1.25  # gain after the glue compressor (the limiter catches the peaks)
+
+
+def _db(x):
+    return 20.0 * np.log10(np.maximum(x, 1e-9))
+
+
+def _smooth(target, rate, attack, release):
+    """Attack/release smoothing of a per-block gain (lower gain = attack)."""
+    a = np.exp(-MASTER_BLOCK / (max(attack, 1e-5) * rate))
+    r = np.exp(-MASTER_BLOCK / (max(release, 1e-5) * rate))
+    out = np.empty_like(target)
+    g = 1.0
+    for i, t in enumerate(target.tolist()):
+        coef = a if t < g else r
+        g = t + coef * (g - t)
+        out[i] = g
+    return out
+
+
+def _block_gain_to_samples(gain, n):
+    centers = (np.arange(len(gain)) + 0.5) * MASTER_BLOCK
+    return np.interp(np.arange(n), centers, gain)
+
+
+def _blocks(buffer, stat):
+    n = len(buffer)
+    count = -(-n // MASTER_BLOCK)
+    padded = np.zeros((count * MASTER_BLOCK, 2), dtype=np.float64)
+    padded[:n] = buffer
+    frames = padded.reshape(count, MASTER_BLOCK, 2)
+    return stat(frames)
+
+
+def compress(buffer, rate, threshold_db=-16.0, ratio=2.5, knee_db=8.0, attack=0.012,
+             release=0.25):
+    """Soft-knee RMS compressor, both channels linked."""
+    if len(buffer) == 0:
+        return buffer
+    level = _db(_blocks(buffer, lambda f: np.sqrt(np.mean(f ** 2, axis=(1, 2)) * 2.0)))
+    over = level - threshold_db
+    slope = 1.0 - 1.0 / ratio
+    reduction = np.where(over <= -knee_db / 2, 0.0,
+                         np.where(over >= knee_db / 2, slope * over,
+                                  slope * (over + knee_db / 2) ** 2 / (2 * knee_db)))
+    gain = _smooth(10.0 ** (-reduction / 20.0), rate, attack, release)
+    return buffer * _block_gain_to_samples(gain, len(buffer))[:, None]
+
+
+SOFT_CLIP_KNEE = 0.6
+
+
+def soft_clip(buffer, knee=SOFT_CLIP_KNEE):
+    """Linear below ``knee``, then a tanh shoulder that never reaches 1 (web: softClip)."""
+    a = np.abs(buffer)
+    shoulder = knee + (1.0 - knee) * np.tanh((a - knee) / (1.0 - knee))
+    return np.sign(buffer) * np.where(a < knee, a, shoulder)
+
+
+def limit(buffer, rate, ceiling_db=-1.0, lookahead=0.004, release=0.08):
+    """Brickwall limiter with lookahead: peaks above the ceiling are turned down
+    smoothly before they arrive."""
+    if len(buffer) == 0:
+        return buffer
+    ceiling = 10.0 ** (ceiling_db / 20.0)
+    peak = _blocks(buffer, lambda f: np.max(np.abs(f), axis=(1, 2)))
+    need = np.minimum(1.0, ceiling / np.maximum(peak, 1e-9))
+    ahead = max(1, int(np.ceil(lookahead * rate / MASTER_BLOCK)))
+    for k in range(1, ahead + 1):  # start turning down a few blocks early
+        need[:-k] = np.minimum(need[:-k], need[k:])
+    need = np.minimum(need, np.concatenate((need[1:], need[-1:])))
+    gain = _smooth(need, rate, 1e-5, release)
+    gain = np.minimum(gain, np.concatenate((gain[1:], gain[-1:])))  # interpolation safety
+    out = buffer * _block_gain_to_samples(gain, len(buffer))[:, None]
+    return np.clip(out, -ceiling, ceiling)
+
+
+def low_cut(buffer, rate, cutoff=30.0):
+    """Removes rumble and DC offset (circular: a loop stays seamless)."""
+    if len(buffer) < 4:
+        return buffer
+    spectrum = np.fft.rfft(buffer, axis=0)
+    f = np.maximum(np.fft.rfftfreq(len(buffer), 1.0 / rate), 1e-3)
+    spectrum *= ((f / cutoff) ** 4 / (1.0 + (f / cutoff) ** 4))[:, None]
+    return np.fft.irfft(spectrum, n=len(buffer), axis=0)
+
+
+def _fold(buffer, length):
+    out = np.array(buffer[:length], dtype=np.float64)
+    for begin in range(length, len(buffer), length):
+        chunk = buffer[begin:begin + length]
+        out[:len(chunk)] += chunk
+    return out
+
+
+def master(buffer, rate, ambience=0.25, loop=True, wrap=2.0):
+    """The finished sound of a whole mix: room, glue, saturation, limiter.
+
+    With ``loop`` the buffer is one loop: reverb tails fold back onto the start
+    and the dynamics see the end of the loop before its start, so the joint
+    stays seamless.
+    """
+    n = len(buffer)
+    if n == 0:
+        return buffer
+    out = np.asarray(buffer, dtype=np.float64)
+    if ambience > 0:
+        dry = out
+        wet = reverb(out.astype(np.float32), rate, 1.0, 0.55).astype(np.float64)
+        wet[:n] -= dry  # reverb() returns dry + wet
+        wet *= 0.35 * float(np.clip(ambience, 0.0, 1.0))
+        if loop:
+            out = dry + _fold(wet, n)
+        else:
+            out = np.concatenate((dry, np.zeros((len(wet) - n, 2)))) + wet
+            n = len(out)
+    out = low_cut(out, rate)
+    pre = min(int(wrap * rate), n) if loop else 0
+    if pre:
+        out = np.concatenate((out[-pre:], out))
+    out = compress(out, rate)
+    out = soft_clip(out * MASTER_MAKEUP)
+    out = limit(out, rate)
+    if pre:
+        out = out[pre:]
+    return out.astype(np.float32)

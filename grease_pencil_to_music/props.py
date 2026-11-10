@@ -111,6 +111,10 @@ class GP2M_LayerSettings(bpy.types.PropertyGroup):
                                subtype="FACTOR", update=_sound_changed)
     lofi: FloatProperty(name="Lo-fi", default=0.0, min=0.0, max=1.0, subtype="FACTOR",
                         update=_sound_changed)
+    harmony: EnumProperty(name="Armonia", items=[(i, l, d) for i, l, d, _ in music.HARMONIES],
+                          default="OFF", update=_sound_changed,
+                          description="Aggiunge voci che accompagnano le note disegnate, "
+                          "sempre dentro la scala della composizione")
     canon_voices: IntProperty(name="Voci del canone", default=1, min=1, max=4,
                               description="Il livello si ripete in altre voci che entrano una "
                               "dopo l'altra (1 = nessun canone)", update=_sound_changed)
@@ -194,6 +198,13 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
                             "nota vicina", update=_sound_changed)
     master_volume: FloatProperty(name="Volume", default=0.9, min=0.0, max=2.0,
                                  subtype="FACTOR", update=_sound_changed)
+    use_master: BoolProperty(name="Suono finito", default=True,
+                             description="Ambiente, compressore, saturazione morbida e "
+                             "limiter sul mix: il suono resta pieno, rotondo e non distorce "
+                             "mai, qualunque cosa disegni", update=_sound_changed)
+    ambience: FloatProperty(name="Ambiente", default=0.25, min=0.0, max=1.0,
+                            subtype="FACTOR", description="Quanto si sente la sala comune "
+                            "(un riverbero che lega tutti i livelli)", update=_sound_changed)
     loop: BoolProperty(name="Loop", default=True,
                        description="Le code (eco, riverbero, note lunghe) rientrano "
                        "dall'inizio del loop",

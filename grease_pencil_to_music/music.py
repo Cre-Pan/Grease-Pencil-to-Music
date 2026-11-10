@@ -85,3 +85,59 @@ def quantize_time(seconds, step):
     if step <= 0:
         return np.asarray(seconds, dtype=np.float64)
     return np.round(np.asarray(seconds, dtype=np.float64) / step) * step
+
+
+# --- Harmony -------------------------------------------------------------------------
+
+# (identifier, label, description, voices added: scale steps, or ("ST", semitones))
+HARMONIES = (
+    ("OFF", "Nessuna", "Solo le note disegnate", ()),
+    ("THIRD", "Terza sopra", "Una seconda voce una terza sopra, sempre dentro la scala",
+     (2,)),
+    ("SIXTH", "Sesta sotto", "Una seconda voce sotto (una sesta), più morbida della terza",
+     (-5,)),
+    ("TRIAD", "Accordo", "Terza e quinta sopra: ogni nota diventa un accordo della scala",
+     (2, 4)),
+    ("FIFTH", "Quinta (power)", "Una quinta giusta sopra, come un power chord",
+     (("ST", 7),)),
+    ("OCTAVE", "Ottava sotto", "La stessa melodia un'ottava sotto, più piena",
+     (("ST", -12),)),
+)
+HARMONY_STEPS = {ident: steps for ident, _l, _d, steps in HARMONIES}
+
+
+def _scale_notes(scale, root):
+    """Every MIDI note (-24..151) of the scale; the chromatic scale harmonizes in major."""
+    if scale == "CHROMATIC":
+        scale = "MAJOR"
+    intervals = SCALE_INTERVALS.get(scale, SCALE_INTERVALS["MAJOR"])
+    pcs = {(int(root) + i) % 12 for i in intervals}
+    return np.array([m for m in range(-24, 152) if m % 12 in pcs], dtype=np.float64)
+
+
+def diatonic_shift(pitch, steps, scale="MAJOR", root=0):
+    """Move (fractional) MIDI pitches by ``steps`` degrees of the scale.
+
+    Each pitch is taken to its nearest scale note, moved along the scale, and
+    keeps its fractional part, so glides and vibrato survive the shift.
+    """
+    notes = _scale_notes(scale, root)
+    p = np.asarray(pitch, dtype=np.float64)
+    base = np.round(p)
+    index = np.searchsorted(notes, base)
+    index = np.clip(index, 1, len(notes) - 1)
+    below, above = notes[index - 1], notes[index]
+    index = np.where(np.abs(base - below) <= np.abs(above - base), index - 1, index)
+    moved = notes[np.clip(index + int(steps), 0, len(notes) - 1)]
+    return moved + (p - base)
+
+
+def harmony_pitches(pitch, harmony, scale="MAJOR", root=0):
+    """Pitch curves of the voices that ``harmony`` adds to ``pitch``."""
+    out = []
+    for step in HARMONY_STEPS.get(harmony, ()):
+        if isinstance(step, tuple):
+            out.append(np.asarray(pitch, dtype=np.float64) + step[1])
+        else:
+            out.append(diatonic_shift(pitch, step, scale, root))
+    return out

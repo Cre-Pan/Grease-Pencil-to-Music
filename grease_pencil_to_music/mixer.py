@@ -10,7 +10,7 @@ from dataclasses import astuple, dataclass, field, replace
 
 import numpy as np
 
-from . import effects, interpret, synth
+from . import effects, interpret, music, synth
 
 
 @dataclass
@@ -21,6 +21,28 @@ class LayerFx:
     reverb_mix: float = 0.0
     reverb_size: float = 0.5
     lofi: float = 0.0
+
+
+@dataclass
+class MasterFx:
+    """The master bus of a composition (effects.master)."""
+
+    enabled: bool = True  # room, glue compressor, saturation and limiter
+    ambience: float = 0.25  # how much of the shared hall is heard
+
+
+def _finish(master, sample_rate, settings, loop):
+    """Master bus, or (without it) just a peak guard."""
+    if settings is not None and settings.enabled:
+        return effects.master(master, sample_rate, settings.ambience, loop)
+    peak = float(np.max(np.abs(master))) if len(master) else 0.0
+    if peak > 0.98:
+        master = master * (0.98 / peak)
+    return master
+
+
+def _master_key(settings):
+    return None if settings is None else astuple(settings)
 
 
 @dataclass
@@ -36,6 +58,7 @@ class LayerInput:
     canon_delay: float = 2.0  # seconds between two entries
     canon_transpose: int = 0  # semitones from one voice to the next
     legato_gap: float = 1.0  # beats: in the legato modes closer strokes become one voice
+    harmony: str = "OFF"  # music.HARMONIES: voices added in the scale
 
 
 @dataclass
@@ -142,10 +165,39 @@ def _stroke_key(stroke, context_key):
     return h.hexdigest()
 
 
+HARMONY_GAIN = 0.55  # added voices sit under the drawn one
+HARMONY_PAN = 0.3
+
+
+def harmonize(interp, harmony, spec):
+    """Add the voices of ``harmony`` (music.HARMONIES) to an interpretation, in the scale
+    of the board. Percussion and noise bands are left alone."""
+    if not music.HARMONY_STEPS.get(harmony):
+        return interp
+    voices, notes = list(interp.voices), list(interp.notes)
+    for voice in interp.voices:
+        if voice.instrument == interpret.NOISE_BAND or synth.get_instrument(
+                voice.instrument).percussive:
+            continue
+        shifted = music.harmony_pitches(voice.pitch, harmony, spec.scale, spec.root)
+        for k, pitch in enumerate(shifted):
+            side = HARMONY_PAN if k % 2 == 0 else -HARMONY_PAN
+            voices.append(replace(voice, pitch=pitch, amp=voice.amp * HARMONY_GAIN,
+                                  pan=np.clip(voice.pan + side, -1.0, 1.0)))
+    for note in interp.notes:
+        if synth.get_instrument(note.instrument).percussive:
+            continue
+        for pitch in music.harmony_pitches([note.pitch], harmony, spec.scale, spec.root):
+            notes.append(replace(note, pitch=int(min(max(round(float(pitch[0])), 0), 127)),
+                                 velocity=max(1, int(note.velocity * 0.75))))
+    return interpret.Interpretation(voices, notes)
+
+
 def _interpret_stroke(stroke, spec, mapping, mode, fill_mode, radius_ref, context_key,
-                      glide=0.12, transpose=0, errors=None):
+                      glide=0.12, transpose=0, errors=None, harmony="OFF"):
     """``(key, Interpretation)`` of a stroke, cached."""
-    key = _stroke_key(stroke, (context_key, mode, fill_mode, round(glide, 4), transpose))
+    key = _stroke_key(stroke, (context_key, mode, fill_mode, round(glide, 4), transpose,
+                               harmony))
     interp = _interp_cache.get(key)
     if interp is not None:
         return key, interp
@@ -159,15 +211,17 @@ def _interpret_stroke(stroke, spec, mapping, mode, fill_mode, radius_ref, contex
         interp.voices = [replace(v, pitch=v.pitch + transpose) for v in interp.voices]
         interp.notes = [replace(n, pitch=min(max(n.pitch + transpose, 0), 127))
                         for n in interp.notes]
+    if not stroke.filled:  # a filled shape is already a chord
+        interp = harmonize(interp, harmony, spec)
     _interp_cache.put(key, interp)
     return key, interp
 
 
 def _render_stroke(stroke, spec, mapping, mode, fill_mode, radius_ref, sample_rate,
-                   context_key, glide=0.12, transpose=0, errors=None):
+                   context_key, glide=0.12, transpose=0, errors=None, harmony="OFF"):
     errors = errors or _Errors()
     key, interp = _interpret_stroke(stroke, spec, mapping, mode, fill_mode, radius_ref,
-                                    context_key, glide, transpose, errors)
+                                    context_key, glide, transpose, errors, harmony)
     cached = _stroke_cache.get(key)
     if cached is not None:
         return key, cached
@@ -190,27 +244,37 @@ def _render_legato(layer, spec, mapping, radius_ref, sample_rate, context_key, t
 
     Returns ``(stroke keys, [(fx, rendered voices)], notes, curves, voice count)``."""
     gap = layer.legato_gap * 60.0 / max(spec.bpm, 1e-6)
-    keys, notes, by_fx = [], [], {}
+    keys, notes, by_fx, filled = [], [], {}, set()
     for stroke in layer.strokes:
+        # Harmony is added after the join: the added voices must not be joined
+        # with the melody they accompany.
         key, interp = _interpret_stroke(stroke, spec, mapping, layer.mode, layer.fill_mode,
                                         radius_ref, context_key, layer.glide, transpose,
                                         errors)
         keys.append(key)
-        notes.extend(interp.notes)
+        harmony = "OFF" if stroke.filled else layer.harmony
+        notes.extend(harmonize(interpret.Interpretation([], interp.notes), harmony,
+                               spec).notes)
         tags, voices = by_fx.setdefault(stroke.fx, ([], []))
         for index, voice in enumerate(interp.voices):
             tags.append((key, index))
             voices.append(voice)
+        if stroke.filled:
+            filled.add(key)
     parts, curves, count = [], [], 0
     for fx, (tags, voices) in by_fx.items():
         rendered = []
         for members, voice in interpret.legato_join(voices, gap, _joinable):
-            vkey = hashlib.blake2b(repr(([tags[i] for i in members], round(gap, 6))).encode(),
+            vkey = hashlib.blake2b(repr(([tags[i] for i in members], round(gap, 6),
+                                         layer.harmony)).encode(),
                                    digest_size=16).hexdigest()
             value = _stroke_cache.get(vkey)
             if value is None:
                 before = errors.count
-                value = _render_voices([voice], sample_rate, mapping.vibrato_rate, errors)
+                drawn = any(tags[i][0] not in filled for i in members)
+                with_harmony = harmonize(interpret.Interpretation([voice], []),
+                                         layer.harmony if drawn else "OFF", spec).voices
+                value = _render_voices(with_harmony, sample_rate, mapping.vibrato_rate, errors)
                 if errors.count == before:
                     _stroke_cache.put(vkey, value)
             rendered.extend(value)
@@ -250,8 +314,11 @@ def _add(a, b):
     return a
 
 
-def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.8):
-    """Render a list of :class:`LayerInput` into a :class:`RenderResult`."""
+def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.8,
+           master_fx=None):
+    """Render a list of :class:`LayerInput` into a :class:`RenderResult`.
+
+    ``master_fx``: :class:`MasterFx` of the finished mix, or None (peak guard only)."""
     loop_n = max(1, int(round(spec.length * sample_rate)))
     all_strokes = [s for layer in layers for s in layer.strokes]
     radius_ref = max((float(np.max(s.radius)) for s in all_strokes if len(s.radius)),
@@ -299,13 +366,13 @@ def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.
             for stroke in layer.strokes:
                 key, (rendered, stroke_notes, stroke_curves) = _render_stroke(
                     stroke, spec, mapping, layer.mode, layer.fill_mode, radius_ref,
-                    sample_rate, context_key, layer.glide, transpose, errors)
+                    sample_rate, context_key, layer.glide, transpose, errors, layer.harmony)
                 stroke_keys.append((key, shift))
                 add(stroke.fx, rendered, stroke_notes, stroke_curves, shift)
 
         layer_key = hashlib.blake2b(
             repr((stroke_keys, astuple(layer.fx), spec.bpm, sample_rate,
-                  round(layer.legato_gap, 4) if legato else None)).encode(),
+                  round(layer.legato_gap, 4) if legato else None, layer.harmony)).encode(),
             digest_size=16).hexdigest()
         buffer = _layer_cache.get(layer_key)
         if buffer is None:
@@ -338,12 +405,11 @@ def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.
             master[:len(scaled)] += scaled
 
     master *= master_volume
-    peak = float(np.max(np.abs(master))) if len(master) else 0.0
-    if peak > 0.98:
-        master *= 0.98 / peak
+    master = _finish(master, sample_rate, master_fx, loop)
 
     key = hashlib.blake2b(
-        repr((layer_keys, loop, round(master_volume, 4), context_key)).encode(),
+        repr((layer_keys, loop, round(master_volume, 4), context_key,
+              _master_key(master_fx))).encode(),
         digest_size=16).hexdigest()
     return RenderResult(master.astype(np.float32), sample_rate, notes, key, voice_count,
                         curves, errors=errors.count)
@@ -352,7 +418,7 @@ def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.
 SECTION_FADE = 0.01  # seconds of fade where a section cuts a repetition short
 
 
-def sequence(parts, length, sample_rate, loop=True):
+def sequence(parts, length, sample_rate, loop=True, master_fx=None):
     """Join keyframe sections into one piece.
 
     ``parts``: ``[(start, end, RenderResult)]`` sorted by start, each rendered
@@ -398,10 +464,9 @@ def sequence(parts, length, sample_rate, loop=True):
         for begin in range(0, len(tail), total_n):
             chunk = tail[begin:begin + total_n]
             master[:len(chunk)] += chunk
-    peak = float(np.max(np.abs(master))) if len(master) else 0.0
-    if peak > 0.98:
-        master *= 0.98 / peak
-    key = hashlib.blake2b(repr((keys, round(length, 6), loop, sample_rate)).encode(),
+    master = _finish(master, sample_rate, master_fx, loop)
+    key = hashlib.blake2b(repr((keys, round(length, 6), loop, sample_rate,
+                                _master_key(master_fx))).encode(),
                           digest_size=16).hexdigest()
     notes.sort(key=lambda n: (n.start, n.pitch))
     return RenderResult(master, sample_rate, notes, key, voices, curves, duration=total,
