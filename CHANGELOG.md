@@ -130,6 +130,15 @@
   Interfaccia → Lingua); al primo avvio segue la lingua del dispositivo. I nomi che scrivi
   (livelli, composizione, suoni, onde) non vengono tradotti.
 
+## In arrivo (add-on)
+
+- **Suona mentre disegni** (come nella web app): in Draw Mode senti la punta del tratto mentre
+  lo disegni, con lo strumento del tratto e la lettura del livello. Quantizzata, Legato e
+  Gesto: una nota ogni volta che la punta entra in un'altra riga (nella scala scelta);
+  Ottica: un suono tenuto che segue la punta (theremin); percussioni: un colpo all'inizio.
+  Lo spessore dà il volume, insieme al volume dello strumento e del livello. Si spegne nelle
+  Preferences o con il pulsante a matita accanto a *Suona con la tastiera*.
+
 ## 0.0.7
 
 - Nuovo nome: **Doodle Music** (menu Shift+A, pannelli, Preferences). L'identificativo

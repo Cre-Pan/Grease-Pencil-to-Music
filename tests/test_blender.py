@@ -1001,3 +1001,56 @@ def test_scene_start_and_frame_rate_changes_follow(comp):
         bpy.context.view_layer.update()
         handlers._last_change[0] = 0.0
         handlers._tick()
+
+
+def test_sound_while_drawing_follows_the_stroke_being_drawn(comp, monkeypatch):
+    draw_sound, keyboard, props = sub("draw_sound"), sub("keyboard"), sub("props")
+    played = []
+
+    class Handle:
+        status = 1
+        pitch = 1.0
+        volume = 1.0
+
+        def stop(self):
+            self.status = 0
+
+    def note_on(instrument, pitch, rate=44100, volume=1.0):
+        played.append((instrument, pitch))
+        return Handle()
+
+    monkeypatch.setattr(keyboard, "note_on", note_on)
+    monkeypatch.setattr(keyboard, "note_off", lambda handle: None)
+    scene = bpy.context.scene
+    layer = sub("board").user_layers(comp.data)[0]
+    comp.data.layers.active = layer
+    draw_sound._Live.tracker = draw_sound.Tracker()
+    assert draw_sound.step(comp, scene, 0.0) is None  # first look
+    # The pen goes down on E4 and moves up to G4: one note per row.
+    stroke = add_stroke(comp, 0, [(0.5, row_z(comp, 64))])
+    assert draw_sound.step(comp, scene, 0.01) == "start"
+    drawing = layer.frames[0].drawing
+    index = len(drawing.strokes) - 1
+    for i, midi in enumerate((64, 65, 67), start=2):
+        drawing.resize_strokes([i], indices=[index])
+        stroke = drawing.strokes[index]
+        stroke.points[i - 1].position = (0.5 + 0.1 * i, 0.0, row_z(comp, midi))
+        stroke.points[i - 1].radius = 0.02
+        assert draw_sound.step(comp, scene, 0.01 * (i + 1)) == "move"
+    instrument = keyboard.instrument_of(comp)[0]
+    assert [p for _i, p in played] == [64, 65, 67]  # the same row is one note
+    assert {i for i, _p in played} == {instrument}
+    assert draw_sound.step(comp, scene, 5.0) == "stop"
+    # Optical reading: one held sound whose pitch follows the tip.
+    props.find_layer_settings(comp.data, layer.name).mode = "OPTICAL"
+    played.clear()
+    add_stroke(comp, 0, [(2.0, row_z(comp, 60))])
+    assert draw_sound.step(comp, scene, 6.0) == "start"
+    index = len(drawing.strokes) - 1
+    drawing.resize_strokes([2], indices=[index])
+    drawing.strokes[index].points[1].position = (2.2, 0.0, row_z(comp, 62))
+    assert draw_sound.step(comp, scene, 6.01) == "move"
+    assert played == [(instrument, 60)]
+    assert draw_sound._Live.handle.pitch == pytest.approx(2 ** (2 / 12))
+    draw_sound.step(None, None, 7.0)
+    assert draw_sound._tick() > 0  # the timer itself never fails (no Draw Mode here)

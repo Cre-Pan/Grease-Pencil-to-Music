@@ -57,6 +57,14 @@ disegna su una tavola, e la tavola suona.
 | Barra laterale **N → Musica** | versione compatta per quando disegni |
 | Preferences dell'add-on | mappatura degli attributi (con preset), valori delle nuove composizioni, tastiera MIDI |
 
+### Suona mentre disegni
+
+In Draw Mode senti il tratto mentre lo disegni, come nella web app: con le letture
+Quantizzata, Legato e Gesto suona una nota ogni volta che la punta entra in un'altra riga
+(nella scala scelta), con Ottica un suono tenuto segue la punta come un theremin, le
+percussioni danno un colpo all'inizio. Lo spessore è il volume. Si spegne con il pulsante a
+matita accanto a *Suona con la tastiera* o nelle Preferences.
+
 ### Suonare con la tastiera
 
 *Suona con la tastiera* (pannello N o Dati oggetto): **A W S E D F T G Y H U J K** sono le
@@ -142,6 +150,7 @@ le note General MIDI della batteria.
 | Voce | Opzioni (default in grassetto) |
 |---|---|
 | Nomi delle note | **C D E F G A B**, Do Re Mi Fa Sol La Si |
+| Suona mentre disegni | **sì** (anche dal pulsante a matita accanto a *Suona con la tastiera*) |
 | Riprendi il play dopo Ctrl+Z | **sì** |
 | Spessore | **Volume**, Volume + Vibrato, Vibrato, Brillantezza, Nessuno |
 | Opacità | **Brillantezza**, Volume, Nessuno |

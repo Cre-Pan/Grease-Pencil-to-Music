@@ -153,7 +153,12 @@ def draw_actions(layout, comp):
     row.prop(comp.gp2m, "auto_update", text="Auto", toggle=True, icon="FILE_REFRESH")
     row.operator("gp2m.regenerate", icon="PLAY_SOUND")
     row.prop(comp.gp2m, "mute", text="", icon="MUTE_IPO_ON" if comp.gp2m.mute else "MUTE_IPO_OFF")
-    layout.operator("gp2m.play_keyboard", icon="KEYTYPE_KEYFRAME_VEC")
+    row = layout.row(align=True)
+    row.operator("gp2m.play_keyboard", icon="KEYTYPE_KEYFRAME_VEC")
+    p = prefs.get_prefs()
+    if isinstance(p, bpy.types.AddonPreferences):  # "Suona mentre disegni"
+        row.prop(p, "draw_sound", text="", icon="GREASEPENCIL",
+                 emboss=True, toggle=True)
 
 
 def draw_board(layout, s):
