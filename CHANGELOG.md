@@ -130,8 +130,30 @@
   Interfaccia → Lingua); al primo avvio segue la lingua del dispositivo. I nomi che scrivi
   (livelli, composizione, suoni, onde) non vengono tradotti.
 
-## In arrivo (add-on)
+## 0.0.8
 
+Blender 5.3
+- Richiede **Blender 5.3** (tutti i test passano sulla 5.3.0).
+- **?** nell'intestazione dei pannelli (Musica, Lettura, Strumento musicale, Output e barra
+  laterale *Musica*): l'aiuto di quella parte in testo formattato (`label_markdown`, nuovo
+  nella 5.3), come il **?** della web app. Via i testi fissi dai pannelli: restano i tooltip.
+- Messaggi lunghi su più righe (`label_multiline`, 5.3): l'errore di generazione si legge per
+  intero e non viene più tagliato a 120 caratteri; l'avviso dei keyframe va a capo.
+- Blender 5.3 ha tolto la durata dei frame Grease Pencil: una pausa è un keyframe vuoto
+  (*Insert Blank Frame*); con *Sezioni da keyframe* diventa una sezione muta (con test).
+- I tratti chiusi con l'opzione **Ciclico** dei nuovi strumenti di disegno della 5.3 suonano
+  anche il tratto di ritorno (già letto dall'add-on, ora spiegato nel **?** della Lettura).
+- La barra laterale *Musica* funziona con la nuova ricerca della 5.3 (Ctrl+F), senza
+  modifiche.
+
+Allineamento con la web app
+- **Progetto della web app (.json)**: *File → Import* lo apre come composizione (tratti,
+  livelli con lettura, volume e riverbero, pennelli, tempo del disegno, suoni registrati come
+  Campione, Beat come livello di colpi); *File → Export* (o *Output → Web app*) salva la
+  composizione da aprire sull'iPad.
+- *Shift+A → Doodle Music → Composizione dalla web app…*.
+
+Suona mentre disegni
 - **Suona mentre disegni** (come nella web app): in Draw Mode senti la punta del tratto mentre
   lo disegni, con lo strumento del tratto e la lettura del livello. Quantizzata, Legato e
   Gesto: una nota ogni volta che la punta entra in un'altra riga (nella scala scelta);
@@ -139,8 +161,7 @@
   Lo spessore dà il volume, insieme al volume dello strumento e del livello. Si spegne nelle
   Preferences o con il pulsante a matita accanto a *Suona con la tastiera*.
 
-## Prossima versione — strumenti e suono finito
-
+Strumenti e suono finito
 - **Suono finito** (Lettura, attivo di default): sul mix della composizione passano una sala
   comune (*Ambiente*), un compressore morbido che lega i livelli, una saturazione dolce e un
   limiter. Il suono resta pieno e non distorce mai, anche con tanti tratti spessi insieme;
@@ -157,6 +178,12 @@
   scala. Si cambia in *Lettura* o nelle Preferences; le composizioni esistenti non cambiano.
   L'import MIDI in una nuova composizione usa la scala cromatica, così le note del file
   restano esatte.
+
+Correzioni
+- **Eliminare uno strumento spostava i tratti degli strumenti successivi su un altro
+  strumento** (due slot più in basso): Blender li sposta già da solo quando toglie lo slot.
+- **Tastiera e griglia nere dopo Ctrl+Z** in Draw Mode su uno strumento appena aggiunto: la
+  tavola ritrova i suoi colori subito dopo l'annullamento (con test).
 
 ## 0.0.7
 

@@ -2,7 +2,7 @@
 
 *(prima si chiamava Grease Pencil to Music)*
 
-Add-on per **Blender 5.2** che trasforma i disegni Grease Pencil in musica.
+Add-on per **Blender 5.3** che trasforma i disegni Grease Pencil in musica.
 Si ispira al *suono disegnato* di Norman McLaren e Daphne Oram (Oramics): si
 disegna su una tavola, e la tavola suona.
 
@@ -53,7 +53,8 @@ disegna su una tavola, e la tavola suona.
 | Proprietà → **Materiale** → Strumento musicale | tipo di strumento, volume, campione, effetti dello strumento |
 | Proprietà → **Output** | export WAV / MP3 / MIDI, mix di tutta la scena |
 | Proprietà → **Scena** | ascolto delle composizioni (canali, ordine, muto) |
-| *File → Import / Export* | MIDI → Grease Pencil; composizione in WAV / MP3 / MIDI |
+| *File → Import / Export* | MIDI → Grease Pencil; composizione in WAV / MP3 / MIDI; **progetto della web app (.json)** |
+| **?** nell'intestazione dei pannelli | spiega quella parte (come il **?** della web app) |
 | Barra laterale **N → Musica** | versione compatta per quando disegni |
 | Preferences dell'add-on | mappatura degli attributi (con preset), valori delle nuove composizioni, tastiera MIDI |
 
@@ -64,6 +65,28 @@ Quantizzata, Legato e Gesto suona una nota ogni volta che la punta entra in un'a
 (nella scala scelta), con Ottica un suono tenuto segue la punta come un theremin, le
 percussioni danno un colpo all'inizio. Lo spessore è il volume. Si spegne con il pulsante a
 matita accanto a *Suona con la tastiera* o nelle Preferences.
+
+### Dalla web app a Blender e ritorno
+
+Lo stesso disegno passa dall'iPad a Blender e viceversa con il progetto `.json` della web app
+(*Esporta → Progetto* o *File → Salva* nella web app):
+
+- **Aprire in Blender**: *File → Import → Progetto Doodle Music web (.json)* (anche
+  *Shift+A → Doodle Music → Composizione dalla web app…*). Diventa una nuova composizione con
+  BPM, battute, ottave, scala, tonica e griglia del progetto; ogni livello mantiene nome,
+  lettura (Q, QL, O, OL, G), volume (opacità del livello) e riverbero; ogni tratto mantiene
+  strumento, spessore, opacità e **tempo del disegno** (per la lettura Gesto). I pennelli
+  diventano attributi di Blender: *Pieno* → tratto riempito e ciclico, *Aerografo* →
+  morbidezza (attacco lento), *Matita* → opacità più bassa (suono più scuro). I **suoni
+  registrati** nella web app diventano strumenti *Campione* (impacchettati nel .blend), il
+  **Beat** diventa un livello *Beat* con un colpo per ogni passo (swing e pattern A/B
+  compresi). Un livello silenziato nella web app è nascosto in Blender.
+- **Tornare sull'iPad**: *File → Export → Progetto Doodle Music web (.json)* o il pulsante
+  *Web app (.json)* in *Proprietà → Output*, poi nella web app *File → Apri*. Viene salvato il
+  keyframe all'inizio della scena; gli strumenti Campione entrano nel file come suoni.
+- Le onde disegnate (sezione Onda) non esistono ancora in Blender: quei tratti suonano col
+  piano elettrico (o lo strumento più vicino). Gli strumenti che l'add-on non ha ancora usano
+  il più simile.
 
 ### Suonare con la tastiera
 
@@ -345,7 +368,7 @@ I test usano Blender come modulo Python (`bpy` da PyPI):
 
 ```bash
 python -m venv .venv
-.venv/bin/pip install bpy==5.2.2 pytest
+.venv/bin/pip install bpy==5.3.0 pytest
 .venv/bin/python -m pytest
 python tools/build_zip.py          # -> dist/grease_pencil_to_music-<versione>-windows_x64.zip
 ```

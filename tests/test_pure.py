@@ -8,7 +8,7 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from grease_pencil_to_music import effects, interpret, midi, mixer, music, synth
+from grease_pencil_to_music import effects, interpret, midi, mixer, music, synth, web_project
 
 SR = 44100
 H = 0.12  # row height of the default board
@@ -821,3 +821,72 @@ def test_master_on_render_and_key():
     assert raw.key != done.key
     assert float(np.max(np.abs(done.audio))) <= 0.9
     assert len(done.audio) == len(raw.audio)
+
+
+# --- Web app project (.json) ----------------------------------------------------------------
+
+def _web(**state):
+    import json
+    base = {"name": "T", "bpm": 120, "bars": 1, "low": 48, "octaves": 3, "scale": "MAJOR",
+            "root": 0, "grid": 0.25, "strokes": [],
+            "layers": [{"id": "a", "name": "A", "mode": "QUANTIZED"}]}
+    base.update(state)
+    return json.dumps({"app": web_project.APP_ID, "version": 3, "state": base})
+
+
+def test_web_beat_follows_swing_and_the_ab_chain():
+    tracks = {"KICK": {"p": [2] + [0] * 31, "pB": [0] * 32},
+              "SNARE": {"p": [0] * 32, "pB": [0, 1] + [0] * 30}}
+    beat = {"on": True, "steps": 16, "swing": 0.5, "ab": True,
+            "chain": ["A", "B", "-"] + ["A"] * 29, "tracks": tracks}
+    hits = web_project.beat_hits(beat, bars=4)
+    # Bar 1 = A (kick), bar 2 = B (snare on the swung second 16th), bar 3 rests, bar 4 = A.
+    assert hits == [(0.0, "KICK", 1.0), (4.25 + 0.0625, "SNARE", 0.7), (12.0, "KICK", 1.0)]
+    assert web_project.beat_hits({**beat, "on": False}, bars=4) == []
+
+
+def test_web_instruments_fall_back_when_the_addon_lacks_them():
+    available = set(synth.INSTRUMENT_BY_ID)
+    assert web_project.addon_instrument("GUITAR", available) == "PLUCK"
+    assert web_project.addon_instrument("HAT", available) == "HIHAT"
+    assert web_project.addon_instrument("PAD", {"STRINGS"}) == "STRINGS"
+    assert web_project.addon_instrument("WAV:x", available) is None
+    project = web_project.parse(_web(strokes=[
+        {"id": "s", "layer": "a", "inst": "WAV:x", "pts": [[0, 60.5, 0.5, 0]]}]), available)
+    assert project.skipped == ["WAV:x"] and len(project.layers[0].strokes) == 1
+
+
+def test_web_grid_and_scale_mapping():
+    assert web_project.grid_ident(0.25) == "1_16" and web_project.grid_ident(1 / 3) == "1_8T"
+    assert web_project.grid_beats("1_8") == 0.5
+    project = web_project.parse(_web(scale="PENTA", root=14, grid=0), set())
+    assert (project.scale, project.root, project.grid) == ("PENTA_MAJOR", 2, "OFF")
+
+
+def test_web_project_round_trip_keeps_the_drawing():
+    available = set(synth.INSTRUMENT_BY_ID)
+    text = _web(bpm=90, bars=2, layers=[
+        {"id": "a", "name": "Melodia", "mode": "OPTICAL", "volume": 0.5, "reverb": 0.3}],
+        strokes=[{"id": "s", "layer": "a", "inst": "STRINGS", "op": 0.8, "brush": "air",
+                  "pts": [[0.5, 64.5, 0.4, 0], [2.5, 67.5, 0.6, 900]]}])
+    project = web_project.parse(text, available, row_height=0.2, seconds_width=2.0)
+    st = project.layers[0].strokes[0]
+    assert st.x.tolist() == pytest.approx([0.5 * 2 / 3 * 2, 2.5 * 2 / 3 * 2])  # beats → s → x
+    assert st.z.tolist() == pytest.approx([16.5 * 0.2, 19.5 * 0.2])
+    assert st.times.tolist() == pytest.approx([0.0, 0.9]) and st.softness == 0.8
+    again = web_project.parse(web_project.dump(project), available, 0.2, 2.0)
+    st2 = again.layers[0].strokes[0]
+    assert st2.x.tolist() == pytest.approx(st.x.tolist(), abs=1e-3)
+    assert st2.z.tolist() == pytest.approx(st.z.tolist(), abs=1e-3)
+    assert st2.radius.tolist() == pytest.approx(st.radius.tolist(), abs=1e-3)
+    assert st2.instrument == "STRINGS" and st2.softness == 0.8 and st2.opacity == 0.8
+    layer = again.layers[0]
+    assert (layer.mode, layer.volume, layer.reverb) == ("OPTICAL", 0.5, 0.3)
+    assert again.board.bpm == 90 and again.board.length == pytest.approx(2 * 4 * 60 / 90)
+
+
+def test_web_project_rejects_other_json():
+    with pytest.raises(web_project.ProjectError):
+        web_project.parse('{"layers": []}', set())
+    with pytest.raises(web_project.ProjectError):
+        web_project.parse("not json", set())

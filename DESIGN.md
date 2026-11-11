@@ -13,7 +13,7 @@ colore = voce).
 
 | Tema | Decisione |
 |---|---|
-| Blender | 5.2 (Grease Pencil v3), poi 5.3 |
+| Blender | 5.3 (Grease Pencil v3); dalla 0.0.8 serve la 5.3 |
 | Distribuzione | Extension zip, solo Windows x64 per le 0.0.x |
 | Piano di disegno | X-Z ("il muro"), vista frontale |
 | Tempo | X; linee verticali ai secondi, battiti più tenui |
@@ -33,6 +33,8 @@ colore = voce).
 | Modificatori GP | ignorati per default (avviso), letti con "Usa modificatori"; gli effetti visivi non suonano |
 | Dipendenze | NumPy e `aud` di Blender; unica wheel inclusa: `rtmidi2` (MIT) per le tastiere MIDI |
 | Nuova composizione | vuota, un livello e uno strumento (Preferences per cambiare) |
+| Web app | stesso progetto: import/export del .json della web app (`web_project.py` puro, `web_io.py` in Blender) |
+| Aiuto | niente testi fissi nei pannelli: tooltip e **?** nell'intestazione con testo Markdown (`label_markdown`, 5.3) |
 | Forma del brano | facoltativa: ogni keyframe GP apre una sezione che ripete il suo loop fino al keyframe dopo |
 
 ## Architettura
@@ -56,14 +58,17 @@ timeline.py    suono nella Timeline: sorgenti, stili, note, flusso ottico;
 draw_sound.py  la punta del tratto suona mentre disegni (timer in Draw Mode)  [bpy]
 keyboard.py    suonare e registrare con tastiera del PC o MIDI               [bpy]
 midi_import.py file .mid → tratti Grease Pencil                           [bpy]
+web_project.py progetto .json della web app ↔ dati della composizione       [puro]
+web_io.py      apri / salva il progetto della web app                     [bpy]
+help.py        pannelli "?" con l'aiuto in Markdown                      [bpy]
 props.py prefs.py operators.py ui.py samples.py feedback.py                 [bpy]
 ```
 
 I moduli "puri" non importano `bpy` e sono testati direttamente; i test
-d'integrazione installano lo zip in Blender 5.2 (`bpy` da PyPI) ed eseguono il
+d'integrazione installano lo zip in Blender 5.3 (`bpy` da PyPI) ed eseguono il
 flusso completo.
 
-Note tecniche su Blender 5.2 emerse durante lo sviluppo:
+Note tecniche su Blender 5.2 / 5.3 emerse durante lo sviluppo:
 
 - dopo aver scritto posizioni via Python serve `drawing.tag_positions_changed()`,
   altrimenti il disegno ha limiti vuoti e non viene mostrato;
@@ -78,7 +83,15 @@ Note tecniche su Blender 5.2 emerse durante lo sviluppo:
 - l'icona dell'occhio di `hide` cambia da sola: non va passata un'icona esplicita;
 - lo scrittore WAV di FFmpeg in Blender fallisce a 48 kHz su certe lunghezze
   ("filling the audio frame failed"): i WAV si scrivono con il modulo `wave`;
-- i modificatori GP hanno un filtro per pass index del livello: la tavola usa il pass 77
+- i modificatori GP hanno un filtro per pass index del livello: la tavola usa il pass 77;
+- `gp.materials.pop(index=i)` sposta già da solo i tratti degli slot successivi (e quelli
+  dello slot tolto sullo slot prima): non vanno spostati anche a mano;
+- 5.3: niente più durata dei frame GP, una pausa è un keyframe vuoto (*Insert Blank Frame*):
+  con *Sezioni da keyframe* diventa una sezione muta;
+- 5.3: `UILayout.label_multiline` e `UILayout.label_markdown` per testi lunghi e aiuto;
+  i pannelli con testo Markdown vanno in una regione `HEADER` e si aprono come popover;
+- 5.3: la proprietà `name` predefinita dei PropertyGroup è di sola lettura: le
+  impostazioni dei livelli dichiarano la loro `name`, quindi la rinomina continua a funzionare
   e ogni modificatore lo esclude;
 - `Window.modal_operators` dice se uno Scala è ancora in corso: la scala dell'oggetto
   viene convertita in durata/ottave solo a trasformazione finita;

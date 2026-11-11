@@ -4,7 +4,7 @@
 Tests run with the ``bpy`` module from PyPI (Blender as a Python module), which
 matches the targeted Blender version:
 
-    python -m venv .venv && .venv/bin/pip install bpy==5.2.2 pytest
+    python -m venv .venv && .venv/bin/pip install bpy==5.3.0 pytest
     .venv/bin/python -m pytest
 
 Blender's user folders are redirected to a temporary directory so that

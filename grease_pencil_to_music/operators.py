@@ -247,8 +247,8 @@ def remove_material_slot(comp, index):
             for stroke in frame.drawing.strokes:
                 if stroke.material_index == index:
                     stroke.material_index = 0
-                elif stroke.material_index > index:
-                    stroke.material_index -= 1
+    # Blender shifts the strokes of the following slots down by itself: shifting them
+    # here too moved them onto the wrong instrument (two slots down).
     gp.materials.pop(index=index)
 
 
