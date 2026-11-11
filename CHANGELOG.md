@@ -139,6 +139,25 @@
   Lo spessore dà il volume, insieme al volume dello strumento e del livello. Si spegne nelle
   Preferences o con il pulsante a matita accanto a *Suona con la tastiera*.
 
+## Prossima versione — strumenti e suono finito
+
+- **Suono finito** (Lettura, attivo di default): sul mix della composizione passano una sala
+  comune (*Ambiente*), un compressore morbido che lega i livelli, una saturazione dolce e un
+  limiter. Il suono resta pieno e non distorce mai, anche con tanti tratti spessi insieme;
+  il loop resta senza giunture. È la stessa catena della web app.
+- **Armonia** per livello (add-on e web app): *Terza sopra*, *Sesta sotto*, *Accordo*,
+  *Quinta*, *Ottava sotto*. Le voci aggiunte restano nella scala della composizione (con la
+  scala cromatica armonizzano in maggiore), suonano più piano della melodia e finiscono anche
+  nel MIDI. Le percussioni e le forme piene non vengono armonizzate; nelle letture legate le
+  voci aggiunte non si legano alla melodia.
+- **Nuovi strumenti** nell'add-on, come nella web app: *Piano elettrico* (FM), *Marimba*,
+  *Pad*, *Basso*; percussioni *Charleston aperto*, *Rimshot*, *Shaker*. L'import MIDI li usa
+  per pianoforti, marimba/xilofono, bassi, pad e per le note GM della batteria corrispondenti.
+- Le nuove composizioni partono in scala **Maggiore** (come la web app): ogni nota cade in
+  scala. Si cambia in *Lettura* o nelle Preferences; le composizioni esistenti non cambiano.
+  L'import MIDI in una nuova composizione usa la scala cromatica, così le note del file
+  restano esatte.
+
 ## 0.0.7
 
 - Nuovo nome: **Doodle Music** (menu Shift+A, pannelli, Preferences). L'identificativo

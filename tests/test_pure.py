@@ -743,3 +743,81 @@ def test_draw_sound_tip_volume_uses_thickness_only_when_mapped():
     assert loud > soft > 0
     assert draw_sound.tip_volume(0.0, 0.04, interpret.Mapping(thickness="VOLUME")) > 0
     assert draw_sound.tip_volume(0.01, 0.04, interpret.Mapping(thickness="NONE")) == loud
+
+
+# --- New instruments, harmony and master bus -----------------------------------------
+
+@pytest.mark.parametrize("ident", ["EPIANO", "MARIMBA", "PAD", "BASS", "OPENHAT", "RIM",
+                                   "SHAKER"])
+def test_new_instruments_render(ident):
+    interp = interpret.interpret_stroke(stroke((1.0, 2.0), (C4_ROW, C4_ROW), instrument=ident),
+                                        free_spec(), interpret.Mapping())
+    offset, buf = synth.render_voice(interp.voices[0], SR)
+    assert buf.shape[1] == 2 and np.all(np.isfinite(buf))
+    assert 0.05 < float(np.max(np.abs(buf))) < 2.0
+
+
+def test_new_instruments_in_midi_import():
+    assert synth.instrument_for_program(0) == "EPIANO"
+    assert synth.instrument_for_program(12) == "MARIMBA"
+    assert synth.instrument_for_program(33) == "BASS"
+    assert synth.instrument_for_program(89) == "PAD"
+    assert synth.instrument_for_program(-1, 46) == "OPENHAT"
+    assert synth.midi_drum_note("SHAKER", 60) == 70
+
+
+def test_diatonic_shift_stays_in_scale():
+    # C major: a third above C is E, above B is D, a sixth below E is G.
+    assert music.diatonic_shift([60, 71], 2, "MAJOR", 0).tolist() == [64, 74]
+    assert music.diatonic_shift([64], -5, "MAJOR", 0).tolist() == [55]
+    # The fractional part (a glide) is kept.
+    assert music.diatonic_shift([60.3], 2, "MAJOR", 0)[0] == pytest.approx(64.3)
+    # A minor pentatonic: one step above A is C.
+    assert music.diatonic_shift([57], 1, "PENTA_MINOR", 9).tolist() == [60]
+    # The chromatic scale harmonizes in major.
+    assert music.diatonic_shift([62], 2, "CHROMATIC", 0).tolist() == [65]
+
+
+def test_harmony_adds_voices_and_notes():
+    spec = free_spec(scale="MAJOR")
+    layer = mixer.LayerInput("L1", [stroke((1.0, 2.0), (C4_ROW, C4_ROW))], harmony="TRIAD")
+    result = mixer.render([layer], spec, interpret.Mapping(), SR)
+    assert sorted(n.pitch for n in result.notes) == [60, 64, 67]
+    assert result.voice_count == 3
+    drums = mixer.LayerInput("L1", [stroke((1.0, 1.1), (C4_ROW, C4_ROW), instrument="KICK")],
+                             harmony="TRIAD")
+    assert len(mixer.render([drums], spec, interpret.Mapping(), SR).notes) == 1
+
+
+def test_harmony_in_legato_keeps_voices_apart():
+    spec = free_spec(scale="MAJOR")
+    layer = mixer.LayerInput("L1", [stroke((1.0, 2.0), (C4_ROW, C4_ROW + 2))],
+                             mode="LEGATO", harmony="THIRD")
+    result = mixer.render([layer], spec, interpret.Mapping(), SR)
+    assert result.voice_count == 2
+
+
+def test_master_never_clips_and_loops_seamlessly():
+    rng = np.random.default_rng(1)
+    loud = (rng.uniform(-3.0, 3.0, (SR * 2, 2))).astype(np.float32)
+    out = effects.master(loud, SR, ambience=0.3, loop=True)
+    assert out.shape == loud.shape and np.all(np.isfinite(out))
+    assert float(np.max(np.abs(out))) <= 10 ** (-1.0 / 20) + 1e-6
+    # Quiet material passes almost untouched (no pumping below the threshold).
+    t = np.arange(SR) / SR
+    quiet = np.stack([0.05 * np.sin(2 * np.pi * 440 * t)] * 2, axis=1).astype(np.float32)
+    calm = effects.master(quiet, SR, ambience=0.0, loop=True)
+    assert np.max(np.abs(calm)) == pytest.approx(0.05 * effects.MASTER_MAKEUP, rel=0.1)
+
+
+def test_master_on_render_and_key():
+    spec = free_spec()
+    strokes = [stroke((0.5 + 0.1 * k, 3.0), (C4_ROW + k, C4_ROW + k), radius=0.2)
+               for k in range(12)]
+    layer = mixer.LayerInput("L1", strokes)
+    raw = mixer.render([layer], spec, interpret.Mapping(), SR, master_volume=2.0)
+    done = mixer.render([layer], spec, interpret.Mapping(), SR, master_volume=2.0,
+                        master_fx=mixer.MasterFx())
+    assert raw.key != done.key
+    assert float(np.max(np.abs(done.audio))) <= 0.9
+    assert len(done.audio) == len(raw.audio)

@@ -59,6 +59,7 @@ def import_midi(context, path, comp=None, fit=True):
     if comp is None:
         bpy.ops.gp2m.add_composition()
         comp = active_composition(context)
+        comp.gp2m.scale = "CHROMATIC"  # the file's notes stay exactly as they are
         empty_defaults = [layer.name for layer in board.user_layers(comp.data)]
     if fit:
         fit_board(comp, tracks, bpm)

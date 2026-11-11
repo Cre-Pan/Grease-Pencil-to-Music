@@ -17,8 +17,10 @@ from .operators import active_composition
 # --- Layers with their instruments ---------------------------------------------------
 
 INSTRUMENT_GROUPS = (
-    ("Melodici", ("SINE", "TRIANGLE", "SQUARE", "SAW", "STRINGS", "PLUCK", "BELL")),
-    ("Percussioni", ("DRUM", "KICK", "SNARE", "HIHAT", "CRASH", "CLAP", "TOM", "COWBELL")),
+    ("Melodici", ("EPIANO", "SINE", "MARIMBA", "BELL", "PLUCK", "STRINGS", "PAD", "SAW",
+                  "SQUARE", "TRIANGLE", "BASS")),
+    ("Percussioni", ("DRUM", "KICK", "SNARE", "CLAP", "HIHAT", "OPENHAT", "TOM", "RIM",
+                     "SHAKER", "CRASH", "COWBELL")),
     ("Suoni", ("SAMPLE", "LIBRARY")),
 )
 INSTRUMENT_ICONS = {"SAMPLE": "FILE_SOUND", "LIBRARY": "ASSET_MANAGER"}
@@ -196,6 +198,10 @@ def draw_reading(layout, s):
     col.prop(s, "min_note")
     col = layout.column(align=True)
     col.prop(s, "master_volume")
+    col.prop(s, "use_master")
+    sub = col.column(align=True)
+    sub.active = s.use_master
+    sub.prop(s, "ambience")
     col.prop(s, "sample_rate")
     layout.prop(s, "use_modifiers")
 
@@ -230,6 +236,7 @@ def draw_layer_details(layout, gp, layer):
     if settings.mode in ("LEGATO", "OPTICAL_LEGATO"):
         box.prop(settings, "legato_gap")
     box.prop(settings, "fill_mode")
+    box.prop(settings, "harmony")
     col = box.column(align=True)
     col.prop(settings, "canon_voices")
     sub = col.column(align=True)

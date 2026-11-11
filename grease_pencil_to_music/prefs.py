@@ -80,7 +80,8 @@ INSTRUMENT_SETS = {
     "ONE": ("SINE",),
     "NONE": (),
     "ESSENTIAL": ("SINE", "SQUARE", "SAW", "STRINGS", "PLUCK", "KICK", "SNARE", "HIHAT"),
-    "MELODIC": ("SINE", "TRIANGLE", "SQUARE", "SAW", "STRINGS", "PLUCK", "BELL"),
+    "MELODIC": ("EPIANO", "SINE", "MARIMBA", "BELL", "PLUCK", "STRINGS", "PAD", "SAW",
+                "SQUARE", "TRIANGLE", "BASS"),
 }
 FEEDBACK_ITEMS = (
     ("AUTO", "Automatico", "Spessore se lo spessore è il volume, altrimenti trasparenza"),
@@ -139,7 +140,7 @@ class GP2M_Preferences(bpy.types.AddonPreferences):
     new_row_height: FloatProperty(name="Altezza riga", default=0.12, min=0.02, max=1.0)
     new_seconds_width: FloatProperty(name="Larghezza secondo", default=1.0, min=0.1, max=10.0)
     new_scale: EnumProperty(name="Scala", items=[(i, l, "") for i, l, _ in music.SCALES],
-                            default="CHROMATIC")
+                            default="MAJOR")
     new_time_grid: EnumProperty(name="Quantizzazione",
                                 items=[(i, l, "") for i, l, _ in music.TIME_GRIDS],
                                 default="1_16")
@@ -236,7 +237,7 @@ class _Defaults:
     new_octaves = 3
     new_row_height = 0.12
     new_seconds_width = 1.0
-    new_scale = "CHROMATIC"
+    new_scale = "MAJOR"
     new_time_grid = "1_16"
     new_key_labels = "C"
     new_layers = 1

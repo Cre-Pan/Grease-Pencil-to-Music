@@ -97,7 +97,7 @@ Tutto si controlla dalla barra laterale **N → Musica**:
 |---|---|
 | Doodle Music | stato, muto, avvisi, *Auto* (aggiornamento automatico), *Genera suono*, **Ascolto** (insieme / solo l'attiva / una dopo l'altra) |
 | Tavola e tempo | BPM, durata del loop, nota più bassa, ottave, **etichette dei tasti** (solo Do, tasti bianchi, tutte, nessuna), griglia |
-| Lettura | scala e tonica, quantizzazione ritmica, **swing**, nota minima, volume, **Usa modificatori** |
+| Lettura | scala e tonica, quantizzazione ritmica, **swing**, nota minima, volume, **Suono finito** con *Ambiente*, **Usa modificatori** |
 | Livelli e strumenti | **Nuovo livello**, ↑ / ↓; ogni livello è un riquadro con lettura, occhio (nascosto e muto), cestino e i suoi **strumenti** (colore, nome, **volume**, occhio); **+ Strumento**; volume, forme piene, canone ed effetti del livello |
 | Esporta | **WAV**, **MP3**, **MIDI** |
 
@@ -121,6 +121,9 @@ fusione di Procreate):
   e dura quanto hai impiegato a disegnarlo: una linea verticale tracciata in fretta è una
   scala rapida, una lenta è un arpeggio lento. I tratti senza tempo di disegno (import MIDI,
   registrati) vengono letti come *Quantizzata*.
+- **Armonia** (per livello): aggiunge voci che accompagnano le note disegnate, sempre nella
+  scala della composizione: *Terza sopra*, *Sesta sotto*, *Accordo* (terza e quinta),
+  *Quinta*, *Ottava sotto*. Le voci aggiunte suonano più piano e finiscono anche nel MIDI.
 - **Canone** (per livello): il livello si ripete in 2–4 voci che entrano dopo N battiti,
   ognuna trasposta di N semitoni rispetto alla precedente; in loop le voci rientrano
   dall'inizio, come in un canone a ruota.
@@ -134,11 +137,21 @@ fusione di Procreate):
 - Un tratto che torna indietro nel tempo (semicerchio, cerchio, zig-zag) suona in ogni sua
   parte, come sotto un lettore ottico: un semicerchio sono due voci.
 
+### Suono finito
+
+Attivo di default (*Lettura → Suono finito*). Sul mix della composizione passano, come nella
+web app: una sala comune (*Ambiente*, regolabile), un taglio dei bassi inudibili, un
+compressore morbido che lega i livelli, una saturazione dolce e un limiter a −1 dB. Così il
+disegno suona pieno e rotondo e non distorce mai, anche con tanti tratti spessi insieme; le
+code e il compressore rientrano dall'inizio del loop, senza giunture. Spento, resta solo il
+controllo dei picchi di prima.
+
 ### Strumenti (sintetizzati)
 
-Melodici: Flauto, Ocarina, 8-bit, Synth, Archi, Chitarra (Karplus-Strong), Campana (FM).
-Percussioni: Percussioni (generiche, dipendono dalla riga), Cassa, Rullante, Charleston,
-Piatto, Battimani, Tom (intonato sulla riga), Campanaccio.
+Melodici: Piano elettrico (FM), Flauto, Marimba, Campana (FM), Chitarra (Karplus-Strong),
+Archi, Pad, Synth, 8-bit, Ocarina, Basso.
+Percussioni: Percussioni (generiche, dipendono dalla riga), Cassa, Rullante, Battimani,
+Charleston, Charleston aperto, Tom (intonato sulla riga), Rimshot, Shaker, Piatto, Campanaccio.
 **Campione**: qualsiasi suono di Blender (*Carica suono…* o un suono del Sequencer),
 intonato sulla nota base. **Libreria**: un SoundFont (`.sf2`) o uno strumento SFZ (`.sfz`),
 con scelta del preset; librerie libere: GeneralUser GS, FluidR3 (SF2), Versilian VCSL (SFZ,

@@ -44,6 +44,14 @@ INSTRUMENTS = (
                (1.0, 0.85, 0.25, 1.0), 24, 0.25, 0.8),
     Instrument("BELL", "Campana", "Sintesi FM inarmonica",
                (0.72, 0.5, 1.0, 1.0), 14, 1.2, 0.45),
+    Instrument("EPIANO", "Piano elettrico", "Piano elettrico (FM): attacco morbido, coda "
+               "che si spegne piano", (0.3, 0.55, 1.0, 1.0), 4, 0.35, 0.75),
+    Instrument("MARIMBA", "Marimba", "Barre di legno percosse, suono caldo e breve",
+               (1.0, 0.62, 0.2, 1.0), 12, 0.25, 0.8),
+    Instrument("PAD", "Pad", "Tappeto morbido: tre seghe stonate, filtrate, attacco lento",
+               (0.42, 0.4, 0.95, 1.0), 89, 1.0, 0.3),
+    Instrument("BASS", "Basso", "Basso synth rotondo e un po' saturato",
+               (0.64, 0.5, 0.36, 1.0), 38, 0.1, 0.6),
     Instrument("DRUM", "Percussioni", "Rumore filtrato: grave = cassa, acuto = charleston",
                (0.85, 0.85, 0.85, 1.0), -1, 0.0, 0.7, True, 0.5),
     Instrument("KICK", "Cassa", "Cassa: colpo grave con discesa di altezza",
@@ -52,6 +60,8 @@ INSTRUMENTS = (
                (0.95, 0.93, 0.78, 1.0), -1, 0.0, 0.6, True, 0.35, 38),
     Instrument("HIHAT", "Charleston", "Charleston chiuso: rumore acuto e corto",
                (0.92, 0.86, 0.5, 1.0), -1, 0.0, 0.35, True, 0.15, 42),
+    Instrument("OPENHAT", "Charleston aperto", "Charleston aperto: rumore acuto che "
+               "suona più a lungo", (0.6, 0.85, 0.95, 1.0), -1, 0.0, 0.3, True, 0.45, 46),
     Instrument("CRASH", "Piatto", "Piatto crash: rumore brillante che si spegne lentamente",
                (1.0, 0.96, 0.45, 1.0), -1, 0.0, 0.3, True, 1.6, 49),
     Instrument("CLAP", "Battimani", "Battimani: tre schiocchi ravvicinati",
@@ -60,6 +70,10 @@ INSTRUMENTS = (
                (0.78, 0.52, 0.35, 1.0), -1, 0.0, 0.8, True, 0.6, -1),
     Instrument("COWBELL", "Campanaccio", "Campanaccio metallico",
                (0.86, 0.7, 0.22, 1.0), -1, 0.0, 0.35, True, 0.4, 56),
+    Instrument("RIM", "Rimshot", "Colpo secco sul bordo del rullante",
+               (0.4, 0.75, 0.75, 1.0), -1, 0.0, 0.45, True, 0.12, 37),
+    Instrument("SHAKER", "Shaker", "Shaker: fruscio corto con un piccolo attacco",
+               (0.45, 0.8, 0.45, 1.0), -1, 0.0, 0.3, True, 0.14, 70),
     Instrument("SAMPLE", "Campione", "Un suono di Blender (importato o del Sequencer), "
                "intonato sulle righe", (0.55, 0.9, 0.95, 1.0), 0, 0.08, 0.8),
     Instrument("LIBRARY", "Libreria", "Strumento campionato da un SoundFont (.sf2) o .sfz: "
@@ -244,6 +258,16 @@ def _percussion(ident, n, sample_rate, pitch, rng):
         return _normalize(0.6 * tone + rattle)
     if ident == "HIHAT":
         return _normalize(_highpass(noise, sample_rate, 7000.0 * tune)) * np.exp(-t / 0.035)
+    if ident == "OPENHAT":
+        return _normalize(_highpass(noise, sample_rate, 7000.0 * tune)) * np.exp(-t / 0.13)
+    if ident == "RIM":
+        click = np.sin(2 * np.pi * 1700.0 * tune * t) * np.exp(-t / 0.012)
+        body = _bandpass(np.sign(np.sin(2 * np.pi * 480.0 * tune * t)), sample_rate,
+                         900.0 * tune, 0.6) * np.exp(-t / 0.018)
+        return _normalize(0.55 * click + _normalize(body))
+    if ident == "SHAKER":
+        envelope = np.clip(t / 0.014, 0.0, 1.0) * np.exp(-np.maximum(t - 0.014, 0.0) / 0.035)
+        return _normalize(_highpass(noise, sample_rate, 5200.0 * tune)) * envelope
     if ident == "CRASH":
         bright = _normalize(_highpass(noise, sample_rate, 3500.0 * tune))
         return bright * np.exp(-t / 0.9)
@@ -306,9 +330,16 @@ def _sample(ident, freq, sample_rate):
     return np.interp(position, np.arange(len(data)), data) * inside * zone.gain
 
 
+# Instruments that use the brightness themselves (no extra dulling lowpass).
+SELF_BRIGHT = ("BELL", "SINE", "SAMPLE", "LIBRARY", NOISE_BAND, "EPIANO", "MARIMBA", "PAD",
+               "BASS")
+SLOW_ATTACK = {"STRINGS": 0.12, "PAD": 0.4}
+
+
 # --- Voice rendering ---------------------------------------------------------
 
-GLIDE_HOLD = ("PLUCK", "BELL")  # struck / plucked: the sound dies before the line ends
+# Struck / plucked: the sound dies before the line ends.
+GLIDE_HOLD = ("PLUCK", "BELL", "EPIANO", "MARIMBA")
 GLIDE_HOLD_MIN = 0.2  # seconds: shorter voices are just notes
 
 
@@ -367,6 +398,31 @@ def render_voice(voice, sample_rate=44100, vibrato_rate=5.5):
     elif inst.ident == "BELL":
         index = 3.0 * np.exp(-ts / 0.6)
         signal = np.sin(phase + index * np.sin(3.5 * phase)) * np.exp(-ts / 1.4)
+    elif inst.ident == "EPIANO":
+        # FM as in the web app: the modulation (and the "tine" bell) fade fast,
+        # what is left is an almost pure, slowly decaying tone.
+        b = float(np.mean(brightness))
+        index = 0.12 + (0.78 + 1.4 * b) * np.exp(-ts / 0.3)
+        tine = (0.5 * b / 14.0) * np.exp(-ts / 0.025) * np.sin(14.0 * phase)
+        signal = np.sin(phase + index * np.sin(phase) + tine) + 0.12 * np.sin(0.5 * phase)
+        signal *= 0.32 + 0.68 * np.exp(-ts / 0.7)
+    elif inst.ident == "MARIMBA":
+        b = float(np.mean(brightness))
+        signal = (np.sin(phase)
+                  + (0.3 + 0.2 * b) * np.exp(-ts / 0.07) * np.sin(3.99 * phase)
+                  + 0.12 * b * np.exp(-ts / 0.012) * np.sin(10.2 * phase))
+        signal *= np.exp(-ts / 0.24)
+    elif inst.ident == "PAD":
+        detune = 2.0 ** (13.0 / 1200.0)
+        signal = (_saw(phase, freq, sample_rate)
+                  + _saw(phase * detune, freq * detune, sample_rate)
+                  + _saw(phase / detune, freq / detune, sample_rate)) / 3.0
+        signal = _lowpass(signal, sample_rate, 500.0 + float(np.mean(brightness)) * 2200.0)
+        signal *= 1.0 + 0.15 * np.sin(2 * np.pi * 0.23 * ts)  # slow breathing
+    elif inst.ident == "BASS":
+        b = float(np.mean(brightness))
+        growl = _lowpass(_saw(phase, freq, sample_rate), sample_rate, 180.0 + b * 450.0)
+        signal = np.tanh(1.6 * (0.55 * np.sin(phase) + 0.3 * growl)) / np.tanh(1.6)
     elif inst.ident in ("SAMPLE", "LIBRARY"):
         signal = _sample(voice.instrument, freq, sample_rate)
     elif inst.ident == NOISE_BAND:
@@ -376,15 +432,14 @@ def render_voice(voice, sample_rate=44100, vibrato_rate=5.5):
     else:  # percussion
         signal = _percussion(inst.ident, n, sample_rate, float(voice.pitch[0]), rng)
 
-    if not inst.percussive and inst.ident not in ("BELL", "SINE", "SAMPLE", "LIBRARY",
-                                                  NOISE_BAND):
+    if not inst.percussive and inst.ident not in SELF_BRIGHT:
         dull = _lowpass(signal, sample_rate, 2.5 * f0)
         signal = brightness * signal + (1.0 - brightness) * dull
 
     if voice.glide and inst.ident in GLIDE_HOLD and voice.duration > GLIDE_HOLD_MIN:
         signal = signal + _glide_hold(phase, ts, sample_rate, float(np.mean(brightness)))
 
-    attack = max(voice.attack, 0.12 if inst.ident == "STRINGS" else 0.0)
+    attack = max(voice.attack, SLOW_ATTACK.get(inst.ident, 0.0))
     envelope = ctrl(voice.amp) * np.clip(ts / max(attack, 1e-4), 0.0, 1.0)
     if not inst.percussive:
         if inst.release > 0:
@@ -401,8 +456,9 @@ def render_voice(voice, sample_rate=44100, vibrato_rate=5.5):
 
 # --- General MIDI -> instruments (MIDI import) ------------------------------------
 
-_GM_DRUMS = {35: "KICK", 36: "KICK", 37: "SNARE", 38: "SNARE", 40: "SNARE", 39: "CLAP",
-             42: "HIHAT", 44: "HIHAT", 46: "HIHAT", 49: "CRASH", 51: "CRASH", 52: "CRASH",
+_GM_DRUMS = {35: "KICK", 36: "KICK", 37: "RIM", 38: "SNARE", 40: "SNARE", 39: "CLAP",
+             42: "HIHAT", 44: "HIHAT", 46: "OPENHAT", 69: "SHAKER", 70: "SHAKER",
+             49: "CRASH", 51: "CRASH", 52: "CRASH",
              55: "CRASH", 57: "CRASH", 59: "CRASH", 41: "TOM", 43: "TOM", 45: "TOM",
              47: "TOM", 48: "TOM", 50: "TOM", 56: "COWBELL"}
 
@@ -413,18 +469,18 @@ def instrument_for_program(program, pitch=60):
         return _GM_DRUMS.get(int(pitch), "DRUM")
     family = program // 8
     return {
-        0: "PLUCK",      # pianos
-        1: "BELL",       # chromatic percussion
+        0: "EPIANO",     # pianos
+        1: "MARIMBA" if program in (12, 13) else "BELL",  # chromatic percussion
         2: "SINE",       # organs
         3: "PLUCK",      # guitars
-        4: "PLUCK",      # basses
+        4: "BASS",       # basses
         5: "STRINGS",    # strings
         6: "STRINGS",    # ensembles
         7: "SAW",        # brass
         8: "SAW",        # reeds
         9: "SINE",       # pipes
         10: "SQUARE" if program == 80 else "SAW",  # synth leads
-        11: "STRINGS",   # synth pads
+        11: "PAD",       # synth pads
         12: "TRIANGLE",  # synth effects
         13: "PLUCK",     # ethnic
         14: "DRUM",      # percussive

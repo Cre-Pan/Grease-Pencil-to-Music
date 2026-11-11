@@ -545,5 +545,13 @@
  "Tocca i tasti a sinistra della tavola per sentire le note con lo strumento scelto; scorri per un glissando.": "Tap the keys on the left of the canvas to hear the notes with the chosen instrument; slide for a glissando.",
  "Dal menu File: in una finestra mobile o come sfondo della tavola, per disegnarci sopra (e da lì si rimuove). Il video segue il play.": "From the File menu: in a floating window or as the canvas background, to draw over it (and remove it from there). Video follows playback.",
  "Salva e Apri sono nel menu File, con le Preferenze.": "Save and Open are in the File menu, with Preferences.",
- "Cambia lo sfondo…": "Change background…"
+ "Cambia lo sfondo…": "Change background…",
+ "Nessuna": "None",
+ "Terza sopra": "Third above",
+ "Sesta sotto": "Sixth below",
+ "Accordo": "Chord",
+ "Quinta": "Fifth",
+ "Ottava sotto": "Octave below",
+ "Armonia": "Harmony",
+ "Aggiunge voci che accompagnano le note disegnate, sempre dentro la scala": "Adds voices that accompany the drawn notes, always in the scale"
 }

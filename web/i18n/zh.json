@@ -545,5 +545,13 @@
  "Tocca i tasti a sinistra della tavola per sentire le note con lo strumento scelto; scorri per un glissando.": "轻点画板左侧的琴键，用所选乐器试听音符；滑动可做滑音。",
  "Dal menu File: in una finestra mobile o come sfondo della tavola, per disegnarci sopra (e da lì si rimuove). Il video segue il play.": "在“文件”菜单中：放入浮动窗口或作为画板背景来描画（也在那里移除）。视频跟随播放。",
  "Salva e Apri sono nel menu File, con le Preferenze.": "“保存”和“打开”在“文件”菜单中，偏好设置也在那里。",
- "Cambia lo sfondo…": "更换背景…"
+ "Cambia lo sfondo…": "更换背景…",
+ "Nessuna": "无",
+ "Terza sopra": "上方三度",
+ "Sesta sotto": "下方六度",
+ "Accordo": "和弦",
+ "Quinta": "五度",
+ "Ottava sotto": "低八度",
+ "Armonia": "和声",
+ "Aggiunge voci che accompagnano le note disegnate, sempre dentro la scala": "添加伴随所画音符的声部，始终在音阶之内"
 }

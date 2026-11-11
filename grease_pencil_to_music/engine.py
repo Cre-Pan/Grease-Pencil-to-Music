@@ -57,6 +57,10 @@ def _layer_fx(settings):
     )
 
 
+def master_fx(settings):
+    return mixer.MasterFx(enabled=settings.use_master, ambience=settings.ambience)
+
+
 MAX_SECTIONS = 24
 
 
@@ -87,6 +91,7 @@ def _layer_inputs(obj, reads):
             canon_voices=settings.canon_voices if settings else 1,
             canon_delay=settings.canon_delay * beat if settings else 0.0,
             canon_transpose=settings.canon_transpose if settings else 0,
+            harmony=settings.harmony if settings else "OFF",
         ))
     return layers
 
@@ -99,7 +104,7 @@ def render_composition(obj, scene):
     if len(frames) == 1:
         reads = reader.read_composition(obj, frames[0], use_modifiers=s.use_modifiers)
         result = mixer.render(_layer_inputs(obj, reads), spec, mapping, rate, loop=s.loop,
-                              master_volume=s.master_volume)
+                              master_volume=s.master_volume, master_fx=master_fx(s))
         result.duration = s.length
         return result, reads
     times = [(frame - scene.frame_start) / _fps(scene) for frame in frames]
@@ -111,7 +116,8 @@ def render_composition(obj, scene):
         parts.append((times[i], end, mixer.render(
             _layer_inputs(obj, reads), spec, mapping, rate, loop=False,
             master_volume=s.master_volume)))
-    return mixer.sequence(parts, s.length, rate, loop=s.loop), first_reads
+    return mixer.sequence(parts, s.length, rate, loop=s.loop,
+                          master_fx=master_fx(s)), first_reads
 
 
 def duration(obj):
