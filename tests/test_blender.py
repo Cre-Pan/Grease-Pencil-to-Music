@@ -1001,3 +1001,30 @@ def test_scene_start_and_frame_rate_changes_follow(comp):
         bpy.context.view_layer.update()
         handlers._last_change[0] = 0.0
         handlers._tick()
+
+
+def test_undo_in_draw_mode_keeps_the_board_colours(comp):
+    """Draw-mode Ctrl+Z restores the drawings but not the material slots: board
+    strokes must not stay on the wrong (black) materials."""
+    board = sub("board")
+    gp = comp.data
+    board_layers = [layer for layer in gp.layers if board.is_board_layer(layer)]
+
+    def indices():
+        return [[stroke.material_index for stroke in layer.frames[0].drawing.strokes]
+                for layer in board_layers]
+
+    before = indices()
+    assert board.board_materials_ok(comp)
+    assert bpy.ops.gp2m.add_instrument(instrument="SINE") == {"FINISHED"}
+    assert board.board_materials_ok(comp)  # adding shifts board slots and strokes
+    # What paint-mode undo leaves: old drawings, new material slots.
+    for layer, old in zip(board_layers, before):
+        for stroke, index in zip(layer.frames[0].drawing.strokes, old):
+            stroke.material_index = index
+    assert not board.board_materials_ok(comp)
+    board._pending.clear()
+    sub("handlers").on_undo_redo()
+    assert comp.name in board._pending
+    board._rebuild_pending()  # normally run by a timer
+    assert board.board_materials_ok(comp)

@@ -335,6 +335,10 @@ def _resume_playback():
 
 @persistent
 def on_undo_redo(*_args):
+    for obj in compositions():
+        # Paint-mode undo does not restore material slots: fix the board colours.
+        if board.has_board(obj) and not board.board_materials_ok(obj):
+            board.request_rebuild(obj)
     mark_all_dirty()
     if _was_playing[0] and prefs.get_prefs().resume_after_undo and not bpy.app.background:
         _was_playing[0] = False
