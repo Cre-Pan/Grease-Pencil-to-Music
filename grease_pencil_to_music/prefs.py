@@ -105,6 +105,9 @@ class GP2M_Preferences(bpy.types.AddonPreferences):
     resume_after_undo: BoolProperty(name="Riprendi il play dopo Ctrl+Z", default=True,
                                     description="Se Ctrl+Z ferma la riproduzione, la fa "
                                     "ripartire subito")
+    draw_sound: BoolProperty(name="Suona mentre disegni", default=True,
+                             description="In Draw Mode senti la punta del tratto mentre "
+                             "disegni, con lo strumento e la lettura del livello")
     map_thickness: EnumProperty(name="Spessore", items=THICKNESS_ITEMS,
                                 default="VOLUME", update=_changed)
     map_opacity: EnumProperty(name="Opacità", items=OPACITY_ITEMS, default="BRIGHTNESS",
@@ -170,6 +173,7 @@ class GP2M_Preferences(bpy.types.AddonPreferences):
                             ("volume_feedback", "Volume visibile sui tratti")):
             grid.label(text=label)
             grid.prop(self, attr, text="")
+        box.prop(self, "draw_sound")
         box.prop(self, "resume_after_undo")
         box = layout.box()
         box.label(text="Cosa suona nel tratto", icon="SOUND")
@@ -216,6 +220,7 @@ def _midi_ports():
 class _Defaults:
     note_naming = "EN"
     resume_after_undo = True
+    draw_sound = True
     map_thickness = "VOLUME"
     map_opacity = "BRIGHTNESS"
     map_vertex_color = "NONE"

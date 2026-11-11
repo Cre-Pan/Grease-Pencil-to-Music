@@ -53,6 +53,7 @@ board.py       tavola, tastiera, etichette, testina come livelli della composizi
 glyphs.py      font a tratto singolo per le etichette                     [puro]
 timeline.py    suono nella Timeline: sorgenti, stili, note, flusso ottico;
                pulsante nell'header del Dope Sheet (draw handler POST_PIXEL)  [bpy]
+draw_sound.py  la punta del tratto suona mentre disegni (timer in Draw Mode)  [bpy]
 keyboard.py    suonare e registrare con tastiera del PC o MIDI               [bpy]
 midi_import.py file .mid → tratti Grease Pencil                           [bpy]
 props.py prefs.py operators.py ui.py samples.py feedback.py                 [bpy]

@@ -697,3 +697,49 @@ def test_cache_is_limited_in_memory():
     assert cache.get(4) is not None and cache.get(0) is None
     cache.put(4, np.zeros(10, dtype=np.float32))
     assert cache.bytes == 440
+
+
+# --- sound while drawing (draw_sound, pure part) -----------------------------------
+
+def test_draw_sound_tracker_follows_the_growing_stroke():
+    from grease_pencil_to_music import draw_sound
+    t = draw_sound.Tracker()
+    k = ("comp", "L1", 1)
+    assert t.update(k, 3, 10, 0.0) is None  # first look: nothing is heard
+    assert t.update(k, 4, 1, 0.01) == "start"  # the pen touches the board
+    assert t.update(k, 4, 5, 0.02) == "move"
+    assert t.update(k, 4, 5, 0.1) is None  # held still for a moment
+    assert t.update(k, 4, 9, 0.2) == "move"
+    assert t.update(k, 4, 9, 0.2 + draw_sound.SILENCE_AFTER + 0.01) == "stop"
+    assert t.update(k, 4, 9, 2.0) is None
+    # undo or eraser: silence, never a note
+    assert t.update(k, 5, 2, 3.0) == "start"
+    assert t.update(k, 4, 9, 3.01) == "stop"
+    assert t.update(k, 2, 9, 3.02) is None
+    # another drawing: only look
+    assert t.update(("comp", "L2", 2), 3, 4, 3.03) is None
+    assert t.update(("comp", "L2", 2), 3, 6, 3.04) == "start"
+    assert t.update(None, 0, 0, 3.05) == "stop"
+
+
+def test_draw_sound_tip_pitch_follows_rows_scale_and_reading():
+    from grease_pencil_to_music import draw_sound
+    spec = interpret.BoardSpec(low_note=48, row_height=H, scale="MAJOR", root=0)
+    rows = 36
+    assert draw_sound.tip_pitch((12 + 0.5) * H, spec, "QUANTIZED", rows) == 60
+    # C#4 snaps to the C major scale (ties go down)
+    assert draw_sound.tip_pitch((13 + 0.5) * H, spec, "QUANTIZED", rows) == 60
+    assert draw_sound.tip_pitch((14 + 0.5) * H, spec, "GESTURE", rows) == 62
+    # optical: continuous, centred on the row
+    assert draw_sound.tip_pitch((13 + 0.75) * H, spec, "OPTICAL", rows) == pytest.approx(61.25)
+    assert draw_sound.tip_pitch(-0.01, spec, "QUANTIZED", rows) is None
+    assert draw_sound.tip_pitch((rows + 0.5) * H, spec, "OPTICAL", rows) is None
+
+
+def test_draw_sound_tip_volume_uses_thickness_only_when_mapped():
+    from grease_pencil_to_music import draw_sound
+    loud = draw_sound.tip_volume(0.04, 0.04, interpret.Mapping(thickness="VOLUME"))
+    soft = draw_sound.tip_volume(0.01, 0.04, interpret.Mapping(thickness="VOLUME"))
+    assert loud > soft > 0
+    assert draw_sound.tip_volume(0.0, 0.04, interpret.Mapping(thickness="VOLUME")) > 0
+    assert draw_sound.tip_volume(0.01, 0.04, interpret.Mapping(thickness="NONE")) == loud
