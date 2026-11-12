@@ -553,5 +553,15 @@
  "Quinta": "Quinte",
  "Ottava sotto": "Octave en dessous",
  "Armonia": "Harmonie",
- "Aggiunge voci che accompagnano le note disegnate, sempre dentro la scala": "Ajoute des voix qui accompagnent les notes dessinées, toujours dans la gamme"
+ "Aggiunge voci che accompagnano le note disegnate, sempre dentro la scala": "Ajoute des voix qui accompagnent les notes dessinées, toujours dans la gamme",
+ "Durata: battute del loop (o trascina la fine della linea del tempo)": "Durée : mesures de la boucle (ou faites glisser la fin de la ligne de temps)",
+ "Accorcia di una battuta": "Une mesure de moins",
+ "batt.": "mes.",
+ "Allunga di una battuta": "Une mesure de plus",
+ "Durata: {0}": "Durée : {0}",
+ "È già la nota più bassa.": "C'est déjà la note la plus grave.",
+ "Massimo 5 ottave.": "5 octaves au maximum.",
+ "Almeno un'ottava.": "Au moins une octave.",
+ "{0} ottave": "{0} octaves",
+ "{0} ottava": "{0} octave"
 }
