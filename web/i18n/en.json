@@ -553,5 +553,10 @@
  "Quinta": "Fifth",
  "Ottava sotto": "Octave below",
  "Armonia": "Harmony",
- "Aggiunge voci che accompagnano le note disegnate, sempre dentro la scala": "Adds voices that accompany the drawn notes, always in the scale"
+ "Aggiunge voci che accompagnano le note disegnate, sempre dentro la scala": "Adds voices that accompany the drawn notes, always in the scale",
+ "Durata: battute del loop (o trascina la fine della linea del tempo)": "Length: bars in the loop (or drag the end of the timeline)",
+ "Accorcia di una battuta": "One bar shorter",
+ "batt.": "bars",
+ "Allunga di una battuta": "One bar longer",
+ "Durata: {0}": "Length: {0}"
 }

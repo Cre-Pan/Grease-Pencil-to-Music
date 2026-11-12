@@ -553,5 +553,10 @@
  "Quinta": "Quinta",
  "Ottava sotto": "Octava abajo",
  "Armonia": "Armonía",
- "Aggiunge voci che accompagnano le note disegnate, sempre dentro la scala": "Añade voces que acompañan a las notas dibujadas, siempre dentro de la escala"
+ "Aggiunge voci che accompagnano le note disegnate, sempre dentro la scala": "Añade voces que acompañan a las notas dibujadas, siempre dentro de la escala",
+ "Durata: battute del loop (o trascina la fine della linea del tempo)": "Duración: compases del bucle (o arrastra el final de la línea de tiempo)",
+ "Accorcia di una battuta": "Un compás menos",
+ "batt.": "comp.",
+ "Allunga di una battuta": "Un compás más",
+ "Durata: {0}": "Duración: {0}"
 }

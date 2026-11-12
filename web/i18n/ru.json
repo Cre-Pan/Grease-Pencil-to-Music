@@ -553,5 +553,10 @@
  "Quinta": "Квинта",
  "Ottava sotto": "Октава ниже",
  "Armonia": "Гармония",
- "Aggiunge voci che accompagnano le note disegnate, sempre dentro la scala": "Добавляет голоса, сопровождающие нарисованные ноты, всегда в пределах лада"
+ "Aggiunge voci che accompagnano le note disegnate, sempre dentro la scala": "Добавляет голоса, сопровождающие нарисованные ноты, всегда в пределах лада",
+ "Durata: battute del loop (o trascina la fine della linea del tempo)": "Длительность: такты цикла (или перетащите конец шкалы времени)",
+ "Accorcia di una battuta": "На такт короче",
+ "batt.": "такт.",
+ "Allunga di una battuta": "На такт длиннее",
+ "Durata: {0}": "Длительность: {0}"
 }

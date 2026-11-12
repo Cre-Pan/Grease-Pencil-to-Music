@@ -553,5 +553,10 @@
  "Quinta": "五度",
  "Ottava sotto": "低八度",
  "Armonia": "和声",
- "Aggiunge voci che accompagnano le note disegnate, sempre dentro la scala": "添加伴随所画音符的声部，始终在音阶之内"
+ "Aggiunge voci che accompagnano le note disegnate, sempre dentro la scala": "添加伴随所画音符的声部，始终在音阶之内",
+ "Durata: battute del loop (o trascina la fine della linea del tempo)": "时长：循环的小节数（或拖动时间轴的末端）",
+ "Accorcia di una battuta": "减少一个小节",
+ "batt.": "小节",
+ "Allunga di una battuta": "增加一个小节",
+ "Durata: {0}": "时长：{0}"
 }

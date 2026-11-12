@@ -129,6 +129,17 @@
 - **Lingue**: italiano, inglese, francese, spagnolo, cinese e russo (Impostazioni →
   Interfaccia → Lingua); al primo avvio segue la lingua del dispositivo. I nomi che scrivi
   (livelli, composizione, suoni, onde) non vengono tradotti.
+- **Gesti a due e tre dita sistemati**: dopo aver suonato la tastiera a sinistra con un dito
+  quel dito restava contato per sempre e i tocchi a due (annulla) e tre dita (ripeti) non
+  funzionavano più; ora i tocchi si leggono dagli eventi touch, che su iPad contano ogni dito,
+  e c'è un po' più di tempo per alzare le dita.
+- **Durata del loop dalla tavola**: − e + accanto ai BPM aggiungono o tolgono battute
+  (tenendo premuto scorrono), oppure trascina la maniglia alla fine del righello. Accorciando,
+  i tratti oltre la fine restano: riallunga e tornano.
+- Niente lente d'ingrandimento, selezione del testo o menu tenendo premuto su tastiere,
+  tavola, pad, cursori e pulsanti.
+- **Tastiera della tavola**: il tasto suonato illumina tutta la riga, che resta accesa un
+  attimo dopo aver alzato il dito, così sai dove disegnare quella nota.
 
 ## 0.0.8
 
