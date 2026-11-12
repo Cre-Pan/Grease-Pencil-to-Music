@@ -860,7 +860,8 @@ def test_new_web_instruments_round_trip_to_addon_sounds():
     available = set(synth.INSTRUMENT_BY_ID)
     for web_id in ("ORGAN", "BRASS", "CHOIR", "VIBES", "OCARINA", "CRASH", "COWBELL", "CONGA",
                    "PIANO", "TRUMPET", "TROMBONE", "HORN", "SAX", "CLARINET", "OBOE",
-                   "BASSOON", "TUBA", "VIOLIN", "CELLO", "HARP", "GLOCK"):
+                   "BASSOON", "TUBA", "VIOLIN", "CELLO", "HARP", "GLOCK", "STRINGS_PIZZ",
+                   "VIOLIN_STAC", "CELLO_PIZZ", "GONG", "TEMPLE", "GUIRO", "GLASS"):
         assert web_project.addon_instrument(web_id, available) in available
     assert web_project.ADDON_TO_WEB["TRIANGLE"] == "OCARINA"
     assert web_project.ADDON_TO_WEB["CRASH"] == "CRASH"
