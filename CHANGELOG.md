@@ -2,6 +2,18 @@
 
 ## Web app (iPad)
 
+- **Trasforma** (in basso a sinistra, accanto al Lazo): un riquadro attorno alla selezione, o a
+  tutti i tratti dei livelli selezionati se non hai lazzato niente, come in Procreate. Gli angoli
+  scalano mantenendo le proporzioni, i perni sui lati allungano solo il tempo o solo l'altezza, il
+  pallino in alto ruota (con uno scatto a 0°, 45°, 90°), dentro sposti. Con la Pencil, il mouse o
+  un dito; ogni gesto è un passo di annulla.
+- Strumenti come in Procreate: Pennello e Gomma in alto vicino a Livelli, Live in un'isola a sé;
+  Lazo, Trasforma e Modificatori in un'isola in basso a sinistra, per la mano libera.
+- **Modificatori** in una finestra mobile (la chiave inglese in basso a sinistra), fuori da
+  Livelli: quelli dei livelli selezionati (con "Aggiungi a tutti") o quelli globali. Resta aperta
+  mentre disegni e si sposta trascinando il titolo.
+- I livelli selezionati scorrendo a destra diventano azzurri (non più verdi) e restano selezionati
+  anche chiudendo Livelli: il Lazo e Trasforma lavorano su tutti.
 - **Modificatori** come in Blender, per livello (nelle impostazioni del livello) o per tutto il
   file (sotto i livelli): Fade, Array, Simmetria, Trasponi e Umanizza. Non distruttivi, dal vivo
   anche mentre disegni (anche il suono sotto la Pencil), con interruttore, ordine nella pila,
