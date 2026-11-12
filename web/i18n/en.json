@@ -578,5 +578,11 @@
  "Corno": "French horn",
  "Sassofono": "Saxophone",
  "Clarinetto": "Clarinet",
- "Oboe": "Oboe"
+ "Oboe": "Oboe",
+ "Violino": "Violin",
+ "Violoncello": "Cello",
+ "Arpa": "Harp",
+ "Glockenspiel": "Glockenspiel",
+ "Fagotto": "Bassoon",
+ "Tuba": "Tuba"
 }

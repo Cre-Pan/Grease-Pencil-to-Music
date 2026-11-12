@@ -578,5 +578,11 @@
  "Corno": "Валторна",
  "Sassofono": "Саксофон",
  "Clarinetto": "Кларнет",
- "Oboe": "Гобой"
+ "Oboe": "Гобой",
+ "Violino": "Скрипка",
+ "Violoncello": "Виолончель",
+ "Arpa": "Арфа",
+ "Glockenspiel": "Колокольчики",
+ "Fagotto": "Фагот",
+ "Tuba": "Туба"
 }

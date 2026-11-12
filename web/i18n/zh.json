@@ -578,5 +578,11 @@
  "Corno": "圆号",
  "Sassofono": "萨克斯",
  "Clarinetto": "单簧管",
- "Oboe": "双簧管"
+ "Oboe": "双簧管",
+ "Violino": "小提琴",
+ "Violoncello": "大提琴",
+ "Arpa": "竖琴",
+ "Glockenspiel": "钟琴",
+ "Fagotto": "大管",
+ "Tuba": "大号"
 }
