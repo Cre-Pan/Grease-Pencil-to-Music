@@ -135,6 +135,11 @@
   le percussioni da disegnare *Piatto*, *Campanaccio* e *Conga*. Il MIDI importato usa
   organi, ottoni, cori, vibrafono e ocarina quando il file li chiede; nell'add-on diventano
   il suono più vicino (Ocarina, Piatto e Campanaccio tornano uguali).
+- **Pianoforte** acustico (corde percosse: armonici leggermente stonati come nelle corde
+  vere, battimenti tra le corde, attacco del martelletto, coda che dura di più sulle note
+  gravi), **fiati** (*Clarinetto*, *Oboe*, *Sassofono*) e **ottoni** (*Tromba*, *Trombone*,
+  *Corno*). Gli strumenti melodici sono in ordine di famiglia: tastiere, percussioni
+  intonate, corde, voci, fiati, ottoni, synth.
 
 ## 0.0.8
 

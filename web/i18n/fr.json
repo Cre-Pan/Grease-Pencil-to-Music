@@ -561,5 +561,12 @@
  "Ocarina": "Ocarina",
  "Piatto": "Cymbale",
  "Campanaccio": "Cloche",
- "Conga": "Conga"
+ "Conga": "Conga",
+ "Pianoforte": "Piano",
+ "Tromba": "Trompette",
+ "Trombone": "Trombone",
+ "Corno": "Cor",
+ "Sassofono": "Saxophone",
+ "Clarinetto": "Clarinette",
+ "Oboe": "Hautbois"
 }

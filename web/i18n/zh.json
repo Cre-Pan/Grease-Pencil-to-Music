@@ -561,5 +561,12 @@
  "Ocarina": "陶笛",
  "Piatto": "镲",
  "Campanaccio": "牛铃",
- "Conga": "康加鼓"
+ "Conga": "康加鼓",
+ "Pianoforte": "钢琴",
+ "Tromba": "小号",
+ "Trombone": "长号",
+ "Corno": "圆号",
+ "Sassofono": "萨克斯",
+ "Clarinetto": "单簧管",
+ "Oboe": "双簧管"
 }

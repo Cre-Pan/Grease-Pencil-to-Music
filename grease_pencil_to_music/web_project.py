@@ -48,6 +48,13 @@ WEB_TO_ADDON = {
     "CRASH": ("CRASH", "OPENHAT"),
     "COWBELL": ("COWBELL", "RIM"),
     "CONGA": ("TOM",),
+    "PIANO": ("EPIANO", "BELL"),
+    "TRUMPET": ("SAW",),
+    "TROMBONE": ("SAW",),
+    "HORN": ("STRINGS", "SAW"),
+    "SAX": ("SAW",),
+    "CLARINET": ("SQUARE",),
+    "OBOE": ("SQUARE",),
 }
 ADDON_TO_WEB = {
     "SINE": "FLUTE", "TRIANGLE": "OCARINA", "SQUARE": "SQUARE", "SAW": "SAW",

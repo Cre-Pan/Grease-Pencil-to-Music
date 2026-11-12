@@ -561,5 +561,12 @@
  "Ocarina": "Ocarina",
  "Piatto": "Crash",
  "Campanaccio": "Cowbell",
- "Conga": "Conga"
+ "Conga": "Conga",
+ "Pianoforte": "Piano",
+ "Tromba": "Trumpet",
+ "Trombone": "Trombone",
+ "Corno": "French horn",
+ "Sassofono": "Saxophone",
+ "Clarinetto": "Clarinet",
+ "Oboe": "Oboe"
 }
