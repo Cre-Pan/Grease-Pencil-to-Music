@@ -178,6 +178,11 @@
   gravi), **fiati** (*Clarinetto*, *Oboe*, *Sassofono*) e **ottoni** (*Tromba*, *Trombone*,
   *Corno*). Gli strumenti melodici sono in ordine di famiglia: tastiere, percussioni
   intonate, corde, voci, fiati, ottoni, synth.
+- **Strumenti campionati** (VS Chamber Orchestra CE, pubblico dominio): Pianoforte, Flauto,
+  Clarinetto, Oboe, Tromba, Trombone e Corno ora suonano registrazioni vere; nuovi *Violino*,
+  *Violoncello*, *Arpa*, *Fagotto*, *Tuba* e *Glockenspiel*. Le note lunghe di fiati, ottoni e
+  archi continuano con un loop morbido; finché i campioni non sono scaricati (o nell'artifact)
+  suona il synth dello strumento. Circa 6 MB, salvati per l'uso offline al primo avvio.
 
 ## 0.0.8
 
