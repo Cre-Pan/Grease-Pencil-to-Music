@@ -129,6 +129,12 @@
 - **Lingue**: italiano, inglese, francese, spagnolo, cinese e russo (Impostazioni →
   Interfaccia → Lingua); al primo avvio segue la lingua del dispositivo. I nomi che scrivi
   (livelli, composizione, suoni, onde) non vengono tradotti.
+- **Nuovi strumenti**: *Organo* (registri a canne con clic del tasto e rotary), *Ottoni*
+  (il filtro si apre col fiato, la nota entra con un piccolo scivolo), *Coro* (vocale «a»),
+  *Vibrafono* (tremolo del motore, tiene il glissando nella lettura Ottica), *Ocarina*; tra
+  le percussioni da disegnare *Piatto*, *Campanaccio* e *Conga*. Il MIDI importato usa
+  organi, ottoni, cori, vibrafono e ocarina quando il file li chiede; nell'add-on diventano
+  il suono più vicino (Ocarina, Piatto e Campanaccio tornano uguali).
 
 ## 0.0.8
 

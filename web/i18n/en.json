@@ -553,5 +553,13 @@
  "Quinta": "Fifth",
  "Ottava sotto": "Octave below",
  "Armonia": "Harmony",
- "Aggiunge voci che accompagnano le note disegnate, sempre dentro la scala": "Adds voices that accompany the drawn notes, always in the scale"
+ "Aggiunge voci che accompagnano le note disegnate, sempre dentro la scala": "Adds voices that accompany the drawn notes, always in the scale",
+ "Organo": "Organ",
+ "Ottoni": "Brass",
+ "Coro": "Choir",
+ "Vibrafono": "Vibraphone",
+ "Ocarina": "Ocarina",
+ "Piatto": "Crash",
+ "Campanaccio": "Cowbell",
+ "Conga": "Conga"
 }

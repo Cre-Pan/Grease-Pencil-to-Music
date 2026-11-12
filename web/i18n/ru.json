@@ -553,5 +553,13 @@
  "Quinta": "Квинта",
  "Ottava sotto": "Октава ниже",
  "Armonia": "Гармония",
- "Aggiunge voci che accompagnano le note disegnate, sempre dentro la scala": "Добавляет голоса, сопровождающие нарисованные ноты, всегда в пределах лада"
+ "Aggiunge voci che accompagnano le note disegnate, sempre dentro la scala": "Добавляет голоса, сопровождающие нарисованные ноты, всегда в пределах лада",
+ "Organo": "Орган",
+ "Ottoni": "Медные",
+ "Coro": "Хор",
+ "Vibrafono": "Вибрафон",
+ "Ocarina": "Окарина",
+ "Piatto": "Тарелка",
+ "Campanaccio": "Коровий колокольчик",
+ "Conga": "Конга"
 }

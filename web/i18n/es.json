@@ -553,5 +553,13 @@
  "Quinta": "Quinta",
  "Ottava sotto": "Octava abajo",
  "Armonia": "Armonía",
- "Aggiunge voci che accompagnano le note disegnate, sempre dentro la scala": "Añade voces que acompañan a las notas dibujadas, siempre dentro de la escala"
+ "Aggiunge voci che accompagnano le note disegnate, sempre dentro la scala": "Añade voces que acompañan a las notas dibujadas, siempre dentro de la escala",
+ "Organo": "Órgano",
+ "Ottoni": "Metales",
+ "Coro": "Coro",
+ "Vibrafono": "Vibráfono",
+ "Ocarina": "Ocarina",
+ "Piatto": "Platillo",
+ "Campanaccio": "Cencerro",
+ "Conga": "Conga"
 }

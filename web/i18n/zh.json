@@ -553,5 +553,13 @@
  "Quinta": "五度",
  "Ottava sotto": "低八度",
  "Armonia": "和声",
- "Aggiunge voci che accompagnano le note disegnate, sempre dentro la scala": "添加伴随所画音符的声部，始终在音阶之内"
+ "Aggiunge voci che accompagnano le note disegnate, sempre dentro la scala": "添加伴随所画音符的声部，始终在音阶之内",
+ "Organo": "风琴",
+ "Ottoni": "铜管",
+ "Coro": "合唱",
+ "Vibrafono": "颤音琴",
+ "Ocarina": "陶笛",
+ "Piatto": "镲",
+ "Campanaccio": "牛铃",
+ "Conga": "康加鼓"
 }

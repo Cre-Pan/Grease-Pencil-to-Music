@@ -856,6 +856,15 @@ def test_web_instruments_fall_back_when_the_addon_lacks_them():
     assert project.skipped == ["WAV:x"] and len(project.layers[0].strokes) == 1
 
 
+def test_new_web_instruments_round_trip_to_addon_sounds():
+    available = set(synth.INSTRUMENT_BY_ID)
+    for web_id in ("ORGAN", "BRASS", "CHOIR", "VIBES", "OCARINA", "CRASH", "COWBELL", "CONGA"):
+        assert web_project.addon_instrument(web_id, available) in available
+    assert web_project.ADDON_TO_WEB["TRIANGLE"] == "OCARINA"
+    assert web_project.ADDON_TO_WEB["CRASH"] == "CRASH"
+    assert web_project.ADDON_TO_WEB["COWBELL"] == "COWBELL"
+
+
 def test_web_grid_and_scale_mapping():
     assert web_project.grid_ident(0.25) == "1_16" and web_project.grid_ident(1 / 3) == "1_8T"
     assert web_project.grid_beats("1_8") == 0.5
