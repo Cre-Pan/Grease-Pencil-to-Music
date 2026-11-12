@@ -596,5 +596,6 @@
  "di {0} s totali": "sur {0} s au total",
  "Una parte": "Une partie",
  "Esporta MIDI": "Exporter le MIDI",
- "Esporta WAV": "Exporter le WAV"
+ "Esporta WAV": "Exporter le WAV",
+ "Forma d'onda del mix: trascina le maniglie per esportarne solo una parte; doppio tocco per tornare a tutto": "Forme d'onde du mix : faites glisser les poignées pour n'exporter qu'une partie ; touchez deux fois pour tout reprendre"
 }

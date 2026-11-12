@@ -596,5 +596,6 @@
  "di {0} s totali": "из {0} с всего",
  "Una parte": "Часть",
  "Esporta MIDI": "Экспорт MIDI",
- "Esporta WAV": "Экспорт WAV"
+ "Esporta WAV": "Экспорт WAV",
+ "Forma d'onda del mix: trascina le maniglie per esportarne solo una parte; doppio tocco per tornare a tutto": "Волна микса: перетащите маркеры, чтобы экспортировать только часть; двойное касание — снова всё"
 }

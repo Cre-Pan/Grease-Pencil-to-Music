@@ -596,5 +596,6 @@
  "di {0} s totali": "共 {0} 秒",
  "Una parte": "部分",
  "Esporta MIDI": "导出 MIDI",
- "Esporta WAV": "导出 WAV"
+ "Esporta WAV": "导出 WAV",
+ "Forma d'onda del mix: trascina le maniglie per esportarne solo una parte; doppio tocco per tornare a tutto": "混音波形：拖动两侧手柄只导出一部分；轻点两下恢复全部"
 }
