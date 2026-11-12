@@ -2810,32 +2810,41 @@ function playHit(ctx, dest, inst, z, s, a, tune, dur, track) {
   if (track) track.push(src);
 }
 
-const zoneBufs = new Map(), zoneWait = new Set(), zonePending = new Map();
+const zoneBufs = new Map(), zoneWait = new Set(), zonePending = new Map(), zoneFails = new Map();
 function zoneFor(id) {
   const zb = zoneBufs.get(id);
   if (!zb) wantZone(id);
   return zb || null;
 }
+/* A recording that did not arrive (a dropped download, the app sent to the background) is
+   asked for again by itself, sooner at first: the loop must not keep the synth stand-in until
+   the next change. Each file gets a second try at once. */
+const fetchSample = url => fetch(url).then(r => { if (!r.ok) throw new Error(String(r.status)); return r.arrayBuffer(); });
 function wantZone(id) {
   if (zoneWait.has(id) || !SAMPLE_ZONES[id] || !window.fetch || location.protocol === "file:") return zonePending.get(id);
   zoneWait.add(id);
   const dec = new OfflineAudioContext(1, 1, SR);
-  const one = m => fetch(`samples/${id}/${m}.mp3`)
-    .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.arrayBuffer(); })
+  const one = m => fetchSample(`samples/${id}/${m}.mp3`)
+    .catch(() => new Promise(ok => setTimeout(ok, 800)).then(() => fetchSample(`samples/${id}/${m}.mp3`)))
     .then(ab => new Promise((ok, no) => dec.decodeAudioData(ab, ok, no)))
     .then(buf => [m, { buf, off: onsetOf(buf) }]);
   const p = Promise.all(SAMPLE_ZONES[id].map(one))
-    .then(list => { zonePending.delete(id); zoneBufs.set(id, new Map(list)); samplesVersion++; changed(); })
+    .then(list => { zonePending.delete(id); zoneFails.delete(id); zoneBufs.set(id, new Map(list)); samplesVersion++; changed(); })
     .catch(err => {  // offline before the first download: the synth stays, and it is tried again a little later
       console.warn("samples", id, err);
       zonePending.delete(id);
-      setTimeout(() => zoneWait.delete(id), 15000);
+      const n = (zoneFails.get(id) || 0) + 1;
+      zoneFails.set(id, n);
+      setTimeout(() => { zoneWait.delete(id); if (zoneInUse(id)) wantZone(id); }, Math.min(60000, 2000 * 2 ** (n - 1)));
     });
   zonePending.set(id, p);
   return p;
 }
 /* Before an export: the recordings of the sampled instruments in use, not their synth
    stand-ins (on a fresh start they may still be on their way). Waits at most 20 s. */
+const zoneInUse = id => state.layers.some(l => !l.muted && layerStrokes(l).some(st => st.inst === id))
+  || (state.beat.on && BEAT_TRACKS.some(k => k === id && !state.beat.tracks[k].mute));
+addEventListener("online", () => { for (const id of zoneFails.keys()) { if (zonePending.has(id)) continue; zoneWait.delete(id); if (zoneInUse(id)) wantZone(id); } });
 async function zonesReady() {
   const waits = new Set();
   for (const layer of state.layers) {
@@ -3448,6 +3457,11 @@ function fraction() {
   return ((t / player.len) % 1 + 1) % 1;
 }
 
+/* A player that was swapped out leaves the audio graph once it has stopped: iPad Safari keeps
+   nodes still connected (and their loop buffers, megabytes each) alive. */
+function release(pl) {
+  pl.src.onended = () => { for (const n of [pl.src, pl.gain, pl.metro]) try { n.disconnect(); } catch (e) { /* gone */ } };
+}
 function startPlayer(frac) {
   const at = live.currentTime + 0.03, len = loop.buffer.duration;
   const src = live.createBufferSource(); src.buffer = loop.buffer; src.loop = true;
@@ -3458,6 +3472,7 @@ function startPlayer(frac) {
     const old = player;
     old.gain.gain.cancelScheduledValues(at); old.gain.gain.setValueAtTime(1, at); old.gain.gain.linearRampToValueAtTime(0, at + 0.04);
     try { old.src.stop(at + 0.06); old.metro.stop(at); } catch (e) { /* already stopped */ }
+    release(old);
   }
   player = { src, gain: g, metro: m, t0: at - frac * len, len, from: frac };
 }
@@ -3481,6 +3496,7 @@ function stop() {
     const t = live.currentTime, g = player.gain.gain;
     g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(0, t + 0.05);
     try { player.src.stop(t + 0.07); player.metro.stop(t); } catch (e) { /* ignore */ }
+    release(player);
   }
   player = null;
   if (ui.recording) setRecording(false);
