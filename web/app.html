@@ -4477,7 +4477,7 @@ function addPoint(cur, q) {
     const cell = Math.floor(q[0] / (state.grid || 0.25));
     if (cur.cell !== cell) {
       cur.cell = cell; cur.dots.push(q.slice());
-      previewNote(cur.inst, snapScale(Math.floor(q[1])), ampOf(q[2]), cur.op);
+      if (!activeLayer().muted) previewNote(cur.inst, snapScale(Math.floor(q[1])), ampOf(q[2]), cur.op);
     }
   }
 }
@@ -4485,6 +4485,7 @@ function soundWhileDrawing(e, first) {
   if (!ui.drawSound) return;
   if (current.brush === "dots" || current.brush === "fill") return;
   const { x, y } = pointerXY(e), layer = activeLayer();
+  if (layer.muted) { thereminStop(); return; }  // drawing on a muted layer: as silent as the loop
   // through the modifiers: what sounds at this moment (transposed, mirrored in pitch...)
   const echo = liveEcho(layer, current.live ? fraction() * loopBeats() : bOf(x), pOf(y), widthFor(e));
   if (!echo.length) { thereminStop(); return; }
@@ -4817,7 +4818,7 @@ function finish(e) {
   const tap = st.finger && !st.heard && e.timeStamp - strokeStart < 250;
   for (const k of ["pointer", "pred", "finger", "x0", "y0", "heard", "len", "seed", "cell"]) delete st[k];
   if (tap) {  // wait a moment: a second finger turns it into an undo gesture
-    const commit = () => { commitStroke(st); previewNote(st.inst, snapScale(Math.floor(st.pts[0][1])), 0.7, st.op); };
+    const commit = () => { commitStroke(st); if (!activeLayer().muted) previewNote(st.inst, snapScale(Math.floor(st.pts[0][1])), 0.7, st.op); };
     pendingTap = { time: e.timeStamp, commit, timer: setTimeout(() => { pendingTap = null; commit(); }, 90) };
     requestFrame();
     return;
