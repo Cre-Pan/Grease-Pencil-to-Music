@@ -55,6 +55,12 @@ WEB_TO_ADDON = {
     "SAX": ("SAW",),
     "CLARINET": ("SQUARE",),
     "OBOE": ("SQUARE",),
+    "BASSOON": ("SAW",),
+    "TUBA": ("BASS", "SAW"),
+    "VIOLIN": ("STRINGS",),
+    "CELLO": ("STRINGS",),
+    "HARP": ("PLUCK",),
+    "GLOCK": ("BELL",),
 }
 ADDON_TO_WEB = {
     "SINE": "FLUTE", "TRIANGLE": "OCARINA", "SQUARE": "SQUARE", "SAW": "SAW",
