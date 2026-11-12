@@ -187,6 +187,19 @@
   *Violoncello*, *Arpa*, *Fagotto*, *Tuba* e *Glockenspiel*. Le note lunghe di fiati, ottoni e
   archi continuano con un loop morbido; finché i campioni non sono scaricati (o nell'artifact)
   suona il synth dello strumento. Circa 6 MB, salvati per l'uso offline al primo avvio.
+- **Archi veri** (sezioni di violoncelli, viole e violini) e **articolazioni**: *Archi tremolo*,
+  *Archi pizzicato*, *Violino* e *Violoncello* anche *staccato* e *pizzicato*. Per il legato:
+  Violino, Violoncello o Archi con la lettura *Quantizzata legata*.
+- **34 percussioni registrate**: membrane (gran cassa, rullante orchestrale, tamburo grande, a
+  cornice, bongo, tumba), metalli (gong, piatto sospeso, piatti a due, triangolo, campane
+  nepalesi, sonagli, agogô, freno, albero di campanelli), legni (claves, temple block, tamburo a
+  fessura), fruscii e sfregamenti (maracas, cabasa, tamburello, güiro, raganella, gran cassa
+  sfregata, piatto con l'archetto, gong strisciato, tamburello rullato) e suoni concreti
+  (incudine, lamiera, cucchiai, catena, mattone, bolle, vetro). Gli sfregamenti e i rullati
+  durano quanto la linea disegnata.
+- **Lista strumenti per famiglie** richiudibili (con i colori della famiglia in anteprima);
+  tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
+  piccolo ritmo per le percussioni.
 
 ## 0.0.8
 
