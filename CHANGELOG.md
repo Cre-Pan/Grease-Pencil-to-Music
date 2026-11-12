@@ -2,6 +2,10 @@
 
 ## Web app (iPad)
 
+- Esporta ridisegnata: la durata a destra del titolo, i numeri in piccole isole; una linea del
+  tempo con due maniglie gialle (a passi di un battito, doppio tocco per tornare a tutto) per esportare solo una parte, con
+  ascolto da In a Out; un'isola Immagine / Audio / Video / MIDI mostra un pannello alla volta e
+  il grande pulsante Esporta resta sempre in basso. Audio, video e MIDI rispettano In e Out.
 - Prima versione web: Disegna, Beat, MIDI, Esporta, in stile Apple (tema chiaro e scuro).
 - Apple Pencil: lo spessore segue la pressione (anche dove il browser la passa solo come
   forza del tocco), indicatore della pressione in basso a destra.
