@@ -661,5 +661,21 @@
  "Legni e blocchi": "木与木块",
  "Fruscii e sfregamenti": "摇与刮",
  "Concreti": "具体音",
- "Altri": "其他"
+ "Altri": "其他",
+ "Trascina per una tastiera più alta o più bassa": "拖动让键盘更高或更矮",
+ "Altezza della tastiera": "键盘高度",
+ "Tempo: TAP, − +, scrivi": "速度：TAP、− +、输入",
+ "Durata: battute o secondi, Adatta": "时长：小节或秒，适配",
+ "TAP": "TAP",
+ "Tocca TAP a tempo, almeno quattro volte.": "按节拍点 TAP，至少四次。",
+ "Secondi": "秒",
+ "battuta": "小节",
+ "secondi": "秒",
+ "La durata giusta per quello che hai disegnato": "正好容纳你画的内容的时长",
+ "Adatta al disegno": "适配绘画",
+ "+4 battute": "+4 小节",
+ "{0} battute di {1} s: la durata va a battute intere": "{0} 个 {1} 秒的小节：时长以整小节计",
+ "{0} secondi a {1} BPM": "{1} BPM 下 {0} 秒",
+ "{0} BPM": "{0} BPM",
+ "s": "秒"
 }

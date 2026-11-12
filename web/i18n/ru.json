@@ -661,5 +661,21 @@
  "Legni e blocchi": "Дерево и блоки",
  "Fruscii e sfregamenti": "Шорохи и скрежет",
  "Concreti": "Конкретные звуки",
- "Altri": "Другие"
+ "Altri": "Другие",
+ "Trascina per una tastiera più alta o più bassa": "Потяните, чтобы сделать клавиатуру выше или ниже",
+ "Altezza della tastiera": "Высота клавиатуры",
+ "Tempo: TAP, − +, scrivi": "Темп: TAP, − +, ввод",
+ "Durata: battute o secondi, Adatta": "Длительность: такты или секунды, подогнать",
+ "TAP": "TAP",
+ "Tocca TAP a tempo, almeno quattro volte.": "Нажимайте TAP в такт, не меньше четырёх раз.",
+ "Secondi": "Секунды",
+ "battuta": "такт",
+ "secondi": "секунд",
+ "La durata giusta per quello che hai disegnato": "Длительность по нарисованному",
+ "Adatta al disegno": "По рисунку",
+ "+4 battute": "+4 такта",
+ "{0} battute di {1} s: la durata va a battute intere": "{0} тактов по {1} с: длительность — целыми тактами",
+ "{0} secondi a {1} BPM": "{0} секунд при {1} BPM",
+ "{0} BPM": "{0} BPM",
+ "s": "с"
 }

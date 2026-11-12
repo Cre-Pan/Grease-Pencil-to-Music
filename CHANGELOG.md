@@ -171,6 +171,20 @@
 - Palm rejection: un contatto largo (il palmo), un tocco nella fascia del bordo dalla parte
   della mano che disegna (Preferenze → Pennello e Pencil → Mano che disegna) dopo aver usato
   la Pencil, o un tocco appena la Pencil si alza non disegnano e non fanno annulla/ripeti.
+- Palm rejection più leggera: i tocchi con due e tre dita tornano a funzionare. Conta come
+  palmo solo un contatto molto largo, un tocco nei 300 ms dopo che la Pencil si alza, o la
+  fascia del bordo dalla parte della mano mentre la Pencil è in uso (negli ultimi 2 secondi).
+- Preferenze: in *Mano che disegna* Sinistra è a sinistra e Destra a destra.
+- Lazo: con una selezione, un dito la sposta da qualunque punto della tavola (come in
+  Procreate); ingrandendo l'aggancio diventa più fine (metà griglia dal 200%, un quarto e
+  mezzi semitoni dal 400%, libero dal 600%).
+- Live accende il metronomo in basso, che ora si può spegnere; uscendo da Live si spegne.
+- **Tempo e Durata** in due finestrine in basso a destra: Tempo con TAP, − + e il numero da
+  scrivere; Durata in battute o in secondi (il righello mostra i secondi), − +, *Adatta al
+  disegno* e *+4 battute*.
+- *Carica l'esempio* è nel menu ≡, sopra Aiuto.
+- MIDI: trascina la maniglia sopra la tastiera per farla più alta o più bassa (doppio clic:
+  altezza normale).
 - **Nuovi strumenti**: *Organo* (registri a canne con clic del tasto e rotary), *Ottoni*
   (il filtro si apre col fiato, la nota entra con un piccolo scivolo), *Coro* (vocale «a»),
   *Vibrafono* (tremolo del motore, tiene il glissando nella lettura Ottica), *Ocarina*; tra
