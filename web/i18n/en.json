@@ -563,5 +563,20 @@
  "Massimo 5 ottave.": "5 octaves at most.",
  "Almeno un'ottava.": "At least one octave.",
  "{0} ottave": "{0} octaves",
- "{0} ottava": "{0} octave"
+ "{0} ottava": "{0} octave",
+ "Organo": "Organ",
+ "Ottoni": "Brass",
+ "Coro": "Choir",
+ "Vibrafono": "Vibraphone",
+ "Ocarina": "Ocarina",
+ "Piatto": "Crash",
+ "Campanaccio": "Cowbell",
+ "Conga": "Conga",
+ "Pianoforte": "Piano",
+ "Tromba": "Trumpet",
+ "Trombone": "Trombone",
+ "Corno": "French horn",
+ "Sassofono": "Saxophone",
+ "Clarinetto": "Clarinet",
+ "Oboe": "Oboe"
 }
