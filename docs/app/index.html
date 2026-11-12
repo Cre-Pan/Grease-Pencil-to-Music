@@ -1780,7 +1780,7 @@ function exampleState() {
   const pad = newLayer(t("Atmosfera"), "OPTICAL", { volume: 0.7, pan: -0.15, reverb: 0.55 });
   const melody = newLayer(t("Melodia"), "QUANTIZED", { volume: 0.85, pan: 0.12, reverb: 0.3 });
   const s = { name: t("Prima melodia"), example: true, bpm: 92, bars: 4, low: 36, octaves: 4, scale: "MAJOR", root: 0, grid: 0.25,
-    layers: [bass, pad, melody], active: melody.id, strokes: [], beat: blankBeat(), samples: [], waves: [] };
+    layers: [bass, pad, melody], active: melody.id, strokes: [], beat: blankBeat(), samples: [], waves: [], mods: [] };
   applyPreset(s.beat, "HIPHOP");
   const add = (layer, inst, path, w, op = 1) => s.strokes.push(makeStroke(layer.id, inst, path, w, op, s.bpm));
   const notes = [[0, 1, 72], [1, 1, 76], [4, 1, 76], [5, 1, 72], [6, 2, 69], [8, 1, 69], [9, 1, 72], [10, 1.5, 77],
@@ -1939,9 +1939,10 @@ function afterUndo() {
 }
 function updateUndo() { $("#btnUndo").disabled = !history.length; $("#btnRedo").disabled = !future.length; }
 
-/* Tempo, length, scale, range: one undo step for a run of changes to the same setting (holding
-   + on the tempo, dragging the end of the loop). Without it undo brought back, with the last
-   stroke, the tempo and the length of that moment too: the snapshot keeps them. */
+/* Settings kept in the snapshot (tempo, length, scale, range, the beat's swing and volume, a
+   layer's volume...): one undo step for a run of changes to the same setting (holding + on the
+   tempo, sliding a slider). Without it undo brought back, with the last stroke, the tempo or
+   the swing of that moment too: the snapshot keeps them. */
 let songStep = null;
 function rememberSong(what) {
   const now = performance.now();
@@ -5160,12 +5161,15 @@ function openTrack(id, anchor) {
   ui.open = "popTrack"; ui.openBtn = null;
 }
 $("#inTrackVol").addEventListener("input", e => {
+  rememberSong("trackVol " + trackOpen);
   const tr = state.beat.tracks[trackOpen]; tr.vol = +e.target.value; fillRange(e.target);
   $("#valTrackVol").textContent = Math.round(tr.vol * 100) + "%";
 });
 $("#inTrackVol").addEventListener("change", () => { changed(); previewDrum(trackOpen); });
 for (const [btnId, step] of [["#tuneDown", -1], ["#tuneUp", 1]]) $(btnId).onclick = () => {
   const tr = state.beat.tracks[trackOpen];
+  if (clamp((tr.tune || 0) + step, -12, 12) === (tr.tune || 0)) return;
+  rememberSong("tune " + trackOpen);
   tr.tune = clamp((tr.tune || 0) + step, -12, 12);
   $("#tuneLabel").textContent = (tr.tune > 0 ? "+" : "") + tr.tune;
   previewDrum(trackOpen); changed();
@@ -5299,11 +5303,11 @@ function syncBeatControls() {
   }
   $("#beatSub").textContent = PRESETS[b.preset] ? PRESETS[b.preset].name : "";  // bars and tempo are in the transport
 }
-$("#inSwing").addEventListener("input", e => { state.beat.swing = +e.target.value; fillRange(e.target); $("#valSwing").textContent = Math.round(state.beat.swing * 100) + "%"; });
+$("#inSwing").addEventListener("input", e => { rememberSong("swing"); state.beat.swing = +e.target.value; fillRange(e.target); $("#valSwing").textContent = Math.round(state.beat.swing * 100) + "%"; });
 $("#inSwing").addEventListener("change", () => changed());
-$("#inBeatVol").addEventListener("input", e => { state.beat.volume = +e.target.value; fillRange(e.target); $("#valBeatVol").textContent = Math.round(state.beat.volume * 100) + "%"; });
+$("#inBeatVol").addEventListener("input", e => { rememberSong("beatVol"); state.beat.volume = +e.target.value; fillRange(e.target); $("#valBeatVol").textContent = Math.round(state.beat.volume * 100) + "%"; });
 $("#inBeatVol").addEventListener("change", () => changed());
-$("#beatOn").addEventListener("change", e => { state.beat.on = e.target.checked; changed(); });
+$("#beatOn").addEventListener("change", e => { rememberSong("beatOn"); state.beat.on = e.target.checked; changed(); });
 $("#beatAB").addEventListener("change", e => {
   remember(); const b = state.beat;
   b.ab = e.target.checked;
@@ -7072,7 +7076,7 @@ function miniRange(label, id, min, max, step, value, fmt, onInput) {
   const input = document.createElement("input"); input.type = "range"; input.id = id; input.min = min; input.max = max; input.step = step;
   const v = document.createElement("span"); v.textContent = fmt(value);
   setRange(input, value);
-  input.oninput = () => { fillRange(input); v.textContent = fmt(+input.value); onInput(+input.value); };
+  input.oninput = () => { rememberSong(id + " " + state.active); fillRange(input); v.textContent = fmt(+input.value); onInput(+input.value); };
   input.onchange = () => changed();
   wrap.append(l, input, v);
   return wrap;
@@ -7080,7 +7084,7 @@ function miniRange(label, id, min, max, step, value, fmt, onInput) {
 function layerDetail(layer) {
   const d = document.createElement("div"); d.className = "layer-detail";
   const name = document.createElement("input"); name.type = "text"; name.id = "layerName"; name.value = layer.name; name.setAttribute("aria-label", "Nome del livello");
-  name.onchange = () => { layer.name = name.value.trim() || layer.name; saveSoon(); renderLayers(); };
+  name.onchange = () => { const v = name.value.trim(); if (v && v !== layer.name) { remember(); layer.name = v; } saveSoon(); renderLayers(); };
   const modes = document.createElement("div"); modes.className = "seg";
   /* One row that shows the current reading; scroll it up or down (or tap the arrows) to change it,
      like the blend modes in Procreate. */
@@ -7656,6 +7660,7 @@ $("#smpListen").onclick = () => {
 $("#smpRetry").onclick = () => { openSoundSheet(); };
 $("#smpSave").onclick = async () => {
   const name = $("#smpName").value.trim() || review.name;
+  remember();  // a new sound, or a new name and base note: one undo step (before, undo removed it with the step before)
   let meta = review.editing && state.samples.find(m => m.id === review.editing);
   if (meta) { meta.name = name; meta.root = review.root; }
   else {
@@ -7847,7 +7852,8 @@ waveCv.addEventListener("pointerup", endWaveDraw);
 waveCv.addEventListener("pointercancel", endWaveDraw);
 $("#waveName").addEventListener("change", e => {
   const w = currentWave(); if (!w) return;
-  w.name = e.target.value.trim().slice(0, 40) || w.name; e.target.value = w.name;
+  const name = e.target.value.trim().slice(0, 40) || w.name;
+  if (name !== w.name) { remember(); w.name = name; } e.target.value = w.name;
   waveChanged(); renderWaveView(); syncChrome(); syncMidiChip();
 });
 $("#waveSym").addEventListener("change", e => { remember(); currentWave().sym = e.target.checked; waveChanged(); });
