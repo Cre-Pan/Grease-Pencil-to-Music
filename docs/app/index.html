@@ -7412,7 +7412,7 @@ downloadsCap.then(dl => { if (!dl && inArtifact) { for (const id of ["#exGo", "#
 // Installed on the Home Screen: works offline (service worker) and keeps its data.
 if (!inArtifact && "serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
   const hadController = !!navigator.serviceWorker.controller;
-  navigator.serviceWorker.register("sw.js").then(reg => {
+  navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(reg => {
     // iPad resumes an installed app instead of relaunching it: look for a new version on return.
     document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update().catch(() => {}); });
   }).catch(() => {});

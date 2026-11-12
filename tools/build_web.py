@@ -54,7 +54,7 @@ const SAMPLES = "gp2m-samples-{samples_version}";  // kept across app updates wh
 const FILES = ["./", "./index.html", "./manifest.webmanifest", "./icon-180.png", "./icon-192.png", "./icon-512.png", "./icon-maskable.png", "./favicon-32.png", "./favicon-64.png"];
 const SOUNDS = {sounds};
 self.addEventListener("install", event => {{
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES.map(url => new Request(url, {{ cache: "reload" }})))).then(() => self.skipWaiting()));
 }});
 self.addEventListener("activate", event => {{
   event.waitUntil(caches.keys()
