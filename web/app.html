@@ -1896,6 +1896,12 @@ function restore(snap) {
   if (d.samples) { state.samples = d.samples; for (const m of state.samples) registerSample(m); }
   if (d.song) Object.assign(state, d.song);
   if (sounds !== restore.last) { samplesVersion++; restore.last = sounds; }
+  dropMissingInst();
+}
+/* The chosen instrument is a sound or a wave the composition no longer has: back to the piano.
+   (Drawing on with it made strokes that turned into piano at the next start, and the sound was
+   not saved with the project.) */
+function dropMissingInst() {
   if (/^(SMP|WAV):/.test(ui.inst) && !state.samples.some(m => m.id === ui.inst) && !state.waves.some(w => w.id === ui.inst)) ui.inst = "EPIANO";
 }
 function undo() {
@@ -1907,7 +1913,7 @@ function redo() {
   history.push(snapshot()); restore(future.pop()); afterUndo();
 }
 function afterUndo() {
-  sel = null; $("#selBar").hidden = true;
+  sel = null; drag = null; lasso = null; $("#selBar").hidden = true;  // a drag still under way would move nothing (and failed)
   changed({ board: true }); syncChrome(); syncMidiChip(); refreshPanels(); updateUndo();
   if (ui.view === "beat") { buildBeatGrid(); syncBeatControls(); }
   if (ui.view === "wave") renderWaveView();
@@ -3813,6 +3819,7 @@ function appendMidi(tracks, fileName) {
 
 function afterBigChange() {
   clearSelection();
+  dropMissingInst(); syncMidiChip();
   changed({ board: true });
   syncChrome(); refreshPanels();
   if (ui.view === "beat") { buildBeatGrid(); syncBeatControls(); }
