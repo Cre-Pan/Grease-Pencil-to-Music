@@ -129,6 +129,30 @@
 - **Lingue**: italiano, inglese, francese, spagnolo, cinese e russo (Impostazioni →
   Interfaccia → Lingua); al primo avvio segue la lingua del dispositivo. I nomi che scrivi
   (livelli, composizione, suoni, onde) non vengono tradotti.
+- **Gesti a due e tre dita sistemati**: dopo aver suonato la tastiera a sinistra con un dito
+  quel dito restava contato per sempre e i tocchi a due (annulla) e tre dita (ripeti) non
+  funzionavano più; ora i tocchi si leggono dagli eventi touch, che su iPad contano ogni dito,
+  e c'è un po' più di tempo per alzare le dita.
+- **Durata del loop dalla tavola**: − e + accanto ai BPM aggiungono o tolgono battute
+  (tenendo premuto scorrono), oppure trascina la maniglia alla fine del righello. Accorciando,
+  i tratti oltre la fine restano: riallunga e tornano.
+- Niente lente d'ingrandimento, selezione del testo o menu tenendo premuto su tastiere,
+  tavola, pad, cursori e pulsanti.
+- **Tastiera della tavola**: il tasto suonato illumina tutta la riga, che resta accesa un
+  attimo dopo aver alzato il dito, così sai dove disegnare quella nota.
+- Play: il cursore non compare più per un istante alla fine della timeline prima di partire.
+- Il cursore del tempo si trascina: sul righello della tavola e su tutto il piano roll MIDI
+  (durante il play la musica riparte da dove lo lasci).
+- MIDI: una linea molto trasparente segue il mouse o la Pencil sospesa.
+- Bordi della tavola (mouse o Pencil sospesa): sopra e sotto compaiono − e + per togliere o
+  aggiungere un'ottava da quel lato, a destra per togliere o aggiungere una battuta.
+- Livelli: via il testo di spiegazione al passaggio e quelli dentro le impostazioni del
+  livello; toccando la lettura (Quantizzata, Ottica…) si apre la tendina con tutte, le frecce
+  vanno a quella prima o dopo; Armonia è una tendina.
+- Cursori: tocca a destra o a sinistra della manopola per un passo preciso (Pan 10, volumi 5);
+  il Pan si aggancia al centro con più forza e lì la manopola mostra un pallino pieno.
+- Il cerchio del pennello si vede solo sulla tavola e svanisce piano quando la Pencil si
+  allontana.
 - **Nuovi strumenti**: *Organo* (registri a canne con clic del tasto e rotary), *Ottoni*
   (il filtro si apre col fiato, la nota entra con un piccolo scivolo), *Coro* (vocale «a»),
   *Vibrafono* (tremolo del motore, tiene il glissando nella lettura Ottica), *Ocarina*; tra

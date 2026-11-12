@@ -76,7 +76,7 @@ DROP = {"use strict", "SMP:", "WAV:", "Nota saltata:", "Render non riuscito:", "
         "Tastiera MIDI:", "MIDI non leggibile:", "Progetto aperto:", "Progetto non leggibile:", "Come funziona:",
         "· due dita per annullare", "· vuoto", "Fai suonare", "(tieni premuto: solo questo)", "s · tocca per fermare",
         "· {0} tratti ora suonano Piano elettrico", "Strumento:", "Battuta", "Registrazione", "Nascondi", "Mostra", "Silenzia",
-        "Spazio · B · E · S · L", "Do Re Mi", "Italiano", "English", "Français", "Español", "script, style, [data-notr]", "Livelli eliminati · due dita per annullare"}
+        "Spazio · B · E · S · L", "input, textarea, [contenteditable]", "Do Re Mi", "Italiano", "English", "Français", "Español", "script, style, [data-notr]", "Livelli eliminati · due dita per annullare"}
 ADD = ["Pronto: {0}", "Salvato: {0}", "Ora suonano: {0}", "«{0}» è nascosto: rendilo visibile per disegnare.",
        "{0} è fuori dalla tavola: cambia la nota più bassa in Tavola.", "Tastiera MIDI: {0}", "MIDI non leggibile: {0}",
        "Progetto aperto: {0}", "Progetto non leggibile: {0}", "Come funziona: {0}", "due dita per annullare",
@@ -85,7 +85,7 @@ ADD = ["Pronto: {0}", "Salvato: {0}", "Ora suonano: {0}", "«{0}» è nascosto: 
        "Mostra {0} (tieni premuto: solo questo)", "Silenzia {0}", "tocca per fermare", "{0} tratti ora suonano Piano elettrico",
        "Strumento: {0}", "Battuta {0}", "Battute {0}", "{0}: pausa", "{0}: pattern {1}", "Registrazione {0}", "Onda {0}",
        "Livello {0}", "{0} battute", "{0} battuta", "1 tratto", "1 livello", "rilevata", "leggera", "decisa", "media",
-       "pausa", "spessore", "Registrazione", "Spazio", "nessuna nota chiara: {0}"]
+       "pausa", "spessore", "Registrazione", "Spazio", "nessuna nota chiara: {0}", "{0} ottave", "{0} ottava"]
 found = [s for s in found if s not in DROP]
 # keep the strings added by hand earlier (labels built in code the scan cannot see)
 prev = json.loads(out.read_text(encoding="utf-8")) if out.exists() else []
