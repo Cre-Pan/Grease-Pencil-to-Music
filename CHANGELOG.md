@@ -140,6 +140,19 @@
   tavola, pad, cursori e pulsanti.
 - **Tastiera della tavola**: il tasto suonato illumina tutta la riga, che resta accesa un
   attimo dopo aver alzato il dito, così sai dove disegnare quella nota.
+- Play: il cursore non compare più per un istante alla fine della timeline prima di partire.
+- Il cursore del tempo si trascina: sul righello della tavola e su tutto il piano roll MIDI
+  (durante il play la musica riparte da dove lo lasci).
+- MIDI: una linea molto trasparente segue il mouse o la Pencil sospesa.
+- Bordi della tavola (mouse o Pencil sospesa): sopra e sotto compaiono − e + per togliere o
+  aggiungere un'ottava da quel lato, a destra per togliere o aggiungere una battuta.
+- Livelli: via il testo di spiegazione al passaggio e quelli dentro le impostazioni del
+  livello; toccando la lettura (Quantizzata, Ottica…) si apre la tendina con tutte, le frecce
+  vanno a quella prima o dopo; Armonia è una tendina.
+- Cursori: tocca a destra o a sinistra della manopola per un passo preciso (Pan 10, volumi 5);
+  il Pan si aggancia al centro con più forza e lì la manopola mostra un pallino pieno.
+- Il cerchio del pennello si vede solo sulla tavola e svanisce piano quando la Pencil si
+  allontana.
 
 ## 0.0.8
 

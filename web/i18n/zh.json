@@ -558,5 +558,10 @@
  "Accorcia di una battuta": "减少一个小节",
  "batt.": "小节",
  "Allunga di una battuta": "增加一个小节",
- "Durata: {0}": "时长：{0}"
+ "Durata: {0}": "时长：{0}",
+ "È già la nota più bassa.": "已经是最低的音了。",
+ "Massimo 5 ottave.": "最多 5 个八度。",
+ "Almeno un'ottava.": "至少一个八度。",
+ "{0} ottave": "{0} 个八度",
+ "{0} ottava": "{0} 个八度"
 }

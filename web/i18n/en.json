@@ -558,5 +558,10 @@
  "Accorcia di una battuta": "One bar shorter",
  "batt.": "bars",
  "Allunga di una battuta": "One bar longer",
- "Durata: {0}": "Length: {0}"
+ "Durata: {0}": "Length: {0}",
+ "È già la nota più bassa.": "That's already the lowest note.",
+ "Massimo 5 ottave.": "5 octaves at most.",
+ "Almeno un'ottava.": "At least one octave.",
+ "{0} ottave": "{0} octaves",
+ "{0} ottava": "{0} octave"
 }

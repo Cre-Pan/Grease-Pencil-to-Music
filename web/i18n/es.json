@@ -558,5 +558,10 @@
  "Accorcia di una battuta": "Un compás menos",
  "batt.": "comp.",
  "Allunga di una battuta": "Un compás más",
- "Durata: {0}": "Duración: {0}"
+ "Durata: {0}": "Duración: {0}",
+ "È già la nota più bassa.": "Ya es la nota más grave.",
+ "Massimo 5 ottave.": "Máximo 5 octavas.",
+ "Almeno un'ottava.": "Al menos una octava.",
+ "{0} ottave": "{0} octavas",
+ "{0} ottava": "{0} octava"
 }
