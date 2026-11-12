@@ -153,6 +153,20 @@
   il Pan si aggancia al centro con più forza e lì la manopola mostra un pallino pieno.
 - Il cerchio del pennello si vede solo sulla tavola e svanisce piano quando la Pencil si
   allontana.
+- Le sezioni in alto non si allargano più passandoci sopra col puntatore (si spostavano
+  sotto il cursore e, in MIDI, la bolla traballava): i nomi sono nei suggerimenti, e un tocco
+  sulla sezione attiva li mostra tutti.
+- Nuovo menu ≡ accanto a File con Preferenze, Tema e Aiuto (il pulsante ? è sparito); il
+  titolo del brano sta fuori dall'isola, alla sua destra.
+- Gomma: lo spessore si regola col cursore a sinistra quando hai in mano la gomma (non più
+  nella tendina); nuova gomma **Morbida** che assottiglia il tratto (e quindi il volume)
+  prima di toglierlo, per dissolvenze.
+- Il cerchio del pennello sotto la Pencil sospesa si vede di nuovo.
+- Pennarello opaco al 100%; con un'opacità più bassa non si scurisce dove si incrocia, nemmeno
+  con un altro tratto a pennarello dello stesso colore sul livello.
+- Palm rejection: un contatto largo (il palmo), un tocco nella fascia del bordo dalla parte
+  della mano che disegna (Preferenze → Pennello e Pencil → Mano che disegna) dopo aver usato
+  la Pencil, o un tocco appena la Pencil si alza non disegnano e non fanno annulla/ripeti.
 - **Nuovi strumenti**: *Organo* (registri a canne con clic del tasto e rotary), *Ottoni*
   (il filtro si apre col fiato, la nota entra con un piccolo scivolo), *Coro* (vocale «a»),
   *Vibrafono* (tremolo del motore, tiene il glissando nella lettura Ottica), *Ocarina*; tra

@@ -584,5 +584,13 @@
  "Arpa": "竖琴",
  "Glockenspiel": "钟琴",
  "Fagotto": "大管",
- "Tuba": "大号"
+ "Tuba": "大号",
+ "Menu: Preferenze, Tema, Aiuto": "菜单：偏好设置、主题、帮助",
+ "Menu": "菜单",
+ "cosa fa ogni cosa qui": "这里每样东西的作用",
+ "Mano che disegna": "画画的手",
+ "Destra": "右手",
+ "Sinistra": "左手",
+ "Morbida": "柔和",
+ "Assottiglia il tratto dove passi (più piano), poi lo toglie: per dissolvenze in entrata e in uscita.": "在经过处让笔画变细（更轻），然后擦除：用于淡入和淡出。"
 }

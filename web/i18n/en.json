@@ -584,5 +584,13 @@
  "Arpa": "Harp",
  "Glockenspiel": "Glockenspiel",
  "Fagotto": "Bassoon",
- "Tuba": "Tuba"
+ "Tuba": "Tuba",
+ "Menu: Preferenze, Tema, Aiuto": "Menu: Preferences, Theme, Help",
+ "Menu": "Menu",
+ "cosa fa ogni cosa qui": "what everything here does",
+ "Mano che disegna": "Drawing hand",
+ "Destra": "Right",
+ "Sinistra": "Left",
+ "Morbida": "Soft",
+ "Assottiglia il tratto dove passi (più piano), poi lo toglie: per dissolvenze in entrata e in uscita.": "Thins the stroke where you pass (quieter), then removes it: for fade-ins and fade-outs."
 }
