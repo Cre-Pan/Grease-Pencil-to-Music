@@ -402,7 +402,7 @@ Vedi [DESIGN.md](DESIGN.md) per decisioni e roadmap, [RESEARCH.md](RESEARCH.md) 
 GPL-3.0-or-later. La visualizzazione nella Timeline si ispira a
 [Timeline Audio Visualizer](https://github.com/OwOpq/timeline-audio-visualizer) (GPL-3.0).
 
-Gli strumenti campionati della web app (pianoforte, archi, arpa, fiati, ottoni, glockenspiel)
+Gli strumenti campionati e le percussioni registrate della web app
 vengono da [VS Chamber Orchestra: Community Edition](https://github.com/sgossner/VSCO-2-CE)
 di Versilian Studios (Sam Gossner, Simon Dalzell; pianoforte verticale di Simon Dalzell, Ivy
 Audio), in pubblico dominio (CC0 1.0); `tools/build_samples.py` li converte in
