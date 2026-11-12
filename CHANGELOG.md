@@ -2,6 +2,10 @@
 
 ## Web app (iPad)
 
+- **Modificatori** come in Blender, per livello (nelle impostazioni del livello) o per tutto il
+  file (sotto i livelli): Fade, Array, Simmetria, Trasponi e Umanizza. Non distruttivi, dal vivo
+  anche mentre disegni (anche il suono sotto la Pencil), con interruttore, ordine nella pila,
+  Duplica, Applica ed Elimina; valgono per tavola, suono, MIDI, video e miniature.
 - Esporta ridisegnata: la durata a destra del titolo, i numeri in piccole isole; una linea del
   tempo con due maniglie gialle (a passi di un battito, doppio tocco per tornare a tutto) per esportare solo una parte, con
   ascolto da In a Out; un'isola Immagine / Audio / Video / MIDI mostra un pannello alla volta e

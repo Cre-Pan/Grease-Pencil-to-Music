@@ -330,6 +330,28 @@ resta. *Simmetrico* fa sentire lo stesso suono nelle due orecchie; il **?** in a
 due dita annullano, tre ripetono. *Disegna con questa onda* la usa come strumento; le onde sono anche in *Strumento →
 Onde disegnate* ed entrano nel progetto .json.
 
+### Modificatori (come in Blender)
+
+In *Livelli*, toccando il livello attivo si apre la sua pila di **Modificatori**; sotto
+l'elenco dei livelli c'è quella di *Modificatori del file*, che vale per ogni livello (dopo i
+suoi). Non sono distruttivi: cambiano come vedi e senti i tratti (tavola, suono, MIDI, video,
+miniature) senza toccarli, e funzionano **dal vivo anche mentre disegni**, compreso il suono
+che senti sotto la Pencil. Ognuno si accende e spegne con l'interruttore; dal menu **⋯** lo
+sposti nella pila, lo duplichi, lo elimini o lo **Applichi** (diventa parte dei tratti).
+
+| Modificatore | Cosa fa |
+|---|---|
+| **Fade** | lo spessore (cioè il volume) parte sottile e/o finisce sottile: *In*, *Out*, *In e out*; su *Ogni tratto* o su *Tutto il brano* (un crescendo); *Lunghezza* e *Minimo* |
+| **Array** | ripete il tratto *Ogni* tot battiti (mostra anche i secondi), *Copie* o *Ripeti fino alla fine*; *Altezza* sale o scende a ogni copia in gradi della scala (le scale) o in semitoni; *Eco* fa ogni copia più sottile. Con *Ogni* a 0 le copie suonano insieme (accordi) |
+| **Simmetria** | specchia nel *Tempo* (retrogrado) e/o in *Altezza* (inversione) attorno a due centri regolabili, mostrati sulla tavola come linee tratteggiate; *Tieni l'originale* |
+| **Trasponi** | sposta in gradi della scala o in semitoni |
+| **Umanizza** | piccole imperfezioni di tempo, altezza e spessore; *Altro caso* cambia il sorteggio |
+
+L'ordine conta, come in Blender: un *Umanizza* dopo un *Array* rende ogni copia diversa. Le
+copie non si selezionano col lazo (si sposta il tratto disegnato e le copie lo seguono). I
+modificatori sono salvati nel progetto .json; l'import in Blender per ora legge i tratti
+disegnati, senza modificatori (*Applica* prima di esportare per portarli in Blender).
+
 ### Gesti della web app
 
 | Gesto | Azione |
