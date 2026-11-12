@@ -611,5 +611,21 @@
  "Una parte": "A part",
  "Esporta MIDI": "Export MIDI",
  "Esporta WAV": "Export WAV",
- "Forma d'onda del mix: trascina le maniglie per esportarne solo una parte; doppio tocco per tornare a tutto": "Mix waveform: drag the handles to export only a part; double tap to go back to all"
+ "Forma d'onda del mix: trascina le maniglie per esportarne solo una parte; doppio tocco per tornare a tutto": "Mix waveform: drag the handles to export only a part; double tap to go back to all",
+ "Trascina per una tastiera più alta o più bassa": "Drag for a taller or shorter keyboard",
+ "Altezza della tastiera": "Keyboard height",
+ "Tempo: TAP, − +, scrivi": "Tempo: TAP, − +, type",
+ "Durata: battute o secondi, Adatta": "Length: bars or seconds, Fit",
+ "TAP": "TAP",
+ "Tocca TAP a tempo, almeno quattro volte.": "Tap TAP in time, at least four times.",
+ "Secondi": "Seconds",
+ "battuta": "bar",
+ "secondi": "seconds",
+ "La durata giusta per quello che hai disegnato": "The right length for what you drew",
+ "Adatta al disegno": "Fit to drawing",
+ "+4 battute": "+4 bars",
+ "{0} battute di {1} s: la durata va a battute intere": "{0} bars of {1} s: the length goes by whole bars",
+ "{0} secondi a {1} BPM": "{0} seconds at {1} BPM",
+ "{0} BPM": "{0} BPM",
+ "s": "s"
 }

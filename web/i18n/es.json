@@ -611,5 +611,21 @@
  "Una parte": "Una parte",
  "Esporta MIDI": "Exportar MIDI",
  "Esporta WAV": "Exportar WAV",
- "Forma d'onda del mix: trascina le maniglie per esportarne solo una parte; doppio tocco per tornare a tutto": "Forma de onda de la mezcla: arrastra las asas para exportar solo una parte; toca dos veces para volver a todo"
+ "Forma d'onda del mix: trascina le maniglie per esportarne solo una parte; doppio tocco per tornare a tutto": "Forma de onda de la mezcla: arrastra las asas para exportar solo una parte; toca dos veces para volver a todo",
+ "Trascina per una tastiera più alta o più bassa": "Arrastra para un teclado más alto o más bajo",
+ "Altezza della tastiera": "Altura del teclado",
+ "Tempo: TAP, − +, scrivi": "Tempo: TAP, − +, escribir",
+ "Durata: battute o secondi, Adatta": "Duración: compases o segundos, Ajustar",
+ "TAP": "TAP",
+ "Tocca TAP a tempo, almeno quattro volte.": "Toca TAP a tiempo, al menos cuatro veces.",
+ "Secondi": "Segundos",
+ "battuta": "compás",
+ "secondi": "segundos",
+ "La durata giusta per quello che hai disegnato": "La duración justa para lo que dibujaste",
+ "Adatta al disegno": "Ajustar al dibujo",
+ "+4 battute": "+4 compases",
+ "{0} battute di {1} s: la durata va a battute intere": "{0} compases de {1} s: la duración va por compases enteros",
+ "{0} secondi a {1} BPM": "{0} segundos a {1} BPM",
+ "{0} BPM": "{0} BPM",
+ "s": "s"
 }

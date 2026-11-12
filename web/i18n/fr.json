@@ -611,5 +611,21 @@
  "Una parte": "Une partie",
  "Esporta MIDI": "Exporter le MIDI",
  "Esporta WAV": "Exporter le WAV",
- "Forma d'onda del mix: trascina le maniglie per esportarne solo una parte; doppio tocco per tornare a tutto": "Forme d'onde du mix : faites glisser les poignées pour n'exporter qu'une partie ; touchez deux fois pour tout reprendre"
+ "Forma d'onda del mix: trascina le maniglie per esportarne solo una parte; doppio tocco per tornare a tutto": "Forme d'onde du mix : faites glisser les poignées pour n'exporter qu'une partie ; touchez deux fois pour tout reprendre",
+ "Trascina per una tastiera più alta o più bassa": "Faites glisser pour un clavier plus haut ou plus bas",
+ "Altezza della tastiera": "Hauteur du clavier",
+ "Tempo: TAP, − +, scrivi": "Tempo : TAP, − +, saisir",
+ "Durata: battute o secondi, Adatta": "Durée : mesures ou secondes, Ajuster",
+ "TAP": "TAP",
+ "Tocca TAP a tempo, almeno quattro volte.": "Touchez TAP en rythme, au moins quatre fois.",
+ "Secondi": "Secondes",
+ "battuta": "mesure",
+ "secondi": "secondes",
+ "La durata giusta per quello che hai disegnato": "La bonne durée pour ce que vous avez dessiné",
+ "Adatta al disegno": "Ajuster au dessin",
+ "+4 battute": "+4 mesures",
+ "{0} battute di {1} s: la durata va a battute intere": "{0} mesures de {1} s : la durée va par mesures entières",
+ "{0} secondi a {1} BPM": "{0} secondes à {1} BPM",
+ "{0} BPM": "{0} BPM",
+ "s": "s"
 }
