@@ -771,5 +771,11 @@
  "Aggiungi a tutti": "添加到全部",
  "Cerchia i tratti dei livelli selezionati, poi trascinali": "圈选所选图层的笔画，然后拖动",
  "Nessun tratto nei livelli selezionati.": "所选图层中没有笔画。",
- "Angoli: scala · lati: allunga · pallino in alto: ruota · dentro: sposta": "角：缩放 · 边：拉伸 · 顶部圆点：旋转 · 内部：移动"
+ "Angoli: scala · lati: allunga · pallino in alto: ruota · dentro: sposta": "角：缩放 · 边：拉伸 · 顶部圆点：旋转 · 内部：移动",
+ "Safari su iPad non supporta le tastiere MIDI: suona la tastiera sul vetro": "iPad 上的 Safari 不支持 MIDI 键盘：请弹屏幕上的键盘",
+ "Questo browser non supporta le tastiere MIDI: prova Chrome o Edge": "此浏览器不支持 MIDI 键盘：请试试 Chrome 或 Edge",
+ "Nessuna tastiera MIDI collegata": "未连接 MIDI 键盘",
+ "Tastiere MIDI non permesse: consenti l'accesso MIDI al sito nelle impostazioni del browser": "不允许使用 MIDI 键盘：请在浏览器设置中允许此网站访问 MIDI",
+ "ritardo audio": "音频延迟",
+ "con cuffie o casse col filo è più basso": "使用有线耳机或音箱会更低"
 }

@@ -771,5 +771,11 @@
  "Aggiungi a tutti": "Añadir a todas",
  "Cerchia i tratti dei livelli selezionati, poi trascinali": "Rodea trazos de las capas seleccionadas y arrástralos",
  "Nessun tratto nei livelli selezionati.": "No hay trazos en las capas seleccionadas.",
- "Angoli: scala · lati: allunga · pallino in alto: ruota · dentro: sposta": "Esquinas: escalar · lados: estirar · punto de arriba: girar · dentro: mover"
+ "Angoli: scala · lati: allunga · pallino in alto: ruota · dentro: sposta": "Esquinas: escalar · lados: estirar · punto de arriba: girar · dentro: mover",
+ "Safari su iPad non supporta le tastiere MIDI: suona la tastiera sul vetro": "Safari en iPad no admite teclados MIDI: toca el teclado en pantalla",
+ "Questo browser non supporta le tastiere MIDI: prova Chrome o Edge": "Este navegador no admite teclados MIDI: prueba Chrome o Edge",
+ "Nessuna tastiera MIDI collegata": "Ningún teclado MIDI conectado",
+ "Tastiere MIDI non permesse: consenti l'accesso MIDI al sito nelle impostazioni del browser": "Teclados MIDI no permitidos: permite el acceso MIDI a este sitio en los ajustes del navegador",
+ "ritardo audio": "retardo de audio",
+ "con cuffie o casse col filo è più basso": "es menor con auriculares o altavoces con cable"
 }

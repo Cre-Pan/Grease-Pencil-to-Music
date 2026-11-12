@@ -771,5 +771,11 @@
  "Aggiungi a tutti": "Добавить во все",
  "Cerchia i tratti dei livelli selezionati, poi trascinali": "Обведите штрихи выбранных слоёв и перетащите",
  "Nessun tratto nei livelli selezionati.": "В выбранных слоях нет штрихов.",
- "Angoli: scala · lati: allunga · pallino in alto: ruota · dentro: sposta": "Углы: масштаб · стороны: растянуть · кружок сверху: поворот · внутри: перемещение"
+ "Angoli: scala · lati: allunga · pallino in alto: ruota · dentro: sposta": "Углы: масштаб · стороны: растянуть · кружок сверху: поворот · внутри: перемещение",
+ "Safari su iPad non supporta le tastiere MIDI: suona la tastiera sul vetro": "Safari на iPad не поддерживает MIDI-клавиатуры: играйте на экранной клавиатуре",
+ "Questo browser non supporta le tastiere MIDI: prova Chrome o Edge": "Этот браузер не поддерживает MIDI-клавиатуры: попробуйте Chrome или Edge",
+ "Nessuna tastiera MIDI collegata": "MIDI-клавиатура не подключена",
+ "Tastiere MIDI non permesse: consenti l'accesso MIDI al sito nelle impostazioni del browser": "MIDI-клавиатуры запрещены: разрешите сайту доступ к MIDI в настройках браузера",
+ "ritardo audio": "задержка звука",
+ "con cuffie o casse col filo è più basso": "с проводными наушниками или колонками меньше"
 }

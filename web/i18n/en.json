@@ -771,5 +771,11 @@
  "Aggiungi a tutti": "Add to all",
  "Cerchia i tratti dei livelli selezionati, poi trascinali": "Circle strokes of the selected layers, then drag them",
  "Nessun tratto nei livelli selezionati.": "No strokes in the selected layers.",
- "Angoli: scala · lati: allunga · pallino in alto: ruota · dentro: sposta": "Corners: scale · sides: stretch · top knob: rotate · inside: move"
+ "Angoli: scala · lati: allunga · pallino in alto: ruota · dentro: sposta": "Corners: scale · sides: stretch · top knob: rotate · inside: move",
+ "Safari su iPad non supporta le tastiere MIDI: suona la tastiera sul vetro": "Safari on iPad doesn't support MIDI keyboards: play the on-screen keyboard",
+ "Questo browser non supporta le tastiere MIDI: prova Chrome o Edge": "This browser doesn't support MIDI keyboards: try Chrome or Edge",
+ "Nessuna tastiera MIDI collegata": "No MIDI keyboard connected",
+ "Tastiere MIDI non permesse: consenti l'accesso MIDI al sito nelle impostazioni del browser": "MIDI keyboards not allowed: allow MIDI access for this site in the browser settings",
+ "ritardo audio": "audio delay",
+ "con cuffie o casse col filo è più basso": "wired headphones or speakers make it shorter"
 }

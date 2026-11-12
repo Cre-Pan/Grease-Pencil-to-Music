@@ -2,6 +2,12 @@
 
 ## Web app (iPad)
 
+- Tastiera MIDI: la barra del MIDI dice sempre cosa succede (collegata, nessuna tastiera, accesso
+  negato). Su iPad dice che Safari non supporta le tastiere MIDI, perché iPadOS non ha Web MIDI.
+  Le note partono subito, il motore audio è pronto prima del primo tasto e, se l'uscita audio ha
+  molto ritardo (Bluetooth, alcuni driver), lo indica.
+- Livelli: la scritta della lettura ("Quantizzata"...) non compare più passando sopra con la
+  Pencil o il mouse; la sigla (Q, QL...) resta.
 - **Trasforma** (in basso a sinistra, accanto al Lazo): un riquadro attorno alla selezione, o a
   tutti i tratti dei livelli selezionati se non hai lazzato niente, come in Procreate. Gli angoli
   scalano mantenendo le proporzioni, i perni sui lati allungano solo il tempo o solo l'altezza, il
