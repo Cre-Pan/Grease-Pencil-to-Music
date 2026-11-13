@@ -8,6 +8,9 @@
   conteggio dei tratti: per uscire basta toccare altrove.
 - Lazo come in Blender: l'interno si illumina e il bordo è tratteggiato bianco su nero.
 - Il tasto CTRL della barra non torna più al centro con il doppio clic.
+- iPad: tenendo premuto CTRL con un dito, la Pencil (o un altro dito) usa davvero la gomma; il dito
+  sul tasto non conta più come tocco a due dita né come palmo. Il doppio tocco non fa più zoomare
+  Safari.
 - Modificatori: il tasto, ora una stella a sei punte, sta a sinistra di Livelli. Trascinandone
   uno su o giù gli altri si spostano per mostrare dove andrà; trascinato a sinistra si elimina.
 - Livelli: con il mouse o la Pencil si riordinano trascinandoli su o giù (con il dito: tieni

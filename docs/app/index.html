@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Doodle Music</title>
 <meta name="description" content="Disegna musica con la Apple Pencil: tavola, beat, MIDI ed export.">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -97,10 +97,10 @@ img { max-width: 100%; }
   color-scheme: dark;
 }
 
-html { box-sizing: border-box; height: 100%; }
+html { box-sizing: border-box; height: 100%; touch-action: manipulation; }  /* no double-tap zoom in Safari */
 *, *::before, *::after { box-sizing: inherit; }
 body {
-  height: 100%; margin: 0; overflow: hidden; background: var(--ground); color: var(--fg);
+  height: 100%; margin: 0; overflow: hidden; touch-action: manipulation; background: var(--ground); color: var(--fg);
   font-family: var(--font); font-size: 15px; letter-spacing: -0.01em; -webkit-font-smoothing: antialiased;
   -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; overscroll-behavior: none;
   -webkit-touch-callout: none; -webkit-text-size-adjust: 100%;
@@ -4779,10 +4779,12 @@ function looksLikePalm(x, w, h) {
 }
 function fingerTaps(el, onTap, blocked = () => false) {
   let tap = null, last = null;
-  const fingers = list => { let n = 0; for (const t of list) if (t.touchType !== "stylus") n++; return n; };
+  // only the touches on this surface: a finger holding CTRL on the bar is neither a tap nor a palm
+  const mine = t => !t.target || !t.target.nodeType || el.contains(t.target);
+  const fingers = list => { let n = 0; for (const t of list) if (t.touchType !== "stylus" && mine(t)) n++; return n; };
   el.addEventListener("touchstart", e => {
     if (e.cancelable) e.preventDefault();  // no magnifier, text selection or callout on a long press
-    const n = fingers(e.touches), pen = n < e.touches.length;
+    const n = fingers(e.touches), pen = [...e.touches].some(t => t.touchType === "stylus");
     if (!tap) {
       const join = last && e.timeStamp - last.end < 70;  // the same window as the finger dot that waits (pendingTap)
       tap = { t: join ? last.t : e.timeStamp, base: join ? last.max : 0, max: 0, moved: false, off: false, at: new Map() };
@@ -4804,7 +4806,7 @@ function fingerTaps(el, onTap, blocked = () => false) {
     }
   }, { passive: true });
   const end = e => {
-    if (!tap || e.touches.length) return;
+    if (!tap || fingers(e.touches) || [...e.touches].some(t => t.touchType === "stylus" && mine(t))) return;
     const g = tap; tap = null;
     if (g.off || g.moved || e.timeStamp - g.t > 650) return;
     if (g.max === 1) { last = { t: g.t, end: e.timeStamp, max: 1 }; return; }
@@ -6072,33 +6074,55 @@ function applySideY() {
 (() => {
   const grip = $("#sideGrip");
   let g = null;
-  grip.addEventListener("pointerdown", e => {
-    e.preventDefault(); e.stopPropagation();
+  /* A finger is followed with touch events, not pointer events: on iPad, Safari may cancel the
+     pointer of a finger held still while the Pencil draws elsewhere, and a held touch left to the
+     system turns into a long press that takes the other touches with it. */
+  const start = (id, x, y) => {
     const r = $("#sidebar").getBoundingClientRect();
     const inward = r.left + r.width / 2 < innerWidth / 2 ? 1 : -1;  // towards the middle of the screen
-    g = { id: e.pointerId, x: e.clientX, y: e.clientY, dy: e.clientY - (r.top + r.height / 2), mode: "ctrl", inward };
-    try { grip.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    g = { id, x, y, dy: y - (r.top + r.height / 2), mode: "ctrl", inward };
     ctrlDown();
     grip.classList.add("on");
-  });
-  grip.addEventListener("pointermove", e => {
-    if (!g || e.pointerId !== g.id) return;
+  };
+  const move = (x, y) => {
     // pulled towards the middle first: now it moves the bar; otherwise it stays a button
-    const din = (e.clientX - g.x) * g.inward;
-    if (g.mode === "ctrl" && din > 14 && din > Math.abs(e.clientY - g.y)) {
+    const din = (x - g.x) * g.inward;
+    if (g.mode === "ctrl" && din > 14 && din > Math.abs(y - g.y)) {
       g.mode = "move"; ctrlUp(); grip.classList.remove("on"); grip.classList.add("moving");
     }
     if (g.mode !== "move") return;
     const v = $("#viewDraw").getBoundingClientRect();
-    ui.sideY = (e.clientY - g.dy - v.top) / v.height;
+    ui.sideY = (y - g.dy - v.top) / v.height;
     applySideY();
-  });
+  };
   const end = () => {
     if (!g) return;
     if (g.mode === "move") saveSoon(); else ctrlUp();
     g = null; grip.classList.remove("on", "moving");
   };
-  grip.addEventListener("pointerup", end); grip.addEventListener("pointercancel", end);
+  grip.addEventListener("pointerdown", e => {
+    e.preventDefault(); e.stopPropagation();
+    if (e.pointerType === "touch" || g) return;  // a finger: the touch events below
+    try { grip.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    start(e.pointerId, e.clientX, e.clientY);
+  });
+  grip.addEventListener("pointermove", e => { if (g && e.pointerId === g.id) move(e.clientX, e.clientY); });
+  const pend = e => { if (g && e.pointerId === g.id) end(); };
+  grip.addEventListener("pointerup", pend); grip.addEventListener("pointercancel", pend);
+  const touchOf = (e, id) => [...e.changedTouches].find(t => t.identifier === id);
+  grip.addEventListener("touchstart", e => {
+    if (e.cancelable) e.preventDefault();  // no long press, magnifier or callout
+    e.stopPropagation();
+    const t = e.changedTouches[0];
+    if (!g && t) start("t" + t.identifier, t.clientX, t.clientY);
+  }, { passive: false });
+  grip.addEventListener("touchmove", e => {
+    if (!g || typeof g.id !== "string") return;
+    const t = touchOf(e, +g.id.slice(1));
+    if (t) { if (e.cancelable) e.preventDefault(); move(t.clientX, t.clientY); }
+  }, { passive: false });
+  const tend = e => { if (g && typeof g.id === "string" && touchOf(e, +g.id.slice(1))) end(); };
+  grip.addEventListener("touchend", tend); grip.addEventListener("touchcancel", tend);
   addEventListener("resize", applySideY);
 })();
 /* Held down: with the brush, the eraser until you let go; with the eraser, the lasso eraser
@@ -9103,6 +9127,7 @@ if (!inArtifact && "serviceWorker" in navigator && (location.protocol === "https
 }
 // No page zoom from pinches on the interface (Safari).
 document.addEventListener("gesturestart", e => e.preventDefault());
+document.addEventListener("dblclick", e => { if (e.cancelable && !e.target.closest("input, textarea")) e.preventDefault(); }, { passive: false });  // Safari: a double tap never zooms
 
 window.__gp2m = { voicesOf: layer => { const v = []; interpretLayer(layer, v, []); return v; }, addMediaFile, media, restartAudio, waveData, screenOf: (b, p) => [xOf(b), yOf(p)], geoTop: () => geo.top, state: () => state, ui, renderAll, reviewAudio, detectPitch, sampleBuffers, deleteLayers, collectParts, tiled, allNotes, midiBytes, wavBytes, zipBlob, parseMidi, importMidi, beatHits, showView, loop, ensureLoop };
 </script>
