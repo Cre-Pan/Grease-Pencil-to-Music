@@ -801,5 +801,10 @@
  "Copiato: {0}": "已复制：{0}",
  "Tocca i numeri di battuta per scegliere da dove parte; tocca la posizione per vederla in battute o in secondi. Metronomo e BPM in basso.": "点按小节号选择起点；点按位置可切换为小节或秒。节拍器和 BPM 在下方。",
  "Bordi della tavola": "画板边缘",
- "Uno swipe sul bordo: in basso verso giù aggiunge un'ottava sotto, verso su la toglie; in alto il contrario; a destra verso destra aggiunge una battuta, verso sinistra la toglie.": "在边缘滑动：底部向下滑在下方增加一个八度，向上滑删除；顶部相反；右侧向右滑增加一小节，向左滑删除。"
+ "Uno swipe sul bordo: in basso verso giù aggiunge un'ottava sotto, verso su la toglie; in alto il contrario; a destra verso destra aggiunge una battuta, verso sinistra la toglie.": "在边缘滑动：底部向下滑在下方增加一个八度，向上滑删除；顶部相反；右侧向右滑增加一小节，向左滑删除。",
+ "Tieni premuto: gomma (con la gomma: gomma a lazo). Trascina verso il centro e poi su o giù: sposta la barra": "按住：橡皮擦（使用橡皮擦时：套索橡皮擦）。先向中间拖，再上下拖：移动工具栏",
+ "Modificatore": "修饰键",
+ "Famiglie": "类别",
+ "Cancellato · due dita per annullare": "已擦除 · 双指轻点撤销",
+ "Altro": "其他"
 }

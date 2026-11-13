@@ -801,5 +801,10 @@
  "Copiato: {0}": "Скопировано: {0}",
  "Tocca i numeri di battuta per scegliere da dove parte; tocca la posizione per vederla in battute o in secondi. Metronomo e BPM in basso.": "Коснитесь номеров тактов, чтобы выбрать начало; коснитесь позиции, чтобы видеть её в тактах или секундах. Метроном и BPM внизу.",
  "Bordi della tavola": "Края холста",
- "Uno swipe sul bordo: in basso verso giù aggiunge un'ottava sotto, verso su la toglie; in alto il contrario; a destra verso destra aggiunge una battuta, verso sinistra la toglie.": "Смахивание по краю: внизу вниз добавляет октаву снизу, вверх убирает; сверху наоборот; справа вправо добавляет такт, влево убирает."
+ "Uno swipe sul bordo: in basso verso giù aggiunge un'ottava sotto, verso su la toglie; in alto il contrario; a destra verso destra aggiunge una battuta, verso sinistra la toglie.": "Смахивание по краю: внизу вниз добавляет октаву снизу, вверх убирает; сверху наоборот; справа вправо добавляет такт, влево убирает.",
+ "Tieni premuto: gomma (con la gomma: gomma a lazo). Trascina verso il centro e poi su o giù: sposta la barra": "Удерживайте: ластик (с ластиком: ластик-лассо). Потяните к центру, затем вверх или вниз: перемещает панель",
+ "Modificatore": "Модификатор",
+ "Famiglie": "Семейства",
+ "Cancellato · due dita per annullare": "Стёрто · два пальца — отменить",
+ "Altro": "Другое"
 }

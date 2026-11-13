@@ -801,5 +801,10 @@
  "Copiato: {0}": "Copié : {0}",
  "Tocca i numeri di battuta per scegliere da dove parte; tocca la posizione per vederla in battute o in secondi. Metronomo e BPM in basso.": "Touchez les numéros de mesure pour choisir le départ ; touchez la position pour l'afficher en mesures ou en secondes. Métronome et BPM en bas.",
  "Bordi della tavola": "Bords de la planche",
- "Uno swipe sul bordo: in basso verso giù aggiunge un'ottava sotto, verso su la toglie; in alto il contrario; a destra verso destra aggiunge una battuta, verso sinistra la toglie.": "Un balayage sur le bord : en bas, vers le bas ajoute une octave dessous, vers le haut l'enlève ; en haut, l'inverse ; à droite, vers la droite ajoute une mesure, vers la gauche l'enlève."
+ "Uno swipe sul bordo: in basso verso giù aggiunge un'ottava sotto, verso su la toglie; in alto il contrario; a destra verso destra aggiunge una battuta, verso sinistra la toglie.": "Un balayage sur le bord : en bas, vers le bas ajoute une octave dessous, vers le haut l'enlève ; en haut, l'inverse ; à droite, vers la droite ajoute une mesure, vers la gauche l'enlève.",
+ "Tieni premuto: gomma (con la gomma: gomma a lazo). Trascina verso il centro e poi su o giù: sposta la barra": "Maintenir : gomme (avec la gomme : gomme lasso). Glisser vers le centre puis en haut ou en bas : déplace la barre",
+ "Modificatore": "Modificateur",
+ "Famiglie": "Familles",
+ "Cancellato · due dita per annullare": "Effacé · deux doigts pour annuler",
+ "Altro": "Autre"
 }
