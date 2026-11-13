@@ -2,6 +2,24 @@
 
 ## Web app (iPad)
 
+- Barra a sinistra: via Annulla e Ripeti (due e tre dita, ⌘Z); il trattino in mezzo la sposta su
+  o giù (doppio clic: torna al centro).
+- Modificatori: si riordinano trascinandoli per il titolo, spenti si chiudono, Copia e Incolla
+  (con le impostazioni, anche verso un altro livello o i globali). La chiave inglese ha un'isola
+  sua, come il metronomo.
+- Bordi della tavola: niente più + e − né maniglia sul righello. Uno swipe sul bordo cambia
+  l'estensione (in basso giù/su: un'ottava sotto in più o in meno; in alto il contrario; a destra
+  destra/sinistra: una battuta in più o in meno). Il bordo si illumina seguendo gli angoli
+  arrotondati, sottile ai lati e più spesso vicino al cursore.
+- Tocco sulla posizione (1.1): battute e battiti o secondi.
+- Cursore: il cerchio solo per Pennello e Gomma; Lazo e Trasforma hanno il loro puntatore.
+- Tastiera laterale: i Do in evidenza con l'ottava ("Do 4"), le altre note più tenui e senza numero.
+- Menu ≡: Tema sulla stessa riga del testo.
+- Beat: "+ Strumento" aggiunge qualunque percussione (fino a 16); il nome in Griglia si trascina
+  per cambiare ordine, in Pad si tiene premuto un pad e lo si sposta; dal menu della traccia
+  Cambia strumento (il ritmo resta) o Rimuovi.
+- MIDI: via la riga con i tasti A W S E D F…; la scelta dello strumento è una finestra larga, con
+  le famiglie affiancate. I tuoi suoni: via la descrizione.
 - Tastiera MIDI: la barra del MIDI dice sempre cosa succede (collegata, nessuna tastiera, accesso
   negato). Su iPad dice che Safari non supporta le tastiere MIDI, perché iPadOS non ha Web MIDI.
   Le note partono subito, il motore audio è pronto prima del primo tasto e, se l'uscita audio ha
