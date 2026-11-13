@@ -26,7 +26,7 @@ HEAD = """<!doctype html>
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>{name}</title>
 <meta name="description" content="Disegna musica con la Apple Pencil: tavola, beat, MIDI ed export.">
 <meta name="apple-mobile-web-app-capable" content="yes">

@@ -68,7 +68,7 @@ out = ROOT / "web" / "i18n" / "source.json"
 print(len(found), "strings found")
 
 # ---- curation: code that looks like text, and the composite phrases built with "+" ----
-DROP = {"use strict", "translate({0}px, {1}px) scale(1.05)", "live-pad add-pad", "input, button", ":scope > .mod", "mini-btn mods-all", "SMP:", "WAV:", "Nota saltata:", "Render non riuscito:", "MThd", "MTrk", ").trim() ||",
+DROP = {"use strict", ').join(", ")})', ')}") 5 4, default', "transform 0.22s var(--spring)", "transform 0.2s, opacity 0.2s", "translate({0}px, {1}px) scale(1.05)", "live-pad add-pad", "input, button", ":scope > .mod", "mini-btn mods-all", "SMP:", "WAV:", "Nota saltata:", "Render non riuscito:", "MThd", "MTrk", ").trim() ||",
         "(prefers-color-scheme: dark)", "top left", "top right", "bottom center", "ctx-menu glass", "ArrowUp",
         "ArrowDown", 'width="16" height="16" viewBox', "swatch sample", "chip wave-chip", "Enter", "Escape",
         "input, select, textarea", "Space", "XxxxXxxxXxxxXxxx", "Sol", "Sol♯", "AbortError", "Pronto:", "Salvato:",

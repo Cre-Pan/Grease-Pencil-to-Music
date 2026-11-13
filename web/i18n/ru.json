@@ -807,5 +807,13 @@
  "Famiglie": "Семейства",
  "Cancellato · due dita per annullare": "Стёрто · два пальца — отменить",
  "Altro": "Другое",
- "Trascina per una tastiera più alta o più bassa (giù fino in fondo la nasconde, un tocco la riporta)": "Потяните, чтобы сделать клавиатуру выше или ниже (до упора вниз — скрыть, касание — вернуть)"
+ "Trascina per una tastiera più alta o più bassa (giù fino in fondo la nasconde, un tocco la riporta)": "Потяните, чтобы сделать клавиатуру выше или ниже (до упора вниз — скрыть, касание — вернуть)",
+ "Strumento della selezione": "Инструмент выделения",
+ "Specchia": "Отразить",
+ "Nel tempo": "По времени",
+ "al contrario": "задом наперёд",
+ "In altezza": "По высоте",
+ "note capovolte": "ноты перевёрнуты",
+ "La stella apre una finestra mobile: i modificatori dei livelli selezionati o quelli globali, per tutti i livelli.": "Звезда открывает плавающее окно: модификаторы выбранных слоёв или глобальные, для всех слоёв.",
+ "Eliminato: {0} · due dita per annullare": "Удалено: {0} · два пальца — отменить"
 }

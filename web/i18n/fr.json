@@ -807,5 +807,13 @@
  "Famiglie": "Familles",
  "Cancellato · due dita per annullare": "Effacé · deux doigts pour annuler",
  "Altro": "Autre",
- "Trascina per una tastiera più alta o più bassa (giù fino in fondo la nasconde, un tocco la riporta)": "Faites glisser pour un clavier plus haut ou plus bas (tout en bas : il se cache, un toucher le ramène)"
+ "Trascina per una tastiera più alta o più bassa (giù fino in fondo la nasconde, un tocco la riporta)": "Faites glisser pour un clavier plus haut ou plus bas (tout en bas : il se cache, un toucher le ramène)",
+ "Strumento della selezione": "Instrument de la sélection",
+ "Specchia": "Miroir",
+ "Nel tempo": "Dans le temps",
+ "al contrario": "à l’envers",
+ "In altezza": "En hauteur",
+ "note capovolte": "notes inversées",
+ "La stella apre una finestra mobile: i modificatori dei livelli selezionati o quelli globali, per tutti i livelli.": "L’étoile ouvre une fenêtre flottante : les modificateurs des calques sélectionnés, ou les globaux pour tous les calques.",
+ "Eliminato: {0} · due dita per annullare": "Supprimé : {0} · deux doigts pour annuler"
 }
