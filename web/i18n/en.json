@@ -807,5 +807,13 @@
  "Famiglie": "Families",
  "Cancellato · due dita per annullare": "Erased · two fingers to undo",
  "Altro": "Other",
- "Trascina per una tastiera più alta o più bassa (giù fino in fondo la nasconde, un tocco la riporta)": "Drag for a taller or shorter keyboard (all the way down hides it, a tap brings it back)"
+ "Trascina per una tastiera più alta o più bassa (giù fino in fondo la nasconde, un tocco la riporta)": "Drag for a taller or shorter keyboard (all the way down hides it, a tap brings it back)",
+ "Strumento della selezione": "Selection instrument",
+ "Specchia": "Mirror",
+ "Nel tempo": "In time",
+ "al contrario": "backwards",
+ "In altezza": "In pitch",
+ "note capovolte": "notes upside down",
+ "La stella apre una finestra mobile: i modificatori dei livelli selezionati o quelli globali, per tutti i livelli.": "The star opens a floating window: the modifiers of the selected layers, or the global ones for every layer.",
+ "Eliminato: {0} · due dita per annullare": "Deleted: {0} · two fingers to undo"
 }

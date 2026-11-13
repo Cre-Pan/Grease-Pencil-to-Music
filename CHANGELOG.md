@@ -2,6 +2,16 @@
 
 ## Web app (iPad)
 
+- Cursore e icona di Trasforma: la freccia di iPad, piena e con gli angoli tondi.
+- Selezione: l'isola mostra il colore dello strumento (toccalo per cambiare lo strumento dei
+  tratti selezionati), Specchia (nel tempo o in altezza), Duplica ed Elimina. Niente più Fine né
+  conteggio dei tratti: per uscire basta toccare altrove.
+- Lazo come in Blender: l'interno si illumina e il bordo è tratteggiato bianco su nero.
+- Il tasto CTRL della barra non torna più al centro con il doppio clic.
+- Modificatori: il tasto, ora una stella a sei punte, sta a sinistra di Livelli. Trascinandone
+  uno su o giù gli altri si spostano per mostrare dove andrà; trascinato a sinistra si elimina.
+- Livelli: con il mouse o la Pencil si riordinano trascinandoli su o giù (con il dito: tieni
+  premuto e trascina), e gli altri fanno spazio.
 - MIDI: Seleziona note, Registra e Ricarica l'audio sono in basso a sinistra. La tastiera,
   abbassata fino al limite, si chiude del tutto (resta la maniglia: un tocco o un trascinamento
   verso l'alto la riapre).
