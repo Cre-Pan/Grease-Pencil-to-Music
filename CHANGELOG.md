@@ -2,6 +2,11 @@
 
 ## Web app (iPad)
 
+- MIDI: Seleziona note, Registra e Ricarica l'audio sono in basso a sinistra. La tastiera,
+  abbassata fino al limite, si chiude del tutto (resta la maniglia: un tocco o un trascinamento
+  verso l'alto la riapre).
+- Selezione: l'isola con i comandi sta sotto il riquadro della selezione e lo segue quando lo
+  sposti (sopra, se sotto non c'è spazio). Duplica ed Elimina sono solo icone.
 - Barra a sinistra: il tasto tra opacità e spessore fa da CTRL. Tenuto premuto passa alla gomma
   finché lo tieni (dal pennello); con la gomma diventa una gomma a lazo che cancella tutto quello
   che il lazo racchiude. Per spostare la barra si trascina il tasto verso il centro e poi su o giù.
