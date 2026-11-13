@@ -2,6 +2,8 @@
 
 ## Web app (iPad)
 
+- MIDI: le note spostate con il lazo restano dove le lasci, senza tornare per un attimo al posto di
+  prima mentre il disegno viene riletto.
 - Barra a sinistra: via Annulla e Ripeti (due e tre dita, ⌘Z); il trattino in mezzo la sposta su
   o giù (doppio clic: torna al centro).
 - Modificatori: si riordinano trascinandoli per il titolo, spenti si chiudono, Copia e Incolla

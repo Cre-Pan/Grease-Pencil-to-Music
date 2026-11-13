@@ -5861,7 +5861,16 @@ const rollEnd = e => {
     }
     drawRoll(false);
   }
-  if (rollDrag && e.pointerId === rollDrag.id) { rollDrag = null; applyMove(); showMidiStatus(); drawRoll(false); }
+  if (rollDrag && e.pointerId === rollDrag.id) {
+    rollDrag = null;
+    /* The notes shown come from the last reading of the drawing, which takes a moment to redo:
+       move them now, so they stay where you dropped them instead of jumping back until then. */
+    if (sel && (sel.db || sel.dp)) {
+      const dt = sel.db * spb();
+      for (const n of rollNotes()) if (sel.ids.has(n.sid)) { n.start += dt; n.end += dt; if (!isDrum(n.inst)) n.midi += sel.dp; }
+    }
+    applyMove(); showMidiStatus(); drawRoll(true);
+  }
 };
 roll.addEventListener("pointerup", rollEnd);
 roll.addEventListener("pointercancel", rollEnd);
