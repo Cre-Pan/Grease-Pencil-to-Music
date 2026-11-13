@@ -801,5 +801,11 @@
  "Copiato: {0}": "Copiado: {0}",
  "Tocca i numeri di battuta per scegliere da dove parte; tocca la posizione per vederla in battute o in secondi. Metronomo e BPM in basso.": "Toca los números de compás para elegir dónde empieza; toca la posición para verla en compases o segundos. Metrónomo y BPM abajo.",
  "Bordi della tavola": "Bordes del lienzo",
- "Uno swipe sul bordo: in basso verso giù aggiunge un'ottava sotto, verso su la toglie; in alto il contrario; a destra verso destra aggiunge una battuta, verso sinistra la toglie.": "Un deslizamiento en el borde: abajo, hacia abajo añade una octava debajo y hacia arriba la quita; arriba, al revés; a la derecha, hacia la derecha añade un compás y hacia la izquierda lo quita."
+ "Uno swipe sul bordo: in basso verso giù aggiunge un'ottava sotto, verso su la toglie; in alto il contrario; a destra verso destra aggiunge una battuta, verso sinistra la toglie.": "Un deslizamiento en el borde: abajo, hacia abajo añade una octava debajo y hacia arriba la quita; arriba, al revés; a la derecha, hacia la derecha añade un compás y hacia la izquierda lo quita.",
+ "Tieni premuto: gomma (con la gomma: gomma a lazo). Trascina verso il centro e poi su o giù: sposta la barra": "Mantén pulsado: goma (con la goma: goma de lazo). Arrastra hacia el centro y luego arriba o abajo: mueve la barra",
+ "Modificatore": "Modificador",
+ "Famiglie": "Familias",
+ "Cancellato · due dita per annullare": "Borrado · dos dedos para deshacer",
+ "Altro": "Otros",
+ "Trascina per una tastiera più alta o più bassa (giù fino in fondo la nasconde, un tocco la riporta)": "Arrastra para un teclado más alto o más bajo (hasta abajo lo oculta, un toque lo recupera)"
 }

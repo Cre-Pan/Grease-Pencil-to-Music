@@ -2,6 +2,23 @@
 
 ## Web app (iPad)
 
+- MIDI: Seleziona note, Registra e Ricarica l'audio sono in basso a sinistra. La tastiera,
+  abbassata fino al limite, si chiude del tutto (resta la maniglia: un tocco o un trascinamento
+  verso l'alto la riapre).
+- Selezione: l'isola con i comandi sta sotto il riquadro della selezione e lo segue quando lo
+  sposti (sopra, se sotto non c'è spazio). Duplica ed Elimina sono solo icone.
+- Barra a sinistra: il tasto tra opacità e spessore fa da CTRL. Tenuto premuto passa alla gomma
+  finché lo tieni (dal pennello); con la gomma diventa una gomma a lazo che cancella tutto quello
+  che il lazo racchiude. Per spostare la barra si trascina il tasto verso il centro e poi su o giù.
+- Rec, Pennello e Gomma ora sono in basso a sinistra, accanto a Lazo e Trasforma.
+- Cursore e icona di Trasforma come la freccia di iPad: un triangolo pieno con gli angoli tondi.
+- Strumenti: la finestra ha le famiglie a sinistra e i suoni della famiglia scelta a destra, in
+  righe tutte uguali (in MIDI la finestra è larga e i suoni stanno su tre colonne).
+- Lazo: l'area interna si illumina leggermente mentre la disegni (rossa con la gomma a lazo).
+- Bordi: il tratto cresce in modo più graduale vicino al cursore, arriva anche sopra e sotto la
+  tastiera a sinistra e si ferma appena dopo la curva dell'angolo.
+- MIDI: le note spostate con il lazo restano dove le lasci, senza tornare per un attimo al posto di
+  prima mentre il disegno viene riletto.
 - Barra a sinistra: via Annulla e Ripeti (due e tre dita, ⌘Z); il trattino in mezzo la sposta su
   o giù (doppio clic: torna al centro).
 - Modificatori: si riordinano trascinandoli per il titolo, spenti si chiudono, Copia e Incolla

@@ -801,5 +801,11 @@
  "Copiato: {0}": "Copied: {0}",
  "Tocca i numeri di battuta per scegliere da dove parte; tocca la posizione per vederla in battute o in secondi. Metronomo e BPM in basso.": "Tap the bar numbers to choose where it starts; tap the position to see it in bars or seconds. Metronome and BPM at the bottom.",
  "Bordi della tavola": "Board edges",
- "Uno swipe sul bordo: in basso verso giù aggiunge un'ottava sotto, verso su la toglie; in alto il contrario; a destra verso destra aggiunge una battuta, verso sinistra la toglie.": "A swipe on the edge: at the bottom, down adds an octave below and up removes it; at the top the other way round; on the right, right adds a bar and left removes one."
+ "Uno swipe sul bordo: in basso verso giù aggiunge un'ottava sotto, verso su la toglie; in alto il contrario; a destra verso destra aggiunge una battuta, verso sinistra la toglie.": "A swipe on the edge: at the bottom, down adds an octave below and up removes it; at the top the other way round; on the right, right adds a bar and left removes one.",
+ "Tieni premuto: gomma (con la gomma: gomma a lazo). Trascina verso il centro e poi su o giù: sposta la barra": "Hold: eraser (with the eraser: lasso eraser). Drag towards the middle, then up or down: moves the bar",
+ "Modificatore": "Modifier",
+ "Famiglie": "Families",
+ "Cancellato · due dita per annullare": "Erased · two fingers to undo",
+ "Altro": "Other",
+ "Trascina per una tastiera più alta o più bassa (giù fino in fondo la nasconde, un tocco la riporta)": "Drag for a taller or shorter keyboard (all the way down hides it, a tap brings it back)"
 }
