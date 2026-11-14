@@ -815,5 +815,6 @@
  "In altezza": "In pitch",
  "note capovolte": "notes upside down",
  "La stella apre una finestra mobile: i modificatori dei livelli selezionati o quelli globali, per tutti i livelli.": "The star opens a floating window: the modifiers of the selected layers, or the global ones for every layer.",
- "Eliminato: {0} · due dita per annullare": "Deleted: {0} · two fingers to undo"
+ "Eliminato: {0} · due dita per annullare": "Deleted: {0} · two fingers to undo",
+ "Annulla e ripeti nella barra laterale": "Undo and redo in the side bar"
 }
