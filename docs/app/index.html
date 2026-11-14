@@ -269,18 +269,22 @@ canvas { display: block; }
   position: absolute; z-index: 4; left: max(16px, env(safe-area-inset-left, 0px)); top: 50%;
   transform: translateY(-48%); width: 48px; padding: 12px 0; border-radius: 24px;
   display: flex; flex-direction: column; align-items: center; gap: 10px;
+  transition: top 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);  /* follows the finger a moment behind, without jumps */
 }
 .vslider { position: relative; flex: 0 0 auto; margin: 10px 0; width: 30px; height: min(140px, 17vh); touch-action: none; cursor: ns-resize; }
 .vslider::before {
   content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 6px; transform: translateX(-50%);
   border-radius: 3px; background: var(--fill-2);
 }
-.vfill { position: absolute; left: 50%; bottom: 0; width: 6px; transform: translateX(-50%); border-radius: 3px; background: var(--fg-2); }
+.vfill { position: absolute; left: 50%; bottom: 0; width: 6px; transform: translateX(-50%); border-radius: 3px; background: var(--fg-2); transition: height 0.32s var(--ease); }
 .vthumb {
   position: absolute; left: 50%; width: 28px; height: 28px; transform: translate(-50%, 50%); border-radius: 50%;
   background: var(--knob); box-shadow: 0 0.5px 4px rgba(0, 0, 0, 0.28), 0 3px 8px rgba(0, 0, 0, 0.14);
-  transition: transform 0.2s var(--spring);
+  transition: transform 0.2s var(--spring), bottom 0.32s var(--ease);
 }
+/* a value that changes on its own (CTRL: the eraser's size) slides there; under the finger it follows at once */
+.vslider.held .vfill { transition: none; }
+.vslider.held .vthumb { transition: transform 0.2s var(--spring); }
 .vslider:active .vthumb { transform: translate(-50%, 50%) scale(1.12); }
 .side-sep { width: 22px; height: 0.5px; background: var(--sep); }
 /* The button in the middle of the bar (like Procreate's modify button): hold it for the eraser
@@ -840,6 +844,17 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
 .float-win .mods + .mods { margin-top: 12px; padding-top: 12px; border-top: 0.5px solid var(--sep); }
 .mods-all { justify-self: stretch; text-align: center; padding: 10px 12px; color: var(--blue); }
 /* The selection's island sits under the selection (above it near the bottom) and follows it. */
+/* The tool islands: the light behind the chosen tool slides from one to the other. */
+.cap.has-ind { position: relative; }
+.cap.has-ind > .ib { position: relative; z-index: 1; }
+.cap.has-ind > .ib[aria-pressed="true"] { background: transparent; }
+.tool-ind {
+  position: absolute; left: 0; top: 0; width: 44px; height: 44px; border-radius: 50%; background: var(--fill);
+  pointer-events: none; opacity: 0; transition: transform 0.38s var(--spring), opacity 0.2s var(--ease);
+}
+.tool-ind.on { opacity: 1; }
+.tool-ind.instant { transition: none; }
+@media (prefers-reduced-motion: reduce) { .tool-ind, .sidebar, .vfill, .vthumb { transition: none !important; } }
 .sel-bar { top: 74px; left: 50%; padding: 6px; gap: 6px; white-space: nowrap; animation: pop-in 0.3s var(--spring) both; transform-origin: top center; }
 .sel-color { width: 36px; height: 36px; border-radius: 50%; flex: 0 0 auto; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55), 0 0 0 1px var(--sep); transition: transform 0.2s var(--spring); }
 .sel-color:active { transform: scale(0.92); }
@@ -4894,6 +4909,45 @@ function trackStylus(e) {
 }
 for (const type of ["touchstart", "touchmove"]) canvas.addEventListener(type, trackStylus, { passive: true });
 const stylusRecent = () => performance.now() - stylus.time < 150;
+/* CTRL held with a finger while the Pencil draws. On iPad, Safari can fold the Pencil into the
+   held finger's touch: the board then gets the Pencil's touch events but no pen pointer events
+   (or touch ones, which palm rejection drops), and nothing was drawn. While a finger holds CTRL,
+   a Pencil touch with no pen pointer of its own is followed from its touch events. */
+let gripFinger = false, penPointerAt = 0;
+const penFromTouch = new Map(), stylusDown = new Set();  // touch identifier -> the pointerId it is given
+canvas.addEventListener("pointerdown", e => { if (e.isTrusted && e.pointerType === "pen") penPointerAt = performance.now(); }, true);
+function penPointer(type, t, id) {
+  canvas.dispatchEvent(new PointerEvent(type, {
+    bubbles: true, cancelable: true, pointerId: id, pointerType: "pen", isPrimary: true,
+    clientX: t.clientX, clientY: t.clientY, pressure: type === "pointerup" ? 0 : (t.force || 0.5),
+    buttons: type === "pointerup" ? 0 : 1, button: type === "pointermove" ? -1 : 0,
+  }));
+}
+canvas.addEventListener("touchstart", e => {
+  if (!gripFinger) return;
+  for (const t of e.changedTouches) {
+    if (t.touchType !== "stylus") continue;
+    const at = performance.now(), touchId = t.identifier, x = t.clientX, y = t.clientY, force = t.force;
+    stylusDown.add(touchId);
+    setTimeout(() => {
+      if (!stylusDown.has(touchId) || penPointerAt >= at - 80 || current || erasing || lasso || penFromTouch.has(touchId)) return;  // its own pointer came
+      const id = 70000 + touchId;
+      penFromTouch.set(touchId, id);
+      penPointer("pointerdown", { clientX: x, clientY: y, force }, id);
+    }, 24);
+  }
+}, { passive: true });
+canvas.addEventListener("touchmove", e => {
+  for (const t of e.changedTouches) if (penFromTouch.has(t.identifier)) penPointer("pointermove", t, penFromTouch.get(t.identifier));
+}, { passive: true });
+for (const type of ["touchend", "touchcancel"]) canvas.addEventListener(type, e => {
+  for (const t of e.changedTouches) {
+    stylusDown.delete(t.identifier);
+    if (!penFromTouch.has(t.identifier)) continue;
+    penPointer(type === "touchend" ? "pointerup" : "pointercancel", t, penFromTouch.get(t.identifier));
+    penFromTouch.delete(t.identifier);
+  }
+}, { passive: true });
 const isPen = e => e.pointerType === "pen" || (e.pointerType === "touch" && stylusRecent());
 /* Finger taps: two fingers = undo, three = redo, four = play/stop. Read from touch events,
    which on iPad list every finger on the glass even when Safari cancels or merges the pointer
@@ -6240,6 +6294,7 @@ function applySideY() {
     const r = $("#sidebar").getBoundingClientRect();
     const inward = r.left + r.width / 2 < innerWidth / 2 ? 1 : -1;  // towards the middle of the screen
     g = { id, x, y, dy: y - (r.top + r.height / 2), mode: "ctrl", inward };
+    gripFinger = typeof id === "string";
     ctrlDown();
     grip.classList.add("on");
   };
@@ -6257,7 +6312,7 @@ function applySideY() {
   const end = () => {
     if (!g) return;
     if (g.mode === "move") saveSoon(); else ctrlUp();
-    g = null; grip.classList.remove("on", "moving");
+    g = null; gripFinger = false; grip.classList.remove("on", "moving");
   };
   grip.addEventListener("pointerdown", e => {
     e.preventDefault(); e.stopPropagation();
@@ -7334,9 +7389,9 @@ function vslider(el, get, set, label, fmt) {
     bubble.style.left = (r.right - app.left + 18) + "px";
   };
   const fromEvent = e => { const r = el.getBoundingClientRect(); set(clamp(1 - (e.clientY - r.top) / r.height, 0, 1)); paint(); show(); };
-  el.addEventListener("pointerdown", e => { el.setPointerCapture(e.pointerId); fromEvent(e); });
+  el.addEventListener("pointerdown", e => { el.setPointerCapture(e.pointerId); el.classList.add("held"); fromEvent(e); });
   el.addEventListener("pointermove", e => { if (el.hasPointerCapture(e.pointerId)) fromEvent(e); });
-  for (const t of ["pointerup", "pointercancel"]) el.addEventListener(t, () => { bubble.hidden = true; saveSoon(); });
+  for (const t of ["pointerup", "pointercancel"]) el.addEventListener(t, () => { bubble.hidden = true; el.classList.remove("held"); saveSoon(); });
   el.addEventListener("keydown", e => {
     const dv = e.key === "ArrowUp" ? 0.05 : e.key === "ArrowDown" ? -0.05 : 0;
     if (dv) { set(clamp(get() + dv, 0, 1)); paint(); show(); e.preventDefault(); saveSoon(); }
@@ -8871,6 +8926,23 @@ function syncMidiChip() {
   chip.querySelector("span").textContent = INST[ui.inst].name;
 }
 
+/* The light behind the chosen tool in each island slides to it (CTRL included) instead of jumping. */
+function syncToolInd() {
+  for (const cap of [$("#tools"), $("#btnLasso").parentElement]) {
+    if (!cap) continue;
+    let ind = cap.querySelector(":scope > .tool-ind");
+    if (!ind) { ind = document.createElement("i"); ind.className = "tool-ind instant"; cap.prepend(ind); cap.classList.add("has-ind"); }
+    const on = cap.querySelector(':scope > .ib[aria-pressed="true"]');
+    if (on) {
+      const wasOff = !ind.classList.contains("on");
+      if (wasOff) ind.classList.add("instant");  // it appears where the tool is, then slides from there
+      ind.style.transform = `translate(${on.offsetLeft}px, ${on.offsetTop}px)`;
+      if (wasOff) { void ind.offsetWidth; }
+      ind.classList.remove("instant");
+    }
+    ind.classList.toggle("on", !!on);
+  }
+}
 function setTool(tool) {
   if (tool === "transform" && ui.tool !== "transform") ui.toolBefore = ui.tool;
   if (tool === "transform") arrowEmpty = false;
@@ -8884,6 +8956,7 @@ function setTool(tool) {
   $("#btnEraser").setAttribute("aria-pressed", String(tool === "eraser"));
   $("#btnLasso").setAttribute("aria-pressed", String(tool === "lasso"));
   $("#btnLive").setAttribute("aria-pressed", String(tool === "live"));
+  syncToolInd();
   paintSizeSlider();
   liveMetro(tool === "live");
   requestFrame();
@@ -9286,7 +9359,7 @@ paintSizeSlider = vslider($("#sizeSlider"),
   v => { if (erasingTool()) ui.eraserSize = v; else ui.size = SIZE_MIN + v * (SIZE_MAX - SIZE_MIN); requestFrame(); },
   () => (erasingTool() ? "Gomma" : "Spessore"), v => (erasingTool() ? Math.round(eraserRadius()) + " pt" : Math.round(v * 100) + "%"));
 paintOpSlider = vslider($("#opSlider"), () => (ui.opacity - 0.15) / 0.85, v => { ui.opacity = 0.15 + v * 0.85; }, "Opacità", v => Math.round((0.15 + v * 0.85) * 100) + "%");
-syncChrome(); syncMidiChip(); updateUndo(); updateTransport();
+syncChrome(); syncMidiChip(); updateUndo(); updateTransport(); syncToolInd();
 loadSampleAudio();
 const hashView = { disegna: "draw", beat: "beat", midi: "midi", onda: "wave", esporta: "export" }[(location.hash || "").slice(1)];
 {
