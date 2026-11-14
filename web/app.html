@@ -6304,8 +6304,9 @@ function applySideY(h = $("#viewDraw").clientHeight, half = $("#sidebar").offset
     const bar = $("#sidebar"), r = bar.getBoundingClientRect(), v = $("#viewDraw").getBoundingClientRect();
     const inward = r.left + r.width / 2 < innerWidth / 2 ? 1 : -1;  // towards the middle of the screen
     // measured once: reading the layout on every move made the bar lag behind the finger
-    g = { id, x, y, dy: y - (r.top + r.height / 2), mode: "ctrl", inward, bar, vTop: v.top, vH: v.height, half: bar.offsetHeight / 2, at: null, raf: 0 };
+    g = { id, x, y, dy: y - (r.top + r.height / 2), mode: ctrlLocked ? "unlock" : "ctrl", inward, bar, vTop: v.top, vH: v.height, half: bar.offsetHeight / 2, at: null, raf: 0, t0: performance.now() };
     gripFinger = typeof id === "string";
+    if (g.mode === "unlock") { ctrlUp(); return; }  // locked on: this press lets it go
     ctrlDown();
     grip.classList.add("on");
   };
@@ -6313,6 +6314,7 @@ function applySideY(h = $("#viewDraw").clientHeight, half = $("#sidebar").offset
   const follow = () => {
     if (!g) return;
     g.raf = 0;
+    if (g.mode === "unlock") return;
     const [x, y] = g.at, din = (x - g.x) * g.inward;
     // pulled towards the middle first: now it moves the bar; otherwise it stays a button
     if (g.mode === "ctrl" && din > 14 && din > Math.abs(y - g.y)) {
@@ -6332,9 +6334,13 @@ function applySideY(h = $("#viewDraw").clientHeight, half = $("#sidebar").offset
   const end = () => {
     if (!g) return;
     if (g.raf) { cancelAnimationFrame(g.raf); follow(); }
-    if (g.mode === "move") saveSoon(); else ctrlUp();
+    const tap = g.mode === "ctrl" && !g.latched && performance.now() - g.t0 < 300;
+    if (g.mode === "move") saveSoon();
+    else if (tap && ctrl) ctrlLocked = true;  // a quick tap: CTRL stays on until the next tap
+    else if (g.mode === "ctrl") ctrlUp();
     g.bar.classList.remove("lifted", "pulling"); g.bar.style.removeProperty("--lift");  // snaps back into its place
-    g = null; gripFinger = false; grip.classList.remove("on", "moving");
+    g = null; gripFinger = false; grip.classList.remove("moving");
+    if (!ctrlLocked) grip.classList.remove("on");
   };
   grip.addEventListener("pointerdown", e => {
     e.stopPropagation();
@@ -6381,20 +6387,33 @@ function applySideY(h = $("#viewDraw").clientHeight, half = $("#sidebar").offset
 })();
 /* Held down: with the brush, the eraser until you let go; with the eraser, the lasso eraser
    (whatever the loop holds is erased). A stroke under way finishes with the tool it began with. */
-let ctrl = null;
+/* A quick tap locks it on (the button stays lit) until the next tap: on iPad a finger held on
+   the screen keeps the Pencil from reaching the page at all, so holding CTRL can't be combined
+   with the Pencil; tap, draw, tap again. Picking a tool also lets it go. */
+let ctrl = null, ctrlLocked = false, ctrlBusy = false;
 function ctrlDown() {
   if (ctrl) return;
+  ctrlBusy = true;
   if (ui.tool === "brush" || ui.tool === "live") { ctrl = { back: ui.tool }; setTool("eraser"); }
   else if (ui.tool === "eraser") { ctrl = { lasso: true }; eraseLasso = true; }
   else ctrl = {};
+  ctrlBusy = false;
   requestFrame();
 }
 function ctrlUp() {
+  ctrlLocked = false; $("#sideGrip").classList.remove("on");
   if (!ctrl) return;
   const c = ctrl; ctrl = null;
   if (c.lasso) eraseLasso = false;
+  ctrlBusy = true;
   if (c.back && ui.tool === "eraser") setTool(c.back);
+  ctrlBusy = false;
   requestFrame();
+}
+function ctrlToolPicked() {  // a tool chosen by hand while CTRL is locked: CTRL lets go, the tool stays
+  if (!ctrlLocked || ctrlBusy || !ctrl) return;
+  if (ctrl.lasso) eraseLasso = false;
+  ctrl = null; ctrlLocked = false; $("#sideGrip").classList.remove("on");
 }
 /* The keyboard height: ui.kbH in px (0 = the default from the stylesheet, -1 = folded away:
    pulled down past its lowest, only the grip is left, to pull it back up). */
@@ -8984,6 +9003,7 @@ function syncToolInd() {
   }
 }
 function setTool(tool) {
+  ctrlToolPicked();
   if (tool === "transform" && ui.tool !== "transform") ui.toolBefore = ui.tool;
   if (tool === "transform") arrowEmpty = false;
   ui.tool = tool;
