@@ -6372,6 +6372,7 @@ function applySideY(h = $("#viewDraw").clientHeight, half = $("#sidebar").offset
     if (e.cancelable) e.preventDefault();  // no long press, magnifier or callout
     e.stopPropagation();
     const t = e.changedTouches[0];
+    if (g && g.latched) { clearTimeout(latchTimer); end(); }  // the finger is back: a new press
     if (!g && t) start("t" + t.identifier, t.clientX, t.clientY);
   }, { passive: false });
   grip.addEventListener("touchmove", e => {
@@ -6379,8 +6380,21 @@ function applySideY(h = $("#viewDraw").clientHeight, half = $("#sidebar").offset
     const t = touchOf(e, +g.id.slice(1));
     if (t) { if (e.cancelable) e.preventDefault(); move(t.clientX, t.clientY); }
   }, { passive: false });
-  const tend = e => { if (g && typeof g.id === "string" && touchOf(e, +g.id.slice(1))) end(); };
+  /* iPadOS cancels the touches of the fingers when the Pencil lands (its own palm rejection), so
+     a finger holding CTRL got a touchcancel the moment the Pencil came: CTRL let go before the
+     stroke began. A cancelled CTRL stays held (latched) for the Pencil: while it draws, and a
+     moment after it lifts for the next stroke; if no Pencil comes, it lets go. */
+  let latchTimer = 0;
+  const unlatchSoon = ms => { clearTimeout(latchTimer); latchTimer = setTimeout(() => { if (g && g.latched) end(); }, ms); };
+  const tend = e => {
+    if (!g || typeof g.id !== "string" || !touchOf(e, +g.id.slice(1))) return;
+    inputLog(e.type === "touchcancel" ? "tc" : "te", "grip");
+    if (e.type === "touchcancel" && g.mode === "ctrl") { g.latched = true; unlatchSoon(900); return; }
+    end();
+  };
   grip.addEventListener("touchend", tend); grip.addEventListener("touchcancel", tend);
+  document.addEventListener("pointerdown", e => { if (g && g.latched && e.pointerType === "pen") clearTimeout(latchTimer); }, true);
+  for (const type of ["pointerup", "pointercancel"]) document.addEventListener(type, e => { if (g && g.latched && e.pointerType === "pen") unlatchSoon(700); }, true);
   addEventListener("resize", applySideY);
 })();
 /* Held down: with the brush, the eraser until you let go; with the eraser, the lasso eraser
