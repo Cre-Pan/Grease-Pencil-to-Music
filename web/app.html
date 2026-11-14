@@ -3401,14 +3401,14 @@ async function beatBuffer() {
   return buf;
 }
 
-function masterChain(ctx) {
+function masterChain(ctx, dest = ctx.destination) {
   const bus = ctx.createGain(); bus.gain.value = 0.8;
   const glue = ctx.createDynamicsCompressor();
   glue.threshold.value = -16; glue.ratio.value = 2.5; glue.knee.value = 8; glue.attack.value = 0.012; glue.release.value = 0.25;
   const sat = ctx.createWaveShaper(); sat.curve = softClip; sat.oversample = "2x";
   const lim = ctx.createDynamicsCompressor();
   lim.threshold.value = -2; lim.ratio.value = 20; lim.knee.value = 0; lim.attack.value = 0.002; lim.release.value = 0.08;
-  bus.connect(glue); glue.connect(sat); sat.connect(lim); lim.connect(ctx.destination);
+  bus.connect(glue); glue.connect(sat); sat.connect(lim); lim.connect(dest);
   const conv = ctx.createConvolver(); conv.buffer = reverbIR(ctx.sampleRate);
   const wet = ctx.createGain(); wet.gain.value = 0.8; conv.connect(wet); wet.connect(bus);
   return { bus, send: conv };
@@ -3441,6 +3441,36 @@ async function collectParts(withBeat) {
   }
   return parts;
 }
+/* The loop played in the app is not mixed offline: the layers are summed here, with their
+   volume, pan and reverb send, into a dry and a reverb buffer, and the glue, saturation,
+   limiter and reverb run live (loopIn). The offline mixdown took most of the wait between
+   lifting the Pencil and hearing the stroke. Exports still use renderAll. */
+function sumParts(parts) {
+  const loopN = Math.max(1, Math.round(loopSec() * SR));
+  const mk = () => new AudioBuffer({ length: loopN, numberOfChannels: 2, sampleRate: SR });
+  const dry = mk(), send = mk();
+  const dL = dry.getChannelData(0), dR = dry.getChannelData(1), sL = send.getChannelData(0), sR = send.getChannelData(1);
+  for (const p of parts) {
+    const L = p.buf.getChannelData(0), R = p.buf.numberOfChannels > 1 ? p.buf.getChannelData(1) : L;
+    const pan = clamp(p.pan || 0, -1, 1), x = (pan <= 0 ? pan + 1 : pan) * Math.PI / 2, gl = Math.cos(x), gr = Math.sin(x);
+    // a StereoPanner on a stereo source (Web Audio's equal-power formula)
+    const ll = (pan <= 0 ? 1 : gl) * p.vol, lr = (pan <= 0 ? gl : 0) * p.vol, rl = (pan <= 0 ? 0 : gr) * p.vol, rr = (pan <= 0 ? gr : 1) * p.vol;
+    const k = p.send, n = L.length;
+    for (let i = 0, j = 0; i < n; i++, j++) {
+      if (j === loopN) j = 0;  // the tail rings over the start of the loop
+      const a = L[i], b = R[i];
+      if (a === 0 && b === 0) continue;
+      const oL = ll * a + lr * b, oR = rl * a + rr * b;
+      dL[j] += oL; dR[j] += oR; sL[j] += oL * k; sR[j] += oR * k;
+    }
+  }
+  return { dry, send };
+}
+async function renderLoop() {
+  const parts = await collectParts(true);
+  const { dry, send } = sumParts(parts);
+  return { loop: dry, send, notes: allNotes(true) };
+}
 async function renderAll(withBeat = true) {
   const parts = await collectParts(withBeat);
   const full = await mixdown(parts);
@@ -3459,7 +3489,7 @@ async function renderAll(withBeat = true) {
 
 /* ---------- playback ---------- */
 
-let live = null, liveOut = null, liveSend = null, metroGain = null;
+let live = null, liveOut = null, liveSend = null, metroGain = null, loopIn = null, loopVerb = null;
 const loop = { buffer: null, full: null, notes: [], dirty: true };
 let player = null, renderSerial = 0;
 
@@ -3475,6 +3505,8 @@ function audio() {
     const conv = live.createConvolver(); conv.buffer = reverbIR(live.sampleRate);
     liveSend = live.createGain(); liveSend.gain.value = 0.22; liveSend.connect(conv); conv.connect(liveOut);
     metroGain = live.createGain(); metroGain.gain.value = metroLevel(); metroGain.connect(liveOut);
+    // the loop's master chain, as in masterChain (exports), but live
+    const m = masterChain(live, liveOut); loopIn = m.bus; loopVerb = m.send;
   }
   if (live.state !== "running" && live.state !== "closed") live.resume().catch(() => {});
   return live;
@@ -3487,7 +3519,7 @@ async function restartAudio() {
   if (wasPlaying) stop();
   thereminStop();
   const old = live;
-  live = null; liveOut = null; liveSend = null; metroGain = null; player = null;
+  live = null; liveOut = null; liveSend = null; metroGain = null; loopIn = null; loopVerb = null; player = null;
   audio();  // the new engine starts inside the tap, as iPadOS wants
   if (old) old.close().catch(() => {});
   renderCache.clear(); waveCache.clear(); strokeCache.clear(); strokeBytes = 0;
@@ -3512,9 +3544,9 @@ function ensureLoop() {
         const serial = ++renderSerial;
         loop.dirty = false;
         try {
-          const r = await renderAll(true);
+          const r = await renderLoop();
           if (serial === renderSerial) {
-            loop.buffer = r.loop; loop.full = r.full; loop.notes = r.notes; onRendered(); tries = -1; renderFailures = 0;
+            loop.buffer = r.loop; loop.send = r.send; loop.notes = r.notes; onRendered(); tries = -1; renderFailures = 0;
             // heard right away, even if more drawing is already waiting to be rendered
             if (ui.playing && player && live) startPlayer(fraction());
           }
@@ -3570,21 +3602,34 @@ function fraction() {
 /* A player that was swapped out leaves the audio graph once it has stopped: iPad Safari keeps
    nodes still connected (and their loop buffers, megabytes each) alive. */
 function release(pl) {
-  pl.src.onended = () => { for (const n of [pl.src, pl.gain, pl.metro]) try { n.disconnect(); } catch (e) { /* gone */ } };
+  pl.src.onended = () => { for (const n of [pl.src, pl.wet, pl.gain, pl.wgain, pl.metro]) try { n && n.disconnect(); } catch (e) { /* gone */ } };
 }
+/* The loop as it plays: the dry buffer into the master chain, the reverb send into its reverb,
+   started together. */
+function loopVoice(at, offset) {
+  const src = live.createBufferSource(); src.buffer = loop.buffer; src.loop = true;
+  const wet = live.createBufferSource(); wet.buffer = loop.send || loop.buffer; wet.loop = true;
+  const gain = live.createGain(), wgain = live.createGain();
+  src.connect(gain); gain.connect(loopIn); wet.connect(wgain); wgain.connect(loopVerb);
+  src.start(at, offset); wet.start(at, offset);
+  return { src, wet, gain, wgain };
+}
+function fadeVoice(v, at, from, to, dur) {
+  for (const g of [v.gain.gain, v.wgain.gain]) { g.cancelScheduledValues(at); g.setValueAtTime(from, at); g.linearRampToValueAtTime(to, at + dur); }
+}
+function stopVoice(v, when) { for (const n of [v.src, v.wet]) try { n.stop(when); } catch (e) { /* already stopped */ } }
 function startPlayer(frac) {
   const at = live.currentTime + 0.03, len = loop.buffer.duration;
-  const src = live.createBufferSource(); src.buffer = loop.buffer; src.loop = true;
-  const g = live.createGain(); g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(1, at + 0.04);
-  src.connect(g); g.connect(liveOut); src.start(at, frac * len);
+  const v = loopVoice(at, frac * len);
+  fadeVoice(v, at, 0, 1, 0.04);
   const m = live.createBufferSource(); m.buffer = metronomeBuffer(); m.loop = true; m.connect(metroGain); m.start(at, frac * len);
   if (player) {
     const old = player;
-    old.gain.gain.cancelScheduledValues(at); old.gain.gain.setValueAtTime(1, at); old.gain.gain.linearRampToValueAtTime(0, at + 0.04);
-    try { old.src.stop(at + 0.06); old.metro.stop(at); } catch (e) { /* already stopped */ }
+    fadeVoice(old, at, 1, 0, 0.04);
+    stopVoice(old, at + 0.06); try { old.metro.stop(at); } catch (e) { /* already stopped */ }
     release(old);
   }
-  player = { src, gain: g, metro: m, t0: at - frac * len, len, from: frac };
+  player = { ...v, metro: m, t0: at - frac * len, len, from: frac };
 }
 
 async function play() {
@@ -3603,9 +3648,9 @@ async function play() {
 function stop() {
   ui.playing = false;
   if (player && live) {
-    const t = live.currentTime, g = player.gain.gain;
-    g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(0, t + 0.05);
-    try { player.src.stop(t + 0.07); player.metro.stop(t); } catch (e) { /* ignore */ }
+    const t = live.currentTime;
+    fadeVoice(player, t, player.gain.gain.value, 0, 0.05);
+    stopVoice(player, t + 0.07); try { player.metro.stop(t); } catch (e) { /* ignore */ }
     release(player);
   }
   player = null;
@@ -4263,6 +4308,26 @@ function clipBoard(c) { roundRect(c, geo.left, geo.top, geo.right - geo.left, ge
    between two frames. Exports, which read the canvas right away, use renderInkNow. */
 let inkDirty = false;
 function renderInk() { inkDirty = true; requestFrame(); }
+/* Pinch, scroll and wheel zoom: the ink drawn for the old view is stretched to the new one
+   while the gesture moves, and drawn again sharp once it rests. A long drawing redrawn on
+   every frame of a pinch made it stutter on iPad. */
+let inkMap = null, inkStale = false, inkSettle = 0, inkAt = 0;
+const viewMap = () => { const x0 = xOf(0), y0 = yOf(0); return { x0, y0, sx: xOf(1) - x0, sy: yOf(1) - y0 }; };
+function inkViewMoved() {
+  // a few sharp redraws a second still bring in the strokes that come into view
+  if (!inkMap || performance.now() - inkAt > 120) { inkDirty = true; return; }
+  inkStale = true;
+  clearTimeout(inkSettle);
+  inkSettle = setTimeout(renderInk, 140);
+}
+function drawInk(c) {
+  if (!inkStale) { c.drawImage(inkCanvas, 0, 0); return; }
+  const now = viewMap(), k = now.sx / inkMap.sx, ky = now.sy / inkMap.sy;
+  c.save(); c.setTransform(dpr, 0, 0, dpr, 0, 0); clipBoard(c);
+  c.setTransform(k, 0, 0, ky, dpr * (now.x0 - k * inkMap.x0), dpr * (now.y0 - ky * inkMap.y0));
+  c.drawImage(inkCanvas, 0, 0);
+  c.restore();
+}
 /* Strokes outside the visible board (zoomed in) are skipped: their box is kept with their points. */
 const ptsBox = new WeakMap();
 function strokeBox(pts) {
@@ -4284,8 +4349,9 @@ function offBoard(st) {
   return xOf(b[1]) < geo.left - m || xOf(b[0]) > geo.right + m || yOf(b[2]) < geo.top - m || yOf(b[3]) > geo.bottom + m;
 }
 function renderInkNow(only) {  // only: a Set of layer ids, drawn even when hidden (export)
-  inkDirty = false;
+  inkDirty = false; inkStale = false; clearTimeout(inkSettle);
   if (!geo) return;
+  inkMap = viewMap(); inkAt = performance.now();
   const c = inkCanvas.getContext("2d");
   c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, inkCanvas.width, inkCanvas.height);
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -4639,7 +4705,7 @@ function drawBoard() {
     paintBackground(c, xOf(0), yOf(state.low + rowsCount()), xOf(loopBeats()), yOf(state.low));
     c.restore(); c.setTransform(1, 0, 0, 1, 0, 0);
   }
-  c.drawImage(inkCanvas, 0, 0);
+  drawInk(c);
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
   paintModGuides(c);
   if (current) {  // the stroke being drawn goes through the modifiers too: they are live
@@ -5298,8 +5364,11 @@ function commitStroke(st) {
   delete st.dots;
   if (st.brush === "smooth") delete st.brush;
   remember(); state.strokes.push(...made);
-  const c = inkCanvas.getContext("2d");
-  c.save(); c.setTransform(dpr, 0, 0, dpr, 0, 0); clipBoard(c); for (const m of withMods(made)) paintStroke(c, m); c.restore();
+  if (inkStale || inkDirty) renderInk();  // the sheet is for another view: drawn again whole
+  else {
+    const c = inkCanvas.getContext("2d");
+    c.save(); c.setTransform(dpr, 0, 0, dpr, 0, 0); clipBoard(c); for (const m of withMods(made)) paintStroke(c, m); c.restore();
+  }
   changed(); refreshPanels();
 }
 fingerTaps(canvas, fingerTapAction, () => !!(current && !current.finger) || (erasing && erasePen));
@@ -5481,7 +5550,7 @@ let frameQueued = false;
 function requestFrame() { if (!frameQueued) { frameQueued = true; requestAnimationFrame(frame); } }
 function frame() {
   frameQueued = false;
-  if (viewDirty && ui.view === "draw") { viewDirty = false; cacheBoard(); inkDirty = true; syncZoomPill(); }
+  if (viewDirty && ui.view === "draw") { viewDirty = false; cacheBoard(); inkViewMoved(); syncZoomPill(); }
   if (inkDirty) renderInkNow();
   if (liveRec) liveTick();
   for (const m of media.values()) syncMedia(m, false);
@@ -6435,7 +6504,7 @@ for (const ev of ["pointerup", "pointercancel"]) $("#wave").addEventListener(ev,
 function exPreviewStop() {
   if (!exPrev) return;
   const p = exPrev; exPrev = null;
-  if (live) { const t = live.currentTime; p.gain.gain.cancelScheduledValues(t); p.gain.gain.setValueAtTime(p.gain.gain.value, t); p.gain.gain.linearRampToValueAtTime(0, t + 0.04); try { p.src.stop(t + 0.05); } catch (e) { /* ended */ } }
+  if (live) { const t = live.currentTime; fadeVoice(p, t, p.gain.gain.value, 0, 0.04); stopVoice(p, t + 0.05); }
   $("#exPlay").classList.remove("on"); $("#exPlay").setAttribute("aria-label", "Ascolta da In a Out");
   drawTimeline();
 }
@@ -6446,13 +6515,13 @@ $("#exPlay").onclick = async () => {
   await ensureLoop();
   if (!loop.buffer || ui.view !== "export") return;
   const rg = exRange(), len = loop.buffer.duration, from = exSec(rg.a), dur = exSec(rg.b - rg.a);
-  const src = live.createBufferSource(); src.buffer = loop.buffer; src.loop = true;
-  const gain = live.createGain(), at = live.currentTime + 0.03;
-  gain.gain.setValueAtTime(0, at); gain.gain.linearRampToValueAtTime(1, at + 0.02);
-  gain.gain.setValueAtTime(1, at + dur - 0.04); gain.gain.linearRampToValueAtTime(0, at + dur);
-  src.connect(gain); gain.connect(liveOut); src.start(at, from % len); src.stop(at + dur + 0.02);
-  const me = exPrev = { src, gain, at, dur };
-  src.onended = () => { if (exPrev === me) exPreviewStop(); };
+  const at = live.currentTime + 0.03, v = loopVoice(at, from % len), src = v.src;
+  for (const g of [v.gain.gain, v.wgain.gain]) { g.setValueAtTime(0, at); g.linearRampToValueAtTime(1, at + 0.02); g.setValueAtTime(1, at + dur - 0.04); g.linearRampToValueAtTime(0, at + dur); }
+  stopVoice(v, at + dur + 0.02);
+  release(v);
+  const me = exPrev = { ...v, at, dur };
+  const free = src.onended;
+  src.onended = () => { free(); if (exPrev === me) exPreviewStop(); };
   $("#exPlay").classList.add("on"); $("#exPlay").setAttribute("aria-label", "Stop");
   const tick = () => { if (exPrev !== me) return; drawTimeline(); requestAnimationFrame(tick); };
   requestAnimationFrame(tick);
