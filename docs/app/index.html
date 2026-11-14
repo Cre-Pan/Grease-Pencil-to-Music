@@ -129,7 +129,8 @@ canvas { display: block; }
   -webkit-backdrop-filter: blur(26px) saturate(180%); backdrop-filter: blur(26px) saturate(180%);
 }
 .cap { position: absolute; z-index: 6; display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 999px; }
-.top-left, .top-right { position: absolute; z-index: 6; top: 12px; display: flex; gap: 10px; align-items: flex-start; }
+/* below the window controls when the iPad app runs in a window (the inset is 0 full screen) */
+.top-left, .top-right { position: absolute; z-index: 6; top: max(12px, env(safe-area-inset-top, 0px)); display: flex; gap: 10px; align-items: flex-start; }
 .top-left { left: max(16px, env(safe-area-inset-left, 0px)); }
 .top-right { right: max(16px, env(safe-area-inset-right, 0px)); }
 .top-left .cap, .top-right .cap { position: static; }
@@ -141,7 +142,7 @@ canvas { display: block; }
 #app.right-stacked .midi-view { padding-right: 76px; }
 .ib.wide { width: auto; padding: 0 16px 0 12px; gap: 7px; display: inline-flex; border-radius: 999px; font-size: 14px; font-weight: 600; }
 .doc-input { width: 170px; margin: 0 6px 0 2px; padding: 8px 12px; border-radius: 12px; border: 0; background: var(--fill); color: var(--fg); font: 600 14px inherit; }
-.cap-sections { top: 12px; left: 50%; transform: translateX(-50%); }
+.cap-sections { top: max(12px, env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); }
 
 .cap-transport { position: absolute; z-index: 6; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; align-items: center; }
 .cap-transport .cap, .cap-bl .cap { position: static; padding: 6px; gap: 4px; }
@@ -274,7 +275,9 @@ canvas { display: block; }
 /* Pulled out of its place to be moved: it comes a little towards the board, lifted, and follows the finger. */
 .sidebar.lifted { --lift-s: 1.04; box-shadow: 0 14px 36px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.1); transition: transform 0.22s var(--spring), box-shadow 0.2s var(--ease); }
 .sidebar.pulling { transition: transform 0.08s linear; }
-.vslider { position: relative; flex: 0 0 auto; margin: 10px 0; width: 30px; height: min(140px, 17vh); touch-action: none; cursor: ns-resize; }
+/* --pad: the thumb's centre stops this far from either end, so at its lowest or highest it never comes
+   near the CTRL button or the bar's edge */
+.vslider { --pad: 18px; position: relative; flex: 0 0 auto; margin: 10px 0; width: 30px; height: min(164px, 20vh); touch-action: none; cursor: ns-resize; }
 .vslider::before {
   content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 6px; transform: translateX(-50%);
   border-radius: 3px; background: var(--fill-2);
@@ -6413,12 +6416,13 @@ function applySideY(h = $("#viewDraw").clientHeight, half = $("#sidebar").offset
   grip.addEventListener("touchend", tend); grip.addEventListener("touchcancel", tend);
   /* The iPad app: a native view lies over this button and takes the finger there, outside the
      web page, so the Pencil still reaches the board while it is held. It drives the button
-     through these, and the Pencil Pro's squeeze or double tap toggles CTRL. */
+     through these. The Pencil's double tap toggles CTRL; the Pencil Pro's squeeze plays or pauses. */
   if (nativeApp) {
     window.__gp2mGrip = {
       start: (x, y) => { if (g) end(); start("native", x, y); },
       move: (x, y) => { if (g) move(x, y); },
       end: () => end(),
+      playPause: () => (ui.playing ? stop() : play()),  // the Pencil Pro's squeeze
       toggle: () => {
         if (ctrlLocked || ctrl) { ctrlUp(); return; }
         ctrlDown(); if (ctrl) { ctrlLocked = true; grip.classList.add("on"); }
@@ -7487,18 +7491,20 @@ function followPill() {
 function vslider(el, get, set, label, fmt) {
   const paint = () => {
     const v = get();
-    el.querySelector(".vfill").style.height = v * 100 + "%";
-    el.querySelector(".vthumb").style.bottom = v * 100 + "%";
+    const at = `calc(var(--pad) + ${v} * (100% - 2 * var(--pad)))`;  // the thumb's travel, inside the ends
+    el.querySelector(".vfill").style.height = at;
+    el.querySelector(".vthumb").style.bottom = at;
     el.setAttribute("aria-valuenow", Math.round(v * 100));
   };
   const bubble = $("#bubble");
   const show = () => {
     const r = el.getBoundingClientRect(), app = $("#app").getBoundingClientRect();
     bubble.hidden = false; bubble.textContent = translate(typeof label === "function" ? label() : label) + " " + fmt(get());
-    bubble.style.top = (r.top - app.top + r.height * (1 - get()) - 16) + "px";
+    bubble.style.top = (r.top - app.top + pad + (r.height - 2 * pad) * (1 - get()) - 16) + "px";
     bubble.style.left = (r.right - app.left + 18) + "px";
   };
-  const fromEvent = e => { const r = el.getBoundingClientRect(); set(clamp(1 - (e.clientY - r.top) / r.height, 0, 1)); paint(); show(); };
+  const pad = parseFloat(getComputedStyle(el).getPropertyValue("--pad")) || 0;
+  const fromEvent = e => { const r = el.getBoundingClientRect(); set(clamp(1 - (e.clientY - r.top - pad) / Math.max(1, r.height - 2 * pad), 0, 1)); paint(); show(); };
   el.addEventListener("pointerdown", e => { el.setPointerCapture(e.pointerId); el.classList.add("held"); fromEvent(e); });
   el.addEventListener("pointermove", e => { if (el.hasPointerCapture(e.pointerId)) fromEvent(e); });
   for (const t of ["pointerup", "pointercancel"]) el.addEventListener(t, () => { bubble.hidden = true; el.classList.remove("held"); saveSoon(); });

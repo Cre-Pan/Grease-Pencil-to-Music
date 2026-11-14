@@ -4,17 +4,43 @@ import WebKit
 
 @main
 final class AppDelegate: UIResponder, UIApplicationDelegate {
-    var window: UIWindow?
-
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Sound even with the silent switch, mixed like a music app.
+        // Sound even with the silent switch, like a music app.
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
         try? AVAudioSession.sharedInstance().setActive(true)
-        let window = UIWindow(frame: UIScreen.main.bounds)
+        return true
+    }
+
+    func application(_ application: UIApplication, configurationForConnecting session: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        let config = UISceneConfiguration(name: "Main", sessionRole: session.role)
+        config.delegateClass = SceneDelegate.self
+        return config
+    }
+}
+
+/// The scene life cycle, which apps built with the iOS 26 SDK and later must adopt.
+/// One window, resizable in iPadOS windowing; the web app lays itself out to any size.
+final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+    var window: UIWindow?
+
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
+        guard let scene = scene as? UIWindowScene else { return }
+        scene.sizeRestrictions?.minimumSize = CGSize(width: 500, height: 400)
+        let window = UIWindow(windowScene: scene)
         window.rootViewController = WebViewController()
         window.makeKeyAndVisible()
         self.window = window
-        return true
+    }
+}
+
+/// The page reaches the bottom edge: no inset for the home indicator, which otherwise leaves a
+/// band of empty space under the bottom bar. The other insets stay (the window controls when the
+/// app is in a window).
+final class FullScreenWebView: WKWebView {
+    override var safeAreaInsets: UIEdgeInsets {
+        var insets = super.safeAreaInsets
+        insets.bottom = 0
+        return insets
     }
 }
 
@@ -118,7 +144,7 @@ final class WebViewController: UIViewController, WKScriptMessageHandler, WKUIDel
         content.add(self, name: "save")
         config.userContentController = content
 
-        web = WKWebView(frame: .zero, configuration: config)
+        web = FullScreenWebView(frame: .zero, configuration: config)
         web.uiDelegate = self
         web.navigationDelegate = self
         web.allowsLinkPreview = false
@@ -199,23 +225,21 @@ final class WebViewController: UIViewController, WKScriptMessageHandler, WKUIDel
         }
     }
 
-    // MARK: Apple Pencil: double tap (2nd gen, Pro) and squeeze (Pro) toggle CTRL
+    // MARK: Apple Pencil: double tap (2nd gen, Pro) toggles CTRL, squeeze (Pro) plays or pauses
 
-    func pencilInteractionDidTap(_ interaction: UIPencilInteraction) {
-        web.evaluateJavaScript("window.__gp2mGrip && window.__gp2mGrip.toggle()", completionHandler: nil)
+    private func grip(_ call: String) {
+        web.evaluateJavaScript("window.__gp2mGrip && window.__gp2mGrip.\(call)()", completionHandler: nil)
     }
+
+    func pencilInteractionDidTap(_ interaction: UIPencilInteraction) { grip("toggle") }
 
     @available(iOS 17.5, *)
     func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveSqueeze squeeze: UIPencilInteraction.Squeeze) {
-        if squeeze.phase == .ended {
-            web.evaluateJavaScript("window.__gp2mGrip && window.__gp2mGrip.toggle()", completionHandler: nil)
-        }
+        if squeeze.phase == .ended { grip("playPause") }
     }
 
     @available(iOS 17.5, *)
-    func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveTap tap: UIPencilInteraction.Tap) {
-        web.evaluateJavaScript("window.__gp2mGrip && window.__gp2mGrip.toggle()", completionHandler: nil)
-    }
+    func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveTap tap: UIPencilInteraction.Tap) { grip("toggle") }
 
     // MARK: alert / confirm / prompt from the page
 
