@@ -245,10 +245,13 @@ canvas { display: block; }
 /* Left sidebar: thickness, opacity, undo, redo */
 .sidebar {
   position: absolute; z-index: 4; left: max(16px, env(safe-area-inset-left, 0px)); top: 50%;
-  transform: translateY(-48%); width: 48px; padding: 12px 0; border-radius: 24px;
+  transform: translate(var(--lift, 0px), -48%) scale(var(--lift-s, 1)); width: 48px; padding: 12px 0; border-radius: 24px;
   display: flex; flex-direction: column; align-items: center; gap: 10px;
-  transition: top 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);  /* follows the finger a moment behind, without jumps */
+  transition: transform 0.5s var(--spring), box-shadow 0.3s var(--ease);  /* back into its place with a little spring */
 }
+/* Pulled out of its place to be moved: it comes a little towards the board, lifted, and follows the finger. */
+.sidebar.lifted { --lift-s: 1.04; box-shadow: 0 14px 36px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.1); transition: transform 0.22s var(--spring), box-shadow 0.2s var(--ease); }
+.sidebar.pulling { transition: transform 0.08s linear; }
 .vslider { position: relative; flex: 0 0 auto; margin: 10px 0; width: 30px; height: min(140px, 17vh); touch-action: none; cursor: ns-resize; }
 .vslider::before {
   content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 6px; transform: translateX(-50%);
@@ -4891,9 +4894,11 @@ const stylusRecent = () => performance.now() - stylus.time < 150;
    held finger's touch: the board then gets the Pencil's touch events but no pen pointer events
    (or touch ones, which palm rejection drops), and nothing was drawn. While a finger holds CTRL,
    a Pencil touch with no pen pointer of its own is followed from its touch events. */
-let gripFinger = false, penPointerAt = 0;
-const penFromTouch = new Map(), stylusDown = new Set();  // touch identifier -> the pointerId it is given
-canvas.addEventListener("pointerdown", e => { if (e.isTrusted && e.pointerType === "pen") penPointerAt = performance.now(); }, true);
+let gripFinger = false;
+const penFromTouch = new Map(), stylusDown = new Set(), penLive = new Set();  // touch identifier -> the pointerId it is given
+// the Pencil's own pointer events, while they last: then nothing is made up from its touches
+canvas.addEventListener("pointerdown", e => { if (e.isTrusted && e.pointerType === "pen") penLive.add(e.pointerId); }, true);
+for (const type of ["pointerup", "pointercancel"]) canvas.addEventListener(type, e => { if (e.isTrusted) penLive.delete(e.pointerId); }, true);
 function penPointer(type, t, id) {
   canvas.dispatchEvent(new PointerEvent(type, {
     bubbles: true, cancelable: true, pointerId: id, pointerType: "pen", isPrimary: true,
@@ -4901,31 +4906,41 @@ function penPointer(type, t, id) {
     buttons: type === "pointerup" ? 0 : 1, button: type === "pointermove" ? -1 : 0,
   }));
 }
-canvas.addEventListener("touchstart", e => {
-  if (!gripFinger) return;
+/* Listened to on the whole window, before anything else: with a finger held elsewhere, Safari
+   may hand the Pencil's touch to another target, or give it a "touch" pointer that palm
+   rejection drops (and the cursor stopped where it was). */
+const onBoard = t => { const el = document.elementFromPoint(t.clientX, t.clientY); return el === canvas; };
+const penIdle = () => !current && !erasing && !lasso && !drag && !gz && !penLive.size;
+function penTakeOver(t) {
+  const id = 70000 + t.identifier;
+  penFromTouch.set(t.identifier, id);
+  penPointer("pointerdown", t, id);
+}
+addEventListener("touchstart", e => {
   for (const t of e.changedTouches) {
     if (t.touchType !== "stylus") continue;
-    const at = performance.now(), touchId = t.identifier, x = t.clientX, y = t.clientY, force = t.force;
-    stylusDown.add(touchId);
-    setTimeout(() => {
-      if (!stylusDown.has(touchId) || penPointerAt >= at - 80 || current || erasing || lasso || penFromTouch.has(touchId)) return;  // its own pointer came
-      const id = 70000 + touchId;
-      penFromTouch.set(touchId, id);
-      penPointer("pointerdown", { clientX: x, clientY: y, force }, id);
-    }, 24);
+    stylusDown.add(t.identifier);
+    if (!gripFinger || !onBoard(t)) continue;
+    const snap = { identifier: t.identifier, clientX: t.clientX, clientY: t.clientY, force: t.force };
+    setTimeout(() => { if (stylusDown.has(snap.identifier) && !penFromTouch.has(snap.identifier) && penIdle()) penTakeOver(snap); }, 30);
   }
-}, { passive: true });
-canvas.addEventListener("touchmove", e => {
-  for (const t of e.changedTouches) if (penFromTouch.has(t.identifier)) penPointer("pointermove", t, penFromTouch.get(t.identifier));
-}, { passive: true });
-for (const type of ["touchend", "touchcancel"]) canvas.addEventListener(type, e => {
+}, { capture: true, passive: true });
+addEventListener("touchmove", e => {
+  for (const t of e.changedTouches) {
+    if (t.touchType !== "stylus") continue;
+    if (penFromTouch.has(t.identifier)) penPointer("pointermove", t, penFromTouch.get(t.identifier));
+    else if (gripFinger && stylusDown.has(t.identifier) && penIdle() && onBoard(t)) penTakeOver(t);  // its pointer was cancelled
+  }
+}, { capture: true, passive: true });
+for (const type of ["touchend", "touchcancel"]) addEventListener(type, e => {
   for (const t of e.changedTouches) {
     stylusDown.delete(t.identifier);
+    if (!stylusDown.size) penLive.clear();  // the Pencil is up: a pointer Safari never ended is forgotten
     if (!penFromTouch.has(t.identifier)) continue;
     penPointer(type === "touchend" ? "pointerup" : "pointercancel", t, penFromTouch.get(t.identifier));
     penFromTouch.delete(t.identifier);
   }
-}, { passive: true });
+}, { capture: true, passive: true });
 const isPen = e => e.pointerType === "pen" || (e.pointerType === "touch" && stylusRecent());
 /* Finger taps: two fingers = undo, three = redo, four = play/stop. Read from touch events,
    which on iPad list every finger on the glass even when Safari cancels or merges the pointer
@@ -6256,10 +6271,9 @@ keysBox.addEventListener("pointermove", e => {
 for (const t of ["pointerup", "pointercancel"]) keysBox.addEventListener(t, e => noteOff("p" + e.pointerId));
 /* The bar on the left (thickness and opacity): its middle drags it up or down; ui.sideY is
    where its centre sits, as a share of the board's height (0 = the default, in the middle). */
-function applySideY() {
-  const bar = $("#sidebar"), h = $("#viewDraw").clientHeight;
+function applySideY(h = $("#viewDraw").clientHeight, half = $("#sidebar").offsetHeight / 2) {
+  const bar = $("#sidebar");
   if (!ui.sideY || !h) { bar.style.top = ""; return; }
-  const half = bar.offsetHeight / 2;
   bar.style.top = clamp(ui.sideY * h, 80 + half, h - 92 - half) / h * 100 + "%";  // clear of the islands above and below
 }
 (() => {
@@ -6269,27 +6283,39 @@ function applySideY() {
      pointer of a finger held still while the Pencil draws elsewhere, and a held touch left to the
      system turns into a long press that takes the other touches with it. */
   const start = (id, x, y) => {
-    const r = $("#sidebar").getBoundingClientRect();
+    const bar = $("#sidebar"), r = bar.getBoundingClientRect(), v = $("#viewDraw").getBoundingClientRect();
     const inward = r.left + r.width / 2 < innerWidth / 2 ? 1 : -1;  // towards the middle of the screen
-    g = { id, x, y, dy: y - (r.top + r.height / 2), mode: "ctrl", inward };
+    // measured once: reading the layout on every move made the bar lag behind the finger
+    g = { id, x, y, dy: y - (r.top + r.height / 2), mode: "ctrl", inward, bar, vTop: v.top, vH: v.height, half: bar.offsetHeight / 2, at: null, raf: 0 };
     gripFinger = typeof id === "string";
     ctrlDown();
     grip.classList.add("on");
   };
-  const move = (x, y) => {
+  const move = (x, y) => { g.at = [x, y]; if (!g.raf) g.raf = requestAnimationFrame(follow); };  // once a frame
+  const follow = () => {
+    if (!g) return;
+    g.raf = 0;
+    const [x, y] = g.at, din = (x - g.x) * g.inward;
     // pulled towards the middle first: now it moves the bar; otherwise it stays a button
-    const din = (x - g.x) * g.inward;
     if (g.mode === "ctrl" && din > 14 && din > Math.abs(y - g.y)) {
       g.mode = "move"; ctrlUp(); grip.classList.remove("on"); grip.classList.add("moving");
+      g.bar.classList.remove("pulling"); g.bar.classList.add("lifted");
+      g.bar.style.setProperty("--lift", g.inward * 14 + "px");  // out of its place
     }
-    if (g.mode !== "move") return;
-    const v = $("#viewDraw").getBoundingClientRect();
-    ui.sideY = (y - g.dy - v.top) / v.height;
-    applySideY();
+    if (g.mode === "ctrl") {  // a hint of it coming out as the finger pulls towards the board
+      const pull = din > 4 ? Math.min((din - 4) * 0.4, 5) : 0;
+      g.bar.classList.toggle("pulling", pull > 0);
+      g.bar.style.setProperty("--lift", g.inward * pull + "px");
+      return;
+    }
+    ui.sideY = (y - g.dy - g.vTop) / g.vH;
+    applySideY(g.vH, g.half);
   };
   const end = () => {
     if (!g) return;
+    if (g.raf) { cancelAnimationFrame(g.raf); follow(); }
     if (g.mode === "move") saveSoon(); else ctrlUp();
+    g.bar.classList.remove("lifted", "pulling"); g.bar.style.removeProperty("--lift");  // snaps back into its place
     g = null; gripFinger = false; grip.classList.remove("on", "moving");
   };
   grip.addEventListener("pointerdown", e => {
