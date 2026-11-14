@@ -219,6 +219,11 @@ Per installarla come app sulla schermata Home, che funziona anche offline:
    senza connessione; i disegni restano salvati nell'app. Per esportare usa il foglio di
    condivisione → *Salva su File*.
 
+**Progetti**: tutte le composizioni restano sul dispositivo in una galleria con le anteprime e le
+cartelle (il tasto accanto a *File*, o *File → Progetti…*). Tieni premuto un progetto per il menu
+o trascinalo su una cartella per spostarlo. Restano solo su quel dispositivo: per una copia di
+sicurezza o per passarle a Blender usa *Esporta* (file `.json`).
+
 **Aggiornamenti**: quando il branch di GitHub Pages cambia, l'app installata scarica la nuova
 versione la prima volta che la apri con la connessione e mostra *Nuova versione pronta →
 Aggiorna*. I disegni restano. Il link di GitHub Pages è pubblico: chi lo ha può usare l'app,

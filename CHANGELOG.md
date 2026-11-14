@@ -2,6 +2,14 @@
 
 ## Web app (iPad)
 
+- Progetti: una galleria con tutte le composizioni salvate sul dispositivo, con le anteprime del
+  disegno, le cartelle (anche una dentro l'altra) e la ricerca. Si apre dal tasto accanto a File
+  o da *File → Progetti…*. Tocca un progetto per aprirlo, una cartella per entrarci; tieni premuto
+  per il menu (Rinomina, Duplica, Sposta in…, Esporta .json, Elimina) o tieni premuto e trascina
+  su una cartella (o sul percorso in alto) per spostarlo. *Seleziona* lavora su più elementi.
+  Ogni modifica si salva da sola. *File → Nuova* ora crea una nuova composizione (la precedente
+  resta nei Progetti) e *File → Apri…* aggiunge il file ai Progetti; la composizione che avevi
+  diventa il primo progetto.
 - Cursore e icona di Trasforma: la freccia di iPad, piena e con gli angoli tondi.
 - Selezione: l'isola mostra il colore dello strumento (toccalo per cambiare lo strumento dei
   tratti selezionati), Specchia (nel tempo o in altezza), Duplica ed Elimina. Niente più Fine né
