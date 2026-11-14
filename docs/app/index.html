@@ -828,10 +828,11 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
 .cap-bl { position: absolute; z-index: 6; bottom: 14px; left: max(16px, env(safe-area-inset-left, 0px)); display: flex; gap: 10px; }
 @media (max-width: 760px) { .cap-bl { bottom: 82px; } }
 /* The floating window of the modifiers: it stays open while you draw. */
+/* It opens right under its star at the top right (placeModsWin), or beside it when the islands are stacked. */
 .float-win {
-  position: absolute; z-index: 8; left: 16px; bottom: 78px; width: min(360px, calc(100vw - 32px)); max-height: calc(100% - 170px);
-  overflow-y: auto; padding: 14px 16px 16px; border-radius: 26px; background: var(--pop); color: var(--fg);
-  box-shadow: var(--shadow-lg); border: 0.5px solid var(--glass-edge); animation: pop-in 0.32s var(--spring) both; transform-origin: bottom left;
+  position: absolute; z-index: 8; right: 16px; top: 70px; width: min(360px, calc(100vw - 32px)); max-height: calc(100% - 170px);
+  overflow-y: auto; overscroll-behavior: contain; padding: 14px 16px 16px; border-radius: 26px; background: var(--pop); color: var(--fg);
+  box-shadow: var(--shadow-lg); border: 0.5px solid var(--glass-edge); animation: pop-in 0.32s var(--spring) both; transform-origin: var(--origin, top right);
 }
 .float-head { cursor: grab; touch-action: none; margin-bottom: 10px; }
 .float-win > .seg { margin-bottom: 10px; }
@@ -1173,7 +1174,7 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
     </div>
   </div>
 
-  <!-- Bottom left, for the free hand: Live, brush and eraser, lasso and transform, modifiers. -->
+  <!-- Bottom left, for the free hand: Live, brush and eraser, lasso and transform. -->
   <div class="cap-bl" id="editCap">
     <div class="cap glass" id="liveCap">
     <button class="ib" id="btnLive" title="Live: il tempo scorre, la Pencil dà la nota (R)" aria-label="Registrazione live" aria-pressed="false">
@@ -1985,8 +1986,15 @@ function load() {
 /* ---------- history ---------- */
 
 const SONG_KEYS = ["bpm", "bars", "scale", "root", "grid", "low", "octaves", "name", "example"];
-const snapshot = () => JSON.stringify({ layers: state.layers, strokes: state.strokes, active: state.active, beat: state.beat, waves: state.waves, samples: state.samples, mods: state.mods || [],
-  song: Object.fromEntries(SONG_KEYS.map(k => [k, state[k]])) });
+/* An undo step. The strokes are kept as shallow copies that share their point arrays (points are
+   never changed in place: every edit makes new arrays), the rest as JSON. Before, every step was the
+   whole composition as JSON: with a big drawing, 100 steps were hundreds of MB, and iPad Safari
+   reloaded the page (and each stroke cost a long JSON.stringify). */
+const snapshot = () => ({
+  json: JSON.stringify({ layers: state.layers, active: state.active, beat: state.beat, waves: state.waves, samples: state.samples, mods: state.mods || [],
+    song: Object.fromEntries(SONG_KEYS.map(k => [k, state[k]])) }),
+  strokes: state.strokes.map(st => ({ ...st })),
+});
 function remember() {
   state.example = false;  // once you change it, it is your composition
   history.push(snapshot());
@@ -1995,8 +2003,8 @@ function remember() {
   updateUndo();
 }
 function restore(snap) {
-  const d = JSON.parse(snap);
-  state.layers = d.layers; state.strokes = d.strokes; state.active = d.active; state.beat = d.beat; state.mods = d.mods || [];
+  const d = JSON.parse(snap.json);
+  state.layers = d.layers; state.strokes = snap.strokes.map(st => ({ ...st })); state.active = d.active; state.beat = d.beat; state.mods = d.mods || [];
   const sounds = JSON.stringify([d.waves, d.samples]);
   if (d.waves) { state.waves = d.waves; for (const w of state.waves) registerWave(w); }
   if (d.samples) { state.samples = d.samples; for (const m of state.samples) registerSample(m); }
@@ -2027,6 +2035,7 @@ function afterUndo() {
     if (ids.size) { sel = { ids, db: 0, dp: 0 }; syncSelBar(); }
   }
   changed({ board: true }); syncChrome(); syncMidiChip(); refreshPanels(); updateUndo();
+  if (!$("#modsWin").hidden) renderMods();  // its controls belonged to the modifiers before the undo
   if (ui.view === "beat") { buildBeatGrid(); syncBeatControls(); }
   if (ui.view === "wave") renderWaveView();
   if (ui.view === "export") syncExport();
@@ -3349,8 +3358,19 @@ async function voicesBuffer(voices) {
   while (end > 0 && Math.abs(L[end - 1]) < 1e-5 && Math.abs(R[end - 1]) < 1e-5) end--;
   return { at: Math.round(t0 * SR), L: L.slice(0, end), R: R.slice(0, end) };
 }
+/* A stroke's points never change once it is drawn (edits make new arrays), so their JSON is
+   kept with them: the sound caches are keyed by it, and a long drawing was re-stringified on
+   every change. */
+const ptsJSON = new WeakMap();
+function strokeJSON(st) {
+  let p = ptsJSON.get(st.pts);
+  if (p === undefined) { p = JSON.stringify(st.pts); ptsJSON.set(st.pts, p); }
+  const rest = JSON.stringify({ ...st, pts: 0 });
+  return rest.replace(/"pts":0/, () => '"pts":' + p);
+}
+const strokesJSON = strokes => "[" + strokes.map(strokeJSON).join(",") + "]";
 async function strokeBuffer(st, layer) {
-  const key = JSON.stringify([baseKey(), layer.mode, layer.harmony || "OFF", st]);
+  const key = JSON.stringify([baseKey(), layer.mode, layer.harmony || "OFF"]) + strokeJSON(st);
   if (strokeCache.has(key)) { const v = strokeCache.get(key); strokeCache.delete(key); strokeCache.set(key, v); return v; }
   let voices = [];
   if (st.pts.length) interpretStroke(st, layer, voices, []);
@@ -3371,7 +3391,7 @@ async function renderParts(voices, hits) {
 async function layerBuffer(layer) {
   const strokes = layerStrokes(layer);
   if (!strokes.length) return null;
-  const key = JSON.stringify([baseKey(), layer.mode, layer.harmony || "OFF", strokes]);
+  const key = JSON.stringify([baseKey(), layer.mode, layer.harmony || "OFF"]) + strokesJSON(strokes);
   const hit = cacheGet(key);
   if (hit) return hit;
   let buf;
@@ -3641,28 +3661,38 @@ function onRendered() {
 
 /* ---------- live notes (preview, keyboard, MIDI input) ---------- */
 
+/* The output of one live sound (a preview, a key, a pad). iPad Safari keeps every node that is
+   still connected alive, with the chain behind it: unplugged once the sound is over, or each note
+   played while drawing stayed in the audio graph, and after a while the sound crackled and lagged. */
+function liveBus(ctx, seconds) {
+  const g = ctx.createGain(); g.connect(liveOut); g.connect(liveSend);
+  if (seconds != null) unplugLater(g, seconds);
+  return g;
+}
+function unplugLater(node, seconds) { setTimeout(() => { try { node.disconnect(); } catch (e) { /* gone */ } }, Math.max(0, seconds) * 1000 + 1500); }
 let lastPreview = { key: null, time: 0 };
 function previewNote(inst, midi, amp, bright) {
   const ctx = audio(), now = ctx.currentTime;
   const key = inst + midi;
   if (lastPreview.key === key && now - lastPreview.time < 0.12) return;
   lastPreview = { key, time: now };
-  const g = ctx.createGain(); g.connect(liveOut); g.connect(liveSend);
   const dur = isDrum(inst) ? 0.1 : 0.26;
+  const g = liveBus(ctx, dur + (INST[inst].rel || 0.2) * 2 + (isDrum(inst) ? 12 : 3));  // drums: a ringing gong or cymbal
   scheduleVoice(ctx, g, { inst, start: 0, dur, midi, amp: Float32Array.of(amp * 0.85, amp * 0.85), bright }, now + 0.004);
 }
 
 function liveNote(inst, midi, vel) {
   const ctx = audio(), now = ctx.currentTime;  // at once: the attack ramps already avoid a click
-  const g = ctx.createGain(); g.connect(liveOut); g.connect(liveSend);
   const nodes = [];
-  if (isDrum(inst)) { scheduleDrum(ctx, g, inst, now, vel); return { stop() {} }; }
+  if (isDrum(inst)) { scheduleDrum(ctx, liveBus(ctx, 12), inst, now, vel); return { stop() {} }; }
+  const g = liveBus(ctx, 14);  // a key held past its 10 s note: unplugged a little after it ends anyway
   scheduleVoice(ctx, g, { inst, start: 0, dur: 10, midi, amp: Float32Array.of(vel * 0.9, vel * 0.9), bright: ui.opacity }, now, nodes);
   return {
     stop() {
       const t = ctx.currentTime, rel = INST[inst].rel || 0.15;
       g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(g.gain.value, t); g.gain.setTargetAtTime(0, t, rel / 3.5);
       for (const n of nodes) { try { n.stop(t + rel * 2 + 0.1); } catch (e) { /* stopped */ } }
+      unplugLater(g, rel * 2 + 0.2);
     },
   };
 }
@@ -3677,6 +3707,7 @@ function thereminStart(inst, midi, amp) {
   o.frequency.value = hz(midi); lp.frequency.value = 2400;
   g.gain.setValueAtTime(0, ctx.currentTime); g.gain.linearRampToValueAtTime(amp * 0.2, ctx.currentTime + 0.03);
   o.connect(lp); lp.connect(g); g.connect(liveOut); g.connect(liveSend); o.start();
+  o.onended = () => { try { g.disconnect(); } catch (e) { /* gone */ } };
   theremin = { o, g };
 }
 function thereminMove(midi, amp) {
@@ -3950,6 +3981,7 @@ function afterBigChange() {
   dropMissingInst(); syncMidiChip();
   changed({ board: true });
   syncChrome(); refreshPanels();
+  if (!$("#modsWin").hidden) renderMods();
   if (ui.view === "beat") { buildBeatGrid(); syncBeatControls(); }
   if (ui.view === "midi") { ensureLoop(); drawRoll(true); }
   if (ui.view === "export") { syncExport(); ensureLoop(); }
@@ -4183,7 +4215,7 @@ function screenPoints(pts) {
   for (const q of pts) {
     const x = xOf(q[0]), y = yOf(q[1]), r = Math.max(0.8, q[2] * rh / 2);
     const last = out[out.length - 1];
-    if (last && Math.hypot(x - last[0], y - last[1]) < 0.9) { last[2] = Math.max(last[2], r); continue; }
+    if (last && Math.hypot(x - last[0], y - last[1]) < Math.max(0.9, 0.35 * Math.min(r, last[2]))) { last[2] = Math.max(last[2], r); continue; }
     out.push([x, y, r]);
   }
   return out;
@@ -4249,7 +4281,32 @@ function paintStroke(c, st, extra) {
   drawStyled(c, st.brush || "smooth", screenPoints(pts), colorOf(st.inst), st.op);
 }
 function clipBoard(c) { roundRect(c, geo.left, geo.top, geo.right - geo.left, geo.bottom - geo.top, [0, 18, 18, 0]); c.clip(); }
-function renderInk(only) {  // only: a Set of layer ids, drawn even when hidden (export)
+/* The ink is redrawn at most once a frame: erasing, sliders and gestures can ask many times
+   between two frames. Exports, which read the canvas right away, use renderInkNow. */
+let inkDirty = false;
+function renderInk() { inkDirty = true; requestFrame(); }
+/* Strokes outside the visible board (zoomed in) are skipped: their box is kept with their points. */
+const ptsBox = new WeakMap();
+function strokeBox(pts) {
+  let b = ptsBox.get(pts);
+  if (!b) {
+    b = [Infinity, -Infinity, Infinity, -Infinity, 0];
+    for (const q of pts) {
+      if (q[0] < b[0]) b[0] = q[0]; if (q[0] > b[1]) b[1] = q[0];
+      if (q[1] < b[2]) b[2] = q[1]; if (q[1] > b[3]) b[3] = q[1];
+      if (q[2] > b[4]) b[4] = q[2];
+    }
+    ptsBox.set(pts, b);
+  }
+  return b;
+}
+function offBoard(st) {
+  if (!st.pts.length || st.brush === "fill") return false;
+  const b = strokeBox(st.pts), m = b[4] * rowPx() * 2 + 40;
+  return xOf(b[1]) < geo.left - m || xOf(b[0]) > geo.right + m || yOf(b[2]) < geo.top - m || yOf(b[3]) > geo.bottom + m;
+}
+function renderInkNow(only) {  // only: a Set of layer ids, drawn even when hidden (export)
+  inkDirty = false;
   if (!geo) return;
   const c = inkCanvas.getContext("2d");
   c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, inkCanvas.width, inkCanvas.height);
@@ -4262,7 +4319,7 @@ function renderInk(only) {  // only: a Set of layer ids, drawn even when hidden 
        solid on a sheet of their own, and the sheet goes on at their opacity. */
     const sheets = new Map();
     for (const st of layerStrokes(layer)) {
-      if (sel && sel.ids.has(st.id)) continue;
+      if ((sel && sel.ids.has(st.id)) || offBoard(st)) continue;
       if (st.brush === "marker" && st.op < 0.999) {
         const k = colorOf(st.inst) + "|" + st.op;
         if (!sheets.has(k)) { sheets.set(k, []); paintMarkerSheet(c, sheets.get(k), st.op); }
@@ -4522,6 +4579,7 @@ function layerGizmo() {
   syncSelBar(); renderInk();
 }
 $("#selDup").onclick = () => {
+  if (!sel) return;
   remember();
   const copies = selectedStrokes().map(st => ({ ...JSON.parse(JSON.stringify(st)), id: newId("s") }));
   state.strokes.push(...copies);
@@ -4566,6 +4624,7 @@ $("#selMirror").addEventListener("click", e => {
   ]);
 });
 $("#selDel").onclick = () => {
+  if (!sel) return;
   remember();
   const ids = sel.ids;
   state.strokes = state.strokes.filter(st => !ids.has(st.id));
@@ -4744,7 +4803,14 @@ const touches = new Map();
 const eraserRadius = () => 8 + 52 * ui.eraserSize;
 const inBoard = (x, y) => geo && x >= geo.left - 4 && x <= geo.right + 4 && y >= geo.top - 4 && y <= geo.bottom + 4;
 const activeLayer = () => state.layers.find(l => l.id === state.active) || state.layers[0];
-function pointerXY(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+/* The canvas rect is read again at each touch-down and a few times a second, not for every
+   (coalesced) move: reading it after a style change forces a layout on each Pencil sample. */
+let canvasRect = null, canvasRectAt = 0;
+function pointerXY(e) {
+  const now = performance.now();
+  if (!canvasRect || e.type === "pointerdown" || e.type === "touchstart" || now - canvasRectAt > 250) canvasRect = canvas.getBoundingClientRect(), canvasRectAt = now;
+  return { x: e.clientX - canvasRect.left, y: e.clientY - canvasRect.top };
+}
 /* Apple Pencil pressure. Safari reports it on pointer events (pointerType "pen");
    some web views only on touch events (Touch.force with touchType "stylus"), and
    coalesced events may carry 0: fall back to the latest real value. */
@@ -5437,7 +5503,8 @@ let frameQueued = false;
 function requestFrame() { if (!frameQueued) { frameQueued = true; requestAnimationFrame(frame); } }
 function frame() {
   frameQueued = false;
-  if (viewDirty && ui.view === "draw") { viewDirty = false; cacheBoard(); renderInk(); syncZoomPill(); }
+  if (viewDirty && ui.view === "draw") { viewDirty = false; cacheBoard(); inkDirty = true; syncZoomPill(); }
+  if (inkDirty) renderInkNow();
   if (liveRec) liveTick();
   for (const m of media.values()) syncMedia(m, false);
   if (ui.view === "draw") drawBoard();
@@ -5446,12 +5513,14 @@ function frame() {
   updateClock();
   if (ui.playing) requestFrame();
 }
+let clockText = "";
+function setClock(t) { if (t !== clockText) $("#clockNow").textContent = clockText = t; }
 function updateClock() {
   const beats = (ui.playing ? fraction() : ui.startFrac) * loopBeats();
   if (ui.clockUnit === "sec") {  // minutes and seconds, to the tenth
     const t = beats * spb(), m = Math.floor(t / 60), sec = t - m * 60;
-    $("#clockNow").textContent = m + ":" + (sec < 10 ? "0" : "") + sec.toFixed(1);
-  } else $("#clockNow").textContent = (Math.floor(beats / 4) + 1) + "." + (Math.floor(beats % 4) + 1);
+    setClock(m + ":" + (sec < 10 ? "0" : "") + sec.toFixed(1));
+  } else setClock((Math.floor(beats / 4) + 1) + "." + (Math.floor(beats % 4) + 1));
 }
 /* A tap on the position: show it in bars and beats, or in seconds. */
 $("#btnClock").onclick = e => {
@@ -5548,7 +5617,7 @@ document.addEventListener("pointermove", e => {
   painting.touched.add(pad);
   setPad(pad, painting.value);
 });
-document.addEventListener("pointerup", () => { if (painting) { painting = null; changed(); } });
+for (const t of ["pointerup", "pointercancel"]) document.addEventListener(t, () => { if (painting) { painting = null; changed(); } });  // a cancelled touch went on painting with the next pointer
 let beatPan = null;
 document.addEventListener("pointermove", e => {
   if (!beatPan || e.pointerId !== beatPan.id) return;
@@ -5563,7 +5632,7 @@ for (const t of ["pointerup", "pointercancel"]) document.addEventListener(t, e =
 });
 function previewDrum(id) {
   const tr = state.beat.tracks[id], ctx = audio();
-  const g = ctx.createGain(); g.connect(liveOut); g.connect(liveSend);
+  const g = liveBus(ctx, 12);
   scheduleDrum(ctx, g, id, ctx.currentTime + 0.004, 0.9 * (tr.vol ?? 1), null, tr.tune || 0);
 }
 /* Long press on a track name: its volume and tuning. */
@@ -5726,7 +5795,7 @@ function hitPad(id, vel) {
   const pad = $(`#livePads [data-track="${id}"]`);
   if (pad) { pad.classList.add("hit"); setTimeout(() => pad.classList.remove("hit"), 110); }
   const tr = state.beat.tracks[id], ctx = audio();
-  const g = ctx.createGain(); g.connect(liveOut); g.connect(liveSend);
+  const g = liveBus(ctx, 12);
   scheduleDrum(ctx, g, id, ctx.currentTime + 0.003, vel * (tr.vol ?? 1), null, tr.tune || 0);
   if (padRecording && ui.playing && player) {  // into the pattern, on the nearest step
     const b = state.beat, abs = fraction() * loopBeats() * 4, i = Math.round(abs) % b.steps;
@@ -6581,7 +6650,7 @@ async function exportPng() {
   toast("Preparo il file…");
   await withBoard(scale, async () => {
     const shot = async only => {
-      cacheBoard(); renderInk(only);
+      cacheBoard(); renderInkNow(only);
       const crop = boardCrop(transparent), out = document.createElement("canvas");
       out.width = Math.round(crop.w * dpr); out.height = Math.round(crop.h * dpr);
       paintFrame(out.getContext("2d"), crop, dpr, { transparent, bg, frac: null });
@@ -6797,7 +6866,7 @@ async function previewPng() {
   if (!cv || ui.view !== "export" || exKind() !== "png" || !geo || exporting) return;
   const transparent = ui.pngBg === "clear", bg = $("#exPngBg").checked;
   await withBoard(1.5, async () => {
-    cacheBoard(); renderInk();
+    cacheBoard(); renderInkNow();
     const crop = boardCrop(transparent);
     cv.width = Math.round(crop.w * dpr); cv.height = Math.round(crop.h * dpr);
     const c = cv.getContext("2d"); c.clearRect(0, 0, cv.width, cv.height);
@@ -6813,7 +6882,7 @@ async function previewVideo() {
   if (!cv || ui.view !== "export" || !geo || exporting) return;
   const o = videoOptions(), small = 640;  // twice the size it is shown at: sharp on Retina
   await withBoard(1, async () => {
-    cacheBoard(); renderInk();
+    cacheBoard(); renderInkNow();
     const L = videoLayout(o, small);
     cv.width = L.w; cv.height = L.h;
     cv.dataset.tall = String(L.w < L.h);
@@ -6840,7 +6909,7 @@ async function exportVideo() {
   const audioBuf = cutRange(tiled(r.full, loopN, reps), { ...rg, toEnd: false }), length = vB - vA;
   const o = videoOptions(), L0 = videoLayout(o);
   await withBoard(Math.min(3, Math.max(2, L0.k)), async () => {
-    cacheBoard(); renderInk();
+    cacheBoard(); renderInkNow();
     const L = videoLayout(o), out = document.createElement("canvas");
     out.width = L.w; out.height = L.h;
     const paint = makeVideoPainter(out, o, L, [vA, vB]);
@@ -7177,7 +7246,7 @@ function vslider(el, get, set, label, fmt) {
   const fromEvent = e => { const r = el.getBoundingClientRect(); set(clamp(1 - (e.clientY - r.top) / r.height, 0, 1)); paint(); show(); };
   el.addEventListener("pointerdown", e => { el.setPointerCapture(e.pointerId); fromEvent(e); });
   el.addEventListener("pointermove", e => { if (el.hasPointerCapture(e.pointerId)) fromEvent(e); });
-  el.addEventListener("pointerup", () => { bubble.hidden = true; saveSoon(); });
+  for (const t of ["pointerup", "pointercancel"]) el.addEventListener(t, () => { bubble.hidden = true; saveSoon(); });
   el.addEventListener("keydown", e => {
     const dv = e.key === "ArrowUp" ? 0.05 : e.key === "ArrowDown" ? -0.05 : 0;
     if (dv) { set(clamp(get() + dv, 0, 1)); paint(); show(); e.preventDefault(); saveSoon(); }
@@ -8077,7 +8146,7 @@ function modStack(owner, file) {
   for (const m of owner.mods || []) box.append(modCard(owner, m));
   return box;
 }
-/* The floating window of the modifiers (bottom left, by Lazo and Trasforma): the stacks of the
+/* The floating window of the modifiers (it opens by its star, top right): the stacks of the
    selected layers, or the global one (for every layer, after theirs). It stays open while you draw. */
 function renderMods() {
   const body = $("#modsBody"), scope = ui.modScope === "file" ? "file" : "layers";
@@ -8103,24 +8172,53 @@ function renderMods() {
   for (const l of layers) body.append(modStack(l, false));
 }
 function showMods(on) {
-  $("#modsWin").hidden = !on;
+  const win = $("#modsWin"), was = !win.hidden;
+  win.hidden = !on;
   $("#btnMods").setAttribute("aria-pressed", String(!!on));
-  if (on) renderMods();
+  if (on) { renderMods(); if (!was) { modsMoved = false; placeModsWin(); } }
+}
+/* Next to its star: under it, its right edge lined up with the star's (the star sits left of
+   Livelli); when the islands at the top right are stacked down the edge, to the left of the star.
+   Moved by hand, it stays where it was put until it is closed. */
+let modsMoved = false;
+function placeModsWin() {
+  const win = $("#modsWin"), btn = $("#btnMods");
+  if (win.hidden || modsMoved || btn.closest("[hidden]")) return;
+  const app = $("#app").getBoundingClientRect(), r = btn.getBoundingClientRect(), w = win.offsetWidth;
+  const stacked = $("#topRight").classList.contains("stacked"), gap = 10;
+  let left, top, origin;
+  if (stacked && r.left - app.left - gap - w >= 8) {  // beside the column of buttons, if it fits
+    left = r.left - app.left - gap - w; top = r.top - app.top - 6; origin = "top right";
+  } else if (stacked) {  // a phone: under the button, covering the column below it
+    left = r.right - app.left - w; top = r.bottom - app.top + gap; origin = "top right";
+  } else {
+    left = r.right - app.left - w; top = r.bottom - app.top + gap; origin = "top right";
+  }
+  left = clamp(left, 8, app.width - w - 8);
+  top = clamp(top, 8, app.height - 160);
+  win.style.left = left + "px"; win.style.right = "auto";
+  win.style.top = top + "px"; win.style.bottom = "auto";
+  win.style.maxHeight = Math.max(160, app.height - top - 90) + "px";  // clear of the play and time islands at the bottom
+  win.style.setProperty("--origin", origin);
 }
 $("#btnMods").onclick = e => { e.stopPropagation(); closePopovers(); showMods($("#modsWin").hidden); };
 $("#modsClose").onclick = () => showMods(false);
-/* Drag the window by its title, out of the way of the drawing. */
+/* Drag the window by its title, out of the way of the drawing (only the finger, Pencil or mouse
+   that took it: the Pencil drawing meanwhile does not move it). */
 $("#modsHead").addEventListener("pointerdown", e => {
   if (e.target.closest("button")) return;
-  const win = $("#modsWin"), app = $("#app").getBoundingClientRect(), r = win.getBoundingClientRect();
+  const win = $("#modsWin"), app = $("#app").getBoundingClientRect(), r = win.getBoundingClientRect(), id = e.pointerId;
   const dx = e.clientX - r.left, dy = e.clientY - r.top;
-  try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+  try { e.currentTarget.setPointerCapture(id); } catch (err) { /* ignore */ }
   const move = ev => {
-    win.style.left = clamp(ev.clientX - dx - app.left, 8, app.width - r.width - 8) + "px";
-    win.style.top = clamp(ev.clientY - dy - app.top, 70, app.height - 60) + "px";  // below the top islands
-    win.style.bottom = "auto";
+    if (ev.pointerId !== id) return;
+    modsMoved = true;
+    const top = clamp(ev.clientY - dy - app.top, 8, app.height - 60);
+    win.style.left = clamp(ev.clientX - dx - app.left, 8, app.width - r.width - 8) + "px"; win.style.right = "auto";
+    win.style.top = top + "px"; win.style.bottom = "auto";
+    win.style.maxHeight = Math.max(160, app.height - top - 24) + "px";
   };
-  const up = () => { removeEventListener("pointermove", move); removeEventListener("pointerup", up); removeEventListener("pointercancel", up); };
+  const up = ev => { if (ev.pointerId !== id) return; removeEventListener("pointermove", move); removeEventListener("pointerup", up); removeEventListener("pointercancel", up); };
   addEventListener("pointermove", move); addEventListener("pointerup", up); addEventListener("pointercancel", up);
 });
 const ICON_MODS = '<svg viewBox="0 0 24 24"><path d="M12.0 2.4Q12.6 11.0 20.3 7.2Q13.2 12.0 20.3 16.8Q12.6 13.0 12.0 21.6Q11.4 13.0 3.7 16.8Q10.8 12.0 3.7 7.2Q11.4 11.0 12.0 2.4Z" fill="currentColor" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>';
@@ -8242,8 +8340,7 @@ function instButton(inst) {
 /* Held preview: a melodic instrument climbs a chord and keeps its last note; a percussion
    plays a little pattern. Lifting the finger stops it. */
 function longPreview(id) {
-  const ctx = audio(), t0 = ctx.currentTime + 0.01, out = ctx.createGain();
-  out.connect(liveOut); out.connect(liveSend);
+  const ctx = audio(), t0 = ctx.currentTime + 0.01, out = liveBus(ctx, 20);
   const nodes = [];
   if (isDrum(id)) {
     const hold = INST[id].hold;
@@ -8258,6 +8355,7 @@ function longPreview(id) {
     const t = ctx.currentTime;
     out.gain.cancelScheduledValues(t); out.gain.setValueAtTime(out.gain.value, t); out.gain.setTargetAtTime(0, t, 0.08);
     for (const n of nodes) { try { n.stop(t + 0.5); } catch (e) { /* not started or stopped */ } }
+    unplugLater(out, 0.6);
   };
 }
 const ICON_SINE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2.5 12c2.4-7 4.8-7 7.2 0s4.8 7 7.2 0 3.6-5.3 4.6-3.5"/></svg>';
@@ -8421,6 +8519,7 @@ $("#rootUp").onclick = () => { review.root = clamp(review.root + 1, 24, 96); syn
 $("#smpListen").onclick = () => {
   const ctx = audio(), src = ctx.createBufferSource();
   src.buffer = bufferFrom(review.data); src.connect(liveOut); src.start();
+  src.onended = () => { try { src.disconnect(); } catch (e) { /* gone */ } };
 };
 $("#smpRetry").onclick = () => { openSoundSheet(); };
 $("#smpSave").onclick = async () => {
@@ -8653,7 +8752,7 @@ for (const b of document.querySelectorAll("[data-shape]")) b.onclick = () => {
 $("#waveListen").onclick = () => {
   const w = currentWave(); if (!w) return;
   const ctx = audio(), now = ctx.currentTime + 0.02;
-  const g = ctx.createGain(); g.connect(liveOut); g.connect(liveSend);
+  const g = liveBus(ctx, 6);
   [60, 64, 67, 72, 67, 64, 60].forEach((m, i) => scheduleVoice(ctx, g, { inst: w.id, start: i * 0.2, dur: i === 6 ? 0.8 : 0.18, midi: m, amp: Float32Array.of(0.75, 0.75), bright: 1 }, now));
 };
 $("#waveUse").onclick = () => {
@@ -9065,6 +9164,13 @@ document.addEventListener("keydown", e => {
   else if (e.key === "Escape") closePopovers();
 });
 document.addEventListener("keyup", e => { if (e.code in KEYMAP) noteOff("k" + e.code); });
+/* Leaving the page with a key held (⌘Tab, the app switcher): the keyup never comes, the note
+   would ring on. Let go of the computer keys and of a key of the board. */
+addEventListener("blur", () => {
+  for (const k of [...heldNotes.keys()]) if (k[0] === "k") noteOff(k);
+  if (keyPress) keyPressEnd();
+  if (ctrl) ctrlUp();
+});
 
 /* ---------- start ---------- */
 
@@ -9102,6 +9208,7 @@ setCompact(false);
 startTranslating();
 new ResizeObserver(() => {
   fitTabs();
+  placeModsWin();
   if (ui.view === "draw") layoutDraw();
   if (ui.view === "midi") { buildKeys(); drawRoll(true); }
   if (ui.view === "export") drawWave();
