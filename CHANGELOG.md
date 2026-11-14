@@ -10,6 +10,8 @@
   Ogni modifica si salva da sola. *File → Nuova* ora crea una nuova composizione (la precedente
   resta nei Progetti) e *File → Apri…* aggiunge il file ai Progetti; la composizione che avevi
   diventa il primo progetto.
+- Galleria: tieni premuto e trascina per riordinare i progetti (ordine *Personale*); un progetto
+  lasciato sopra un altro crea una cartella con entrambi. Tolto *Chiudi* in alto a destra.
 - L'app si apre sulla galleria, come Procreate: titolo Doodle Music, comandi in una capsula e +
   tondo a destra. Un link a una sezione (#disegna, #beat…) apre ancora la sezione.
 - Cursore e icona di Trasforma: la freccia di iPad, piena e con gli angoli tondi.
