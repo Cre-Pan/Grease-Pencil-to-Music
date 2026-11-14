@@ -21,7 +21,8 @@ targets:
         CFBundleShortVersionString: "1.0"
         CFBundleVersion: "1"
         UILaunchScreen: {}
-        UIRequiresFullScreen: true
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
         UIStatusBarHidden: true
         UIViewControllerBasedStatusBarAppearance: true
         UIBackgroundModes: [audio]

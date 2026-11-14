@@ -15,9 +15,16 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+      - name: Use the newest Xcode (the latest iPadOS SDK)
+        run: |
+          ls -d /Applications/Xcode*.app
+          latest=$(ls -d /Applications/Xcode_*.app | grep -v -i beta | sort -V | tail -1)
+          [ -n "$latest" ] && sudo xcode-select -s "$latest"
+          xcodebuild -version
+          xcodebuild -showsdks | grep -i iphoneos
       - name: Generate the Xcode project
         run: |
           brew install xcodegen
