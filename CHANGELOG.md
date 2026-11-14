@@ -12,6 +12,8 @@
   diventa il primo progetto.
 - Galleria: tieni premuto e trascina per riordinare i progetti (ordine *Personale*); un progetto
   lasciato sopra un altro crea una cartella con entrambi. Tolto *Chiudi* in alto a destra.
+- Galleria: tocca il nome di un progetto o di una cartella per rinominarlo; scorri a sinistra su
+  una card per Condividi (un .json, o un .zip per una cartella) ed Elimina.
 - L'app si apre sulla galleria, come Procreate: titolo Doodle Music, comandi in una capsula e +
   tondo a destra. Un link a una sezione (#disegna, #beat…) apre ancora la sezione.
 - Cursore e icona di Trasforma: la freccia di iPad, piena e con gli angoli tondi.
