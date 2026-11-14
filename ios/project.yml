@@ -1,0 +1,44 @@
+# The iPad app: the web app (docs/app) in a WKWebView, with a native CTRL button and the
+# Apple Pencil Pro's squeeze / double tap. Generated with XcodeGen (see .github/workflows/ios.yml).
+name: DoodleMusic
+options:
+  bundleIdPrefix: io.github.crepan
+  deploymentTarget:
+    iOS: "16.0"
+targets:
+  DoodleMusic:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: ../docs/app
+        type: folder
+        buildPhase: resources
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: Doodle Music
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UIRequiresFullScreen: true
+        UIStatusBarHidden: true
+        UIViewControllerBasedStatusBarAppearance: true
+        UIBackgroundModes: [audio]
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSMicrophoneUsageDescription: Doodle Music usa il microfono per registrare la voce e riconoscerne le note.
+        NSCameraUsageDescription: Doodle Music usa la fotocamera solo se scegli di importare un video.
+        NSPhotoLibraryAddUsageDescription: Doodle Music salva qui i video e le immagini che esporti.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.crepan.doodlemusic
+        TARGETED_DEVICE_FAMILY: "2"
+        SWIFT_VERSION: "5.0"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGNING_ALLOWED: "NO"
+        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGN_IDENTITY: ""

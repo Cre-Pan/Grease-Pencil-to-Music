@@ -4050,6 +4050,9 @@ function afterBigChange() {
   if (ui.view === "export") { syncExport(); ensureLoop(); }
 }
 
+/* The iPad app (ios/): a WKWebView with message handlers for what a web page can't do. */
+const nativeApp = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.gripRect ? window.webkit.messageHandlers : null;
+
 /* ---------- downloads ---------- */
 
 let downloadsCap = null;
@@ -4060,6 +4063,11 @@ const MIME = { zip: "application/zip", json: "application/json", png: "image/png
 async function shareOrDownload(filename, data) {
   const type = MIME[filename.split(".").pop()] || "application/octet-stream";
   const blob = data instanceof Blob ? data : new Blob([data], { type });
+  if (nativeApp && nativeApp.save) {  // the iPad app: the system share sheet, from native code
+    const b64 = await new Promise((ok, ko) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(",")[1]); fr.onerror = ko; fr.readAsDataURL(blob); });
+    nativeApp.save.postMessage({ name: filename, data: b64 });
+    return true;
+  }
   try {
     const file = new File([blob], filename, { type });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -6403,6 +6411,27 @@ function applySideY(h = $("#viewDraw").clientHeight, half = $("#sidebar").offset
     end();
   };
   grip.addEventListener("touchend", tend); grip.addEventListener("touchcancel", tend);
+  /* The iPad app: a native view lies over this button and takes the finger there, outside the
+     web page, so the Pencil still reaches the board while it is held. It drives the button
+     through these, and the Pencil Pro's squeeze or double tap toggles CTRL. */
+  if (nativeApp) {
+    window.__gp2mGrip = {
+      start: (x, y) => { if (g) end(); start("native", x, y); },
+      move: (x, y) => { if (g) move(x, y); },
+      end: () => end(),
+      toggle: () => {
+        if (ctrlLocked || ctrl) { ctrlUp(); return; }
+        ctrlDown(); if (ctrl) { ctrlLocked = true; grip.classList.add("on"); }
+      },
+    };
+    let sent = "";
+    setInterval(() => {  // where the button is, for the native view over it (the bar moves, views change)
+      const r = grip.getBoundingClientRect(), shown = ui.view === "draw" && r.width > 0 && !grip.closest("[hidden]");
+      const rect = shown ? [r.left, r.top, r.width, r.height].map(v => Math.round(v)) : [0, 0, 0, 0];
+      const key = rect.join();
+      if (key !== sent) { sent = key; nativeApp.gripRect.postMessage(rect); }
+    }, 120);
+  }
   document.addEventListener("pointerdown", e => { if (g && g.latched && e.pointerType === "pen") clearTimeout(latchTimer); }, true);
   for (const type of ["pointerup", "pointercancel"]) document.addEventListener(type, e => { if (g && g.latched && e.pointerType === "pen") unlatchSoon(700); }, true);
   addEventListener("resize", applySideY);
