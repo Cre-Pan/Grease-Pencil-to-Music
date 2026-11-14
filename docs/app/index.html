@@ -1131,7 +1131,7 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   <div class="top-right" id="topRight">
     <div class="cap glass" id="modsCap">
       <button class="ib" id="btnMods" title="Modificatori (M)" aria-label="Modificatori" aria-pressed="false" aria-controls="modsWin">
-        <svg viewBox="0 0 24 24"><path d="M12.0 2.4Q12.6 11.0 20.3 7.2Q13.2 12.0 20.3 16.8Q12.6 13.0 12.0 21.6Q11.4 13.0 3.7 16.8Q10.8 12.0 3.7 7.2Q11.4 11.0 12.0 2.4Z" fill="currentColor" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+        <svg viewBox="11 11 58 58"><path d="M37.25,23.25 Q40,16 42.75,23.25 Q45.5,30.5 53.15,29.25 Q60.8,28 55.9,34 Q51,40 55.9,46 Q60.8,52 53.15,50.75 Q45.5,49.5 42.75,56.75 Q40,64 37.25,56.75 Q34.5,49.5 26.85,50.75 Q19.2,52 24.1,46 Q29,40 24.1,34 Q19.2,28 26.85,29.25 Q34.5,30.5 37.25,23.25 Z" fill="currentColor" stroke="currentColor" stroke-width="9" stroke-linejoin="round"/></svg>
       </button>
    </div>
     <div class="cap cap-layers glass" id="layersCap">
@@ -7367,7 +7367,7 @@ const IC = {
   share: I('<path d="M12 15V3.5M7.5 8L12 3.5 16.5 8"/><path d="M8 11H6.5A2.5 2.5 0 0 0 4 13.5v4A2.5 2.5 0 0 0 6.5 20h11a2.5 2.5 0 0 0 2.5-2.5v-4a2.5 2.5 0 0 0-2.5-2.5H16"/>'),
   video: I('<rect x="3" y="6" width="13" height="12" rx="2.5"/><path d="M16 10.5l5-3v9l-5-3"/>'),
   move: I('<path d="M6.3 4.9L18.2 14.2L13.3 14.3Q11.8 14.3 10.8 15.7L7 19.5Z" fill="currentColor" stroke-width="2.8"/>'),
-  mods: I('<path d="M12.0 2.4Q12.6 11.0 20.3 7.2Q13.2 12.0 20.3 16.8Q12.6 13.0 12.0 21.6Q11.4 13.0 3.7 16.8Q10.8 12.0 3.7 7.2Q11.4 11.0 12.0 2.4Z" fill="currentColor" stroke-width="1.3"/>'),
+  mods: I('<path transform="matrix(0.41379 0 0 0.41379 -4.5517 -4.5517)" d="M37.25,23.25 Q40,16 42.75,23.25 Q45.5,30.5 53.15,29.25 Q60.8,28 55.9,34 Q51,40 55.9,46 Q60.8,52 53.15,50.75 Q45.5,49.5 42.75,56.75 Q40,64 37.25,56.75 Q34.5,49.5 26.85,50.75 Q19.2,52 24.1,46 Q29,40 24.1,34 Q19.2,28 26.85,29.25 Q34.5,30.5 37.25,23.25 Z" fill="currentColor" stroke-width="9"/>'),
   bgimg: I('<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 16l5-5 4 4 3-3 6 6"/><circle cx="15.5" cy="8.5" r="1.5"/>'),
 };
 const HELP = {
@@ -8311,7 +8311,7 @@ $("#modsHead").addEventListener("pointerdown", e => {
   const up = ev => { if (ev.pointerId !== id) return; removeEventListener("pointermove", move); removeEventListener("pointerup", up); removeEventListener("pointercancel", up); };
   addEventListener("pointermove", move); addEventListener("pointerup", up); addEventListener("pointercancel", up);
 });
-const ICON_MODS = '<svg viewBox="0 0 24 24"><path d="M12.0 2.4Q12.6 11.0 20.3 7.2Q13.2 12.0 20.3 16.8Q12.6 13.0 12.0 21.6Q11.4 13.0 3.7 16.8Q10.8 12.0 3.7 7.2Q11.4 11.0 12.0 2.4Z" fill="currentColor" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>';
+const ICON_MODS = '<svg viewBox="11 11 58 58"><path d="M37.25,23.25 Q40,16 42.75,23.25 Q45.5,30.5 53.15,29.25 Q60.8,28 55.9,34 Q51,40 55.9,46 Q60.8,52 53.15,50.75 Q45.5,49.5 42.75,56.75 Q40,64 37.25,56.75 Q34.5,49.5 26.85,50.75 Q19.2,52 24.1,46 Q29,40 24.1,34 Q19.2,28 26.85,29.25 Q34.5,30.5 37.25,23.25 Z" fill="currentColor" stroke="currentColor" stroke-width="9" stroke-linejoin="round"/></svg>';
 /* Touch and hold a layer: its actions, by the finger. */
 function showLayerMenu(layer, anchor) {
   const i = state.layers.indexOf(layer), below = state.layers[i - 1], items = [];
