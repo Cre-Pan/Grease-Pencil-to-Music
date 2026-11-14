@@ -10,6 +10,9 @@ on:
     paths: ["ios/**", "docs/app/**", ".github/workflows/ios.yml"]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-15
@@ -36,3 +39,10 @@ jobs:
         with:
           name: DoodleMusic-ipa
           path: ios/DoodleMusic.ipa
+      - name: Publish as the "iPad app" release (main only)
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view ipad-app >/dev/null 2>&1 || gh release create ipad-app --title "App iPad" --notes "L'ultima build dell'app iPad. Scarica DoodleMusic.ipa e installala con Sideloadly o SideStore." --latest=false
+          gh release upload ipad-app ios/DoodleMusic.ipa --clobber

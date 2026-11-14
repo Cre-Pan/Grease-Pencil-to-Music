@@ -95,8 +95,13 @@ final class GripView: UIView {
     }
 }
 
-final class WebViewController: UIViewController, WKScriptMessageHandler, WKUIDelegate, UIPencilInteractionDelegate {
+final class WebViewController: UIViewController, WKScriptMessageHandler, WKUIDelegate, WKNavigationDelegate, UIPencilInteractionDelegate {
+    /// The published web app: every new version reaches the app without reinstalling it.
+    /// Offline, or if the site can't be reached, the copy bundled in the app is used.
+    static let live = URL(string: "https://cre-pan.github.io/Grease-Pencil-to-Music/app/")!
+    static let bundled = URL(string: "app://local/index.html")!
     private var web: WKWebView!
+    private var onBundle = false
     private let grip = GripView()
 
     override var prefersStatusBarHidden: Bool { true }
@@ -115,6 +120,7 @@ final class WebViewController: UIViewController, WKScriptMessageHandler, WKUIDel
 
         web = WKWebView(frame: .zero, configuration: config)
         web.uiDelegate = self
+        web.navigationDelegate = self
         web.allowsLinkPreview = false
         web.isOpaque = false
         web.backgroundColor = .black
@@ -145,7 +151,31 @@ final class WebViewController: UIViewController, WKScriptMessageHandler, WKUIDel
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        web.load(URLRequest(url: URL(string: "app://local/index.html")!))
+        web.load(URLRequest(url: Self.live, cachePolicy: .reloadRevalidatingCacheData, timeoutInterval: 8))
+    }
+
+    private func fallBack() {
+        guard !onBundle else { return }
+        onBundle = true
+        web.load(URLRequest(url: Self.bundled))
+    }
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { fallBack() }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        if (error as NSError).code != NSURLErrorCancelled, webView.url?.scheme != "app" { fallBack() }
+    }
+    func webView(_ webView: WKWebView, decidePolicyFor response: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        if let http = response.response as? HTTPURLResponse, response.isForMainFrame, http.statusCode >= 400 {
+            decisionHandler(.cancel); fallBack(); return
+        }
+        decisionHandler(.allow)
+    }
+    // Links to other sites open in Safari, not in place of the app.
+    func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        if let url = action.request.url, action.navigationType == .linkActivated,
+           url.host != Self.live.host || !url.path.hasPrefix(Self.live.path) {
+            UIApplication.shared.open(url); decisionHandler(.cancel); return
+        }
+        decisionHandler(.allow)
     }
 
     // MARK: messages from the page
