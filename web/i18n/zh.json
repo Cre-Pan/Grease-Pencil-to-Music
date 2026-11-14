@@ -815,5 +815,6 @@
  "In altezza": "音高方向",
  "note capovolte": "音符上下翻转",
  "La stella apre una finestra mobile: i modificatori dei livelli selezionati o quelli globali, per tutti i livelli.": "星形按钮打开浮动窗口：所选图层的修改器，或作用于所有图层的全局修改器。",
- "Eliminato: {0} · due dita per annullare": "已删除：{0} · 双指轻点撤销"
+ "Eliminato: {0} · due dita per annullare": "已删除：{0} · 双指轻点撤销",
+ "Annulla e ripeti nella barra laterale": "在侧边栏显示撤销和重做"
 }
