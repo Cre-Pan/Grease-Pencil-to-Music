@@ -250,8 +250,13 @@ canvas { display: block; }
 .tab-pill {
   position: absolute; z-index: 0; top: 0; bottom: 0; left: 0; width: 0; border-radius: 999px;
   background: var(--pill); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12), 0 0.5px 1px rgba(0, 0, 0, 0.1);
-  transition: transform 0.42s var(--spring), width 0.42s var(--spring);
+  transition: transform 0.42s var(--spring), width 0.42s var(--spring), scale 0.25s var(--spring);
 }
+/* Slid along with a finger (iOS 26): the pill swells into a lens and follows; let go to pick. */
+.tabs.sliding .tab-pill { transition: width 0.25s var(--spring), scale 0.25s var(--spring); scale: 1.12 1.18; box-shadow: var(--glass-rim), 0 8px 22px rgba(0, 0, 0, 0.18); }
+.tabs.sliding .tab { transition: color 0.15s; }
+.seg.sliding button[aria-pressed="true"]:not(.slide-at) { background: none; box-shadow: none; }
+.seg button.slide-at { background: var(--pill); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16), 0 0.5px 1px rgba(0, 0, 0, 0.1); scale: 1.06; transition: scale 0.2s var(--spring), background 0.15s; }
 
 /* Transport */
 .play {
@@ -271,30 +276,35 @@ canvas { display: block; }
 
 /* Left sidebar: thickness, opacity, undo, redo */
 .sidebar {
-  position: absolute; z-index: 4; left: max(16px, env(safe-area-inset-left, 0px)); top: 50%;
-  transform: translate(var(--lift, 0px), -48%) scale(var(--lift-s, 1)); width: 54px; padding: 6px 0; border-radius: 27px;
+  /* Anchored to the left edge: --tuck px of it lie beyond the screen, so when it is pulled out
+     towards the board (and moved) it still runs into the edge and never comes loose from it.
+     Corners are concentric: each one is the one inside it plus the gap between them (--in). */
+  --tuck: 48px; --in: 7px; --r-thumb: 9px; --r-well: calc(var(--r-thumb) + var(--in)); --r-bar: calc(var(--r-well) + var(--in));
+  position: absolute; z-index: 4; left: calc(-1 * var(--tuck)); top: 50%; transform-origin: left center;
+  transform: translate(var(--lift, 0px), -48%) scale(var(--lift-s, 1));
+  padding: var(--in) var(--in) var(--in) calc(var(--tuck) + var(--in) + env(safe-area-inset-left, 0px)); border-radius: 0 var(--r-bar) var(--r-bar) 0;
   display: flex; flex-direction: column; align-items: center; gap: 10px;
   transition: transform 0.5s var(--spring), box-shadow 0.3s var(--ease);  /* back into its place with a little spring */
 }
 /* Pulled out of its place to be moved: it comes a little towards the board, lifted, and follows the finger. */
-.sidebar.lifted { --lift-s: 1.04; box-shadow: 0 14px 36px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.1); transition: transform 0.22s var(--spring), box-shadow 0.2s var(--ease); }
+.sidebar.lifted { --lift-s: 1.03; box-shadow: var(--glass-rim), 0 14px 36px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.1); transition: transform 0.22s var(--spring), box-shadow 0.2s var(--ease); }
 .sidebar.pulling { transition: transform 0.08s linear; }
-/* Each slider is a well with a pill handle; --pad: the handle's centre stops this far from either end,
-   so at its lowest or highest it stays inside the well, clear of the CTRL button */
+/* Each slider is a well with a pill handle, inset by --in all round; --pad: the handle's centre
+   stops there, so at either end it sits concentric in the well, clear of the CTRL button */
 .vslider {
-  --pad: 16px; position: relative; flex: 0 0 auto; width: 42px; height: min(176px, 21vh); border-radius: 16px;
+  --pad: calc(var(--in) + var(--r-thumb)); position: relative; flex: 0 0 auto; width: 46px; height: min(180px, 21vh); border-radius: var(--r-well);
   background: var(--fill); box-shadow: inset 0 0 0 0.5px var(--glass-edge), inset 0 1px 2px rgba(0, 0, 0, 0.08), var(--glass-rim);
   touch-action: none; cursor: ns-resize;
 }
 .vfill { display: none; }
 .vthumb {
-  position: absolute; left: 50%; width: 32px; height: 18px; transform: translate(-50%, 50%); border-radius: 9px;
+  position: absolute; left: 50%; width: calc(46px - 2 * var(--in)); height: calc(2 * var(--r-thumb)); transform: translate(-50%, 50%); border-radius: var(--r-thumb);
   background: var(--knob); box-shadow: 0 0.5px 3px rgba(0, 0, 0, 0.25), 0 2px 6px rgba(0, 0, 0, 0.12);
   transition: transform 0.2s var(--spring), bottom 0.32s var(--ease);
 }
 /* a value that changes on its own (CTRL: the eraser's size) slides there; under the finger it follows at once */
 .vslider.held .vthumb { transition: transform 0.2s var(--spring); }
-.vslider:active .vthumb { transform: translate(-50%, 50%) scale(1.12); }
+.vslider:active .vthumb { transform: translate(-50%, 50%) scale(1.08); }
 .side-sep { width: 22px; height: 0.5px; background: var(--sep); }
 /* The button in the middle of the bar (like Procreate's modify button): hold it for the eraser
    (with the eraser: the lasso eraser); pull it towards the board, then up or down, to move the bar. */
@@ -904,7 +914,9 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   .group, .layer, .layer-row, .inst { border-radius: 24px; }
   .btn, .beat-name { border-radius: 22px; }
   .pad { border-radius: 18px; }
-  .sidebar { border-radius: 36px; }
+  /* superellipse corners need larger radii to look as round; still concentric */
+  .sidebar { --r-thumb: 9px; --r-well: calc(var(--r-thumb) * 1.5 + var(--in) * 1.5); --r-bar: calc(var(--r-well) + var(--in) * 1.5); }
+  .vslider { corner-shape: squircle; }
 }
 
 @media (max-width: 760px) {
@@ -8056,6 +8068,72 @@ function showView(view, instant) {
   if (view === "wave") renderWaveView();
   setMetro(); requestFrame(); saveSoon();
 }
+/* Islands of more than two choices slide: put a finger on one and drag along, the selection
+   follows, and letting go picks where it is (a plain tap still works as before). */
+function slidePick(box, items, { onMove, onEnd } = {}) {
+  let g = null;
+  const at = x => {  // the choice under x (the nearest one past either end)
+    let best = null, bd = Infinity;
+    for (const b of items()) {
+      if (b.hidden || !b.offsetWidth) continue;
+      const r = b.getBoundingClientRect(), d = x < r.left ? r.left - x : x > r.right ? x - r.right : 0;
+      if (d < bd) { bd = d; best = b; }
+    }
+    return best;
+  };
+  box.addEventListener("pointerdown", e => {
+    if (g || (e.pointerType === "mouse" && e.button !== 0)) return;
+    if (!e.target.closest || !items().includes(e.target.closest("button"))) return;
+    g = { id: e.pointerId, x: e.clientX, on: false, cur: null };
+  });
+  box.addEventListener("pointermove", e => {
+    if (!g || e.pointerId !== g.id) return;
+    if (!g.on) {
+      if (Math.abs(e.clientX - g.x) < 8) return;
+      g.on = true; try { box.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+      box.classList.add("sliding");
+    }
+    const b = at(e.clientX);
+    if (b !== g.cur) { g.cur = b; if (navigator.vibrate) navigator.vibrate(4); }
+    if (onMove) onMove(e.clientX, b);
+  });
+  const end = e => {
+    if (!g || e.pointerId !== g.id) return;
+    const was = g; g = null;
+    if (!was.on) return;  // a tap: the button's own click
+    box.classList.remove("sliding");
+    if (onEnd) onEnd(e.type === "pointercancel" ? null : was.cur);
+    // the click that follows a slide must not pick the button the slide began on
+    const swallow = ev => { ev.stopPropagation(); ev.preventDefault(); };
+    box.addEventListener("click", swallow, { capture: true, once: true });
+    setTimeout(() => box.removeEventListener("click", swallow, { capture: true }), 60);
+  };
+  box.addEventListener("pointerup", end); box.addEventListener("pointercancel", end);
+}
+slidePick($("#tabs"), () => [...$("#tabs").querySelectorAll(".tab")], {
+  onMove: (x, b) => {  // the lens follows the finger, as wide as the tab under it
+    const pill = $("#tabPill"), box = $("#tabs").getBoundingClientRect();
+    if (!b) return;
+    const w = b.offsetWidth;
+    pill.style.width = w + "px";
+    pill.style.transform = `translateX(${clamp(x - box.left - w / 2, 0, box.width - w)}px)`;
+    for (const t of $("#tabs").querySelectorAll(".tab")) t.style.color = t === b ? "var(--fg)" : "";
+  },
+  onEnd: b => {
+    for (const t of $("#tabs").querySelectorAll(".tab")) t.style.color = "";
+    const k = b && Object.keys(TAB).find(k => $(TAB[k]) === b);
+    if (k && k !== ui.view) showView(k); else movePill();
+  },
+});
+/* the segmented controls of three or more choices */
+for (const el of document.querySelectorAll(".seg")) {
+  const items = () => [...el.querySelectorAll(":scope > button")];
+  if (items().length < 3) continue;
+  slidePick(el, items, {
+    onMove: (x, b) => { for (const t of items()) t.classList.toggle("slide-at", t === b); },
+    onEnd: b => { for (const t of items()) t.classList.remove("slide-at"); if (b) b.click(); },
+  });
+}
 function movePill() {
   const btn = $(TAB[ui.view]), pill = $("#tabPill");
   pill.style.width = btn.offsetWidth + "px";
@@ -8121,7 +8199,10 @@ function vslider(el, get, set, label, fmt) {
     bubble.style.top = (r.top - app.top + pad + (r.height - 2 * pad) * (1 - get()) - 16) + "px";
     bubble.style.left = (r.right - app.left + 18) + "px";
   };
-  const pad = parseFloat(getComputedStyle(el).getPropertyValue("--pad")) || 0;
+  const pad = (() => {  // --pad is a calc(): resolve it through a throwaway element
+    const t = document.createElement("i"); t.style.cssText = "position:absolute;visibility:hidden;width:var(--pad)";
+    el.append(t); const w = t.offsetWidth; t.remove(); return w || 16;
+  })();
   const fromEvent = e => { const r = el.getBoundingClientRect(); set(clamp(1 - (e.clientY - r.top - pad) / Math.max(1, r.height - 2 * pad), 0, 1)); paint(); show(); };
   el.addEventListener("pointerdown", e => { el.setPointerCapture(e.pointerId); el.classList.add("held"); fromEvent(e); });
   el.addEventListener("pointermove", e => { if (el.hasPointerCapture(e.pointerId)) fromEvent(e); });
