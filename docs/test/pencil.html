@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Test dito + Pencil</title>
+<style>
+  html, body { margin: 0; height: 100%; font: 15px -apple-system, system-ui, sans-serif; background: #111; color: #eee; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  body { display: grid; grid-template-columns: 220px 1fr; }
+  #holds { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+  .hold { flex: 1; border-radius: 14px; display: grid; place-items: center; text-align: center; background: #2a2a2a; padding: 6px; }
+  .hold.on { background: #2f6fde; }
+  #pad { position: relative; margin: 12px; border-radius: 14px; background: #1d1d1d; touch-action: none; }
+  #pad canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #log { position: absolute; left: 10px; bottom: 10px; margin: 0; font: 12px/1.35 ui-monospace, monospace; white-space: pre; pointer-events: none; color: #bbb; }
+  #title { position: absolute; left: 12px; top: 10px; color: #888; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="holds">
+  <div class="hold" id="A">A<br>div normale</div>
+  <div class="hold" id="B" style="touch-action:none">B<br>touch-action: none</div>
+  <div class="hold" id="C">C<br>touchstart con preventDefault</div>
+  <div class="hold" id="D" style="touch-action:none">D<br>touch-action: none + pointer capture</div>
+  <button class="hold" id="E">E<br>&lt;button&gt;</button>
+</div>
+<div id="pad"><canvas></canvas><div id="title">Tieni un dito su A, B, C, D o E e disegna qui con la Pencil</div><pre id="log"></pre></div>
+<script>
+const pad = document.getElementById("pad"), cv = pad.querySelector("canvas"), g = cv.getContext("2d"), logEl = document.getElementById("log");
+const lines = [], t0 = performance.now();
+let held = "-";
+function log(s) { lines.push(((performance.now() - t0) / 1000).toFixed(2) + " [" + held + "] " + s); if (lines.length > 24) lines.shift(); logEl.textContent = lines.join("\n"); }
+function size() { const r = pad.getBoundingClientRect(); cv.width = r.width * devicePixelRatio; cv.height = r.height * devicePixelRatio; g.scale(devicePixelRatio, devicePixelRatio); }
+size(); addEventListener("resize", size);
+for (const id of "ABCDE") {
+  const el = document.getElementById(id);
+  el.addEventListener("touchstart", e => { if (id === "C") e.preventDefault(); held = id; el.classList.add("on"); log("finger down " + id); }, { passive: id !== "C" });
+  const up = e => { el.classList.remove("on"); log("finger " + e.type.slice(5) + " " + id); held = "-"; };
+  el.addEventListener("touchend", up); el.addEventListener("touchcancel", up);
+  if (id === "D") el.addEventListener("pointerdown", e => { try { el.setPointerCapture(e.pointerId); } catch (err) {} });
+}
+let last = null, moves = 0;
+pad.addEventListener("pointerdown", e => { last = [e.offsetX, e.offsetY]; moves = 0; log("pointerdown " + e.pointerType); });
+pad.addEventListener("pointermove", e => {
+  if (e.pointerType === "pen" && !e.buttons) return;
+  if (!last) return;
+  g.strokeStyle = held === "-" ? "#7cf" : "#f6a"; g.lineWidth = 3; g.lineCap = "round";
+  g.beginPath(); g.moveTo(last[0], last[1]); g.lineTo(e.offsetX, e.offsetY); g.stroke(); last = [e.offsetX, e.offsetY]; moves++;
+});
+for (const t of ["pointerup", "pointercancel"]) pad.addEventListener(t, e => { log(t + " " + e.pointerType + " (" + moves + " move)"); last = null; });
+pad.addEventListener("touchstart", e => { for (const t of e.changedTouches) log("touchstart " + (t.touchType || "?")); }, { passive: true });
+</script>
+</body>
+</html>
