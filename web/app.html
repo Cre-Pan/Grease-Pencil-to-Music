@@ -4895,10 +4895,15 @@ const stylusRecent = () => performance.now() - stylus.time < 150;
    (or touch ones, which palm rejection drops), and nothing was drawn. While a finger holds CTRL,
    a Pencil touch with no pen pointer of its own is followed from its touch events. */
 let gripFinger = false;
-const penFromTouch = new Map(), stylusDown = new Set(), penLive = new Set();  // touch identifier -> the pointerId it is given
-// the Pencil's own pointer events, while they last: then nothing is made up from its touches
-canvas.addEventListener("pointerdown", e => { if (e.isTrusted && e.pointerType === "pen") penLive.add(e.pointerId); }, true);
-for (const type of ["pointerup", "pointercancel"]) canvas.addEventListener(type, e => { if (e.isTrusted) penLive.delete(e.pointerId); }, true);
+/* CTRL held with a finger, then the Pencil on the board. On iPad, with a finger already down,
+   Safari can give the Pencil no pointer events at all (the cursor stood still), give them to
+   another element, or report them as a touch that palm rejection drops; its touch events may not
+   say "stylus" either. So while a finger holds CTRL, every new touch on the board that gets no
+   pointer of its own within a moment is followed from its touch events, as a pen. */
+const penFromTouch = new Map(), touchDown = new Map();  // touch identifier -> pointerId / its start
+let boardPointerAt = -1e9;
+canvas.addEventListener("pointerdown", e => { if (e.isTrusted) boardPointerAt = performance.now(); inputLog("pd", e.pointerType + "#" + e.pointerId); }, true);
+canvas.addEventListener("pointercancel", e => inputLog("pc", e.pointerType + "#" + e.pointerId), true);
 function penPointer(type, t, id) {
   canvas.dispatchEvent(new PointerEvent(type, {
     bubbles: true, cancelable: true, pointerId: id, pointerType: "pen", isPrimary: true,
@@ -4906,41 +4911,54 @@ function penPointer(type, t, id) {
     buttons: type === "pointerup" ? 0 : 1, button: type === "pointermove" ? -1 : 0,
   }));
 }
-/* Listened to on the whole window, before anything else: with a finger held elsewhere, Safari
-   may hand the Pencil's touch to another target, or give it a "touch" pointer that palm
-   rejection drops (and the cursor stopped where it was). */
-const onBoard = t => { const el = document.elementFromPoint(t.clientX, t.clientY); return el === canvas; };
-const penIdle = () => !current && !erasing && !lasso && !drag && !gz && !penLive.size;
+const overBoard = t => { const r = canvas.getBoundingClientRect(); return t.clientX >= r.left && t.clientX <= r.right && t.clientY >= r.top && t.clientY <= r.bottom; };
+const isGripTouch = t => { const el = $("#sideGrip"); return !!(t.target && t.target.nodeType && el.contains(t.target)); };
+const penIdle = () => !current && !erasing && !lasso && !drag && !gz;
 function penTakeOver(t) {
   const id = 70000 + t.identifier;
   penFromTouch.set(t.identifier, id);
+  inputLog("take", "t" + t.identifier);
   penPointer("pointerdown", t, id);
 }
 addEventListener("touchstart", e => {
   for (const t of e.changedTouches) {
-    if (t.touchType !== "stylus") continue;
-    stylusDown.add(t.identifier);
-    if (!gripFinger || !onBoard(t)) continue;
-    const snap = { identifier: t.identifier, clientX: t.clientX, clientY: t.clientY, force: t.force };
-    setTimeout(() => { if (stylusDown.has(snap.identifier) && !penFromTouch.has(snap.identifier) && penIdle()) penTakeOver(snap); }, 30);
+    inputLog("ts", (t.touchType || "?") + " t" + t.identifier + " " + ((t.target && t.target.id) || (t.target && t.target.tagName) || ""));
+    if (!gripFinger || isGripTouch(t) || !overBoard(t)) continue;
+    const snap = { identifier: t.identifier, clientX: t.clientX, clientY: t.clientY, force: t.force }, at = performance.now();
+    touchDown.set(t.identifier, snap);
+    // its own pointer, if Safari sends one, comes with it (just before or just after): then nothing is made up
+    setTimeout(() => { if (touchDown.has(snap.identifier) && !penFromTouch.has(snap.identifier) && boardPointerAt < at - 60 && penIdle()) penTakeOver(snap); }, 40);
   }
 }, { capture: true, passive: true });
 addEventListener("touchmove", e => {
   for (const t of e.changedTouches) {
-    if (t.touchType !== "stylus") continue;
-    if (penFromTouch.has(t.identifier)) penPointer("pointermove", t, penFromTouch.get(t.identifier));
-    else if (gripFinger && stylusDown.has(t.identifier) && penIdle() && onBoard(t)) penTakeOver(t);  // its pointer was cancelled
+    if (penFromTouch.has(t.identifier)) { penPointer("pointermove", t, penFromTouch.get(t.identifier)); continue; }
+    // a pointer that was cancelled mid-stroke: the touch goes on, so does the stroke
+    if (gripFinger && touchDown.has(t.identifier) && penIdle() && overBoard(t)) penTakeOver(t);
   }
 }, { capture: true, passive: true });
 for (const type of ["touchend", "touchcancel"]) addEventListener(type, e => {
   for (const t of e.changedTouches) {
-    stylusDown.delete(t.identifier);
-    if (!stylusDown.size) penLive.clear();  // the Pencil is up: a pointer Safari never ended is forgotten
+    touchDown.delete(t.identifier);
     if (!penFromTouch.has(t.identifier)) continue;
     penPointer(type === "touchend" ? "pointerup" : "pointercancel", t, penFromTouch.get(t.identifier));
     penFromTouch.delete(t.identifier);
   }
 }, { capture: true, passive: true });
+/* ?debug=input: the last touch and pointer events on screen, to see what Safari sends. */
+const inputDebug = /[?&]debug=input/.test(location.search) ? (() => {
+  const box = document.createElement("pre");
+  box.style.cssText = "position:fixed;left:8px;bottom:80px;z-index:999;margin:0;padding:6px 8px;font:11px/1.3 ui-monospace,monospace;background:rgba(0,0,0,.72);color:#fff;border-radius:8px;pointer-events:none;max-width:60vw;white-space:pre-wrap";
+  document.body.appendChild(box);
+  return box;
+})() : null;
+const inputLines = [];
+function inputLog(kind, text) {
+  if (!inputDebug) return;
+  inputLines.push((performance.now() / 1000).toFixed(2) + " " + kind + " " + text + (gripFinger ? " [CTRL]" : ""));
+  if (inputLines.length > 14) inputLines.shift();
+  inputDebug.textContent = inputLines.join("\n");
+}
 const isPen = e => e.pointerType === "pen" || (e.pointerType === "touch" && stylusRecent());
 /* Finger taps: two fingers = undo, three = redo, four = play/stop. Read from touch events,
    which on iPad list every finger on the glass even when Safari cancels or merges the pointer
