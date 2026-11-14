@@ -270,7 +270,7 @@ canvas { display: block; }
 .side-sep { width: 22px; height: 0.5px; background: var(--sep); }
 /* The button in the middle of the bar (like Procreate's modify button): hold it for the eraser
    (with the eraser: the lasso eraser); pull it towards the board, then up or down, to move the bar. */
-.side-ctrl { width: 30px; height: 30px; border-radius: 9px; background: var(--fill-2); box-shadow: inset 0 0 0 0.5px var(--sep); touch-action: none; cursor: pointer; transition: background 0.15s, transform 0.2s var(--spring); }
+.side-ctrl { width: 30px; height: 30px; border-radius: 9px; background: var(--fill-2); box-shadow: inset 0 0 0 0.5px var(--sep); touch-action: none; cursor: pointer; transition: background 0.15s, transform 0.2s var(--spring);  -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 .side-ctrl.on { background: var(--blue); transform: scale(0.92); }
 .side-ctrl.moving { background: var(--fg-2); cursor: ns-resize; }
 .sbtn { width: 44px; height: 40px; border-radius: 12px; display: grid; place-items: center; transition: transform 0.2s var(--spring); }
@@ -6337,8 +6337,9 @@ function applySideY(h = $("#viewDraw").clientHeight, half = $("#sidebar").offset
     g = null; gripFinger = false; grip.classList.remove("on", "moving");
   };
   grip.addEventListener("pointerdown", e => {
-    e.preventDefault(); e.stopPropagation();
+    e.stopPropagation();
     if (e.pointerType === "touch" || g) return;  // a finger: the touch events below
+    e.preventDefault();
     try { grip.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
     start(e.pointerId, e.clientX, e.clientY);
   });
@@ -6346,19 +6347,36 @@ function applySideY(h = $("#viewDraw").clientHeight, half = $("#sidebar").offset
   const pend = e => { if (g && e.pointerId === g.id) end(); };
   grip.addEventListener("pointerup", pend); grip.addEventListener("pointercancel", pend);
   const touchOf = (e, id) => [...e.changedTouches].find(t => t.identifier === id);
+  /* The finger's touch is only listened to, never cancelled (no preventDefault): on iPad, a
+     finger touch the page had cancelled kept Safari from sending anything of the Pencil (no
+     pointer, no touch events) for as long as the finger stayed down, while a second finger
+     still came through. The callout, magnifier and selection are kept away by the CSS. */
   grip.addEventListener("touchstart", e => {
-    if (e.cancelable) e.preventDefault();  // no long press, magnifier or callout
     e.stopPropagation();
     const t = e.changedTouches[0];
+    if (g && g.latched) { clearTimeout(latchTimer); end(); }  // the finger is back: a new press
     if (!g && t) start("t" + t.identifier, t.clientX, t.clientY);
-  }, { passive: false });
+  }, { passive: true });
   grip.addEventListener("touchmove", e => {
     if (!g || typeof g.id !== "string") return;
     const t = touchOf(e, +g.id.slice(1));
-    if (t) { if (e.cancelable) e.preventDefault(); move(t.clientX, t.clientY); }
-  }, { passive: false });
-  const tend = e => { if (g && typeof g.id === "string" && touchOf(e, +g.id.slice(1))) end(); };
+    if (t) move(t.clientX, t.clientY);
+  }, { passive: true });
+  /* iPadOS may cancel the touches of the fingers when the Pencil lands (its own palm rejection):
+     then a finger holding CTRL would get a touchcancel the moment the Pencil came, and CTRL
+     would let go before the stroke began. A cancelled CTRL stays held (latched) for the Pencil: while it draws, and a
+     moment after it lifts for the next stroke; if no Pencil comes, it lets go. */
+  let latchTimer = 0;
+  const unlatchSoon = ms => { clearTimeout(latchTimer); latchTimer = setTimeout(() => { if (g && g.latched) end(); }, ms); };
+  const tend = e => {
+    if (!g || typeof g.id !== "string" || !touchOf(e, +g.id.slice(1))) return;
+    inputLog(e.type === "touchcancel" ? "tc" : "te", "grip");
+    if (e.type === "touchcancel" && g.mode === "ctrl") { g.latched = true; unlatchSoon(900); return; }
+    end();
+  };
   grip.addEventListener("touchend", tend); grip.addEventListener("touchcancel", tend);
+  document.addEventListener("pointerdown", e => { if (g && g.latched && e.pointerType === "pen") clearTimeout(latchTimer); }, true);
+  for (const type of ["pointerup", "pointercancel"]) document.addEventListener(type, e => { if (g && g.latched && e.pointerType === "pen") unlatchSoon(700); }, true);
   addEventListener("resize", applySideY);
 })();
 /* Held down: with the brush, the eraser until you let go; with the eraser, the lasso eraser
