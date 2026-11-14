@@ -812,19 +812,37 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
 .help-item b { display: block; font-size: 15px; margin-bottom: 3px; }
 .help-item span { font-size: 13.5px; color: var(--fg-2); line-height: 1.45; }
 .scrim { position: absolute; inset: 0; z-index: 19; background: rgba(0, 0, 0, 0.28); animation: fade-in 0.25s both; }
+.scrim.clear { background: rgba(0, 0, 0, 0.08); }
 @keyframes fade-in { from { opacity: 0; } }
+/* Preferenze: a glass panel that drops from the menu at the top left, with a notch pointing at
+   it; the sections on the left (icon and name, the open one a blue capsule), on the right the
+   section's grouped lists. */
 .popover.sheet {
-  z-index: 20; inset: max(20px, 4vh) max(20px, 5vw) !important; width: auto; max-height: none; padding: 0;
-  display: grid; grid-template-columns: 240px minmax(0, 1fr); overflow: hidden; transform-origin: center;
+  z-index: 20; top: var(--sheet-top, 70px); left: var(--sheet-left, 16px); bottom: auto; right: auto;
+  width: min(820px, calc(100% - 32px)); height: min(640px, calc(100% - var(--sheet-top, 70px) - 16px)); max-height: none; padding: 0; overflow: visible;
+  display: grid; grid-template-columns: 236px minmax(0, 1fr); transform-origin: var(--notch-x, 40px) 0;
+  background: var(--glass); box-shadow: var(--glass-rim), var(--shadow-lg);
+  -webkit-backdrop-filter: blur(30px) saturate(190%); backdrop-filter: blur(30px) saturate(190%);
 }
-.sheet-nav { padding: 20px 12px; background: var(--fill); display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
-.sheet-nav h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; padding: 4px 10px 14px; }
-.sheet-nav button { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 12px; font-size: 15px; font-weight: 600; text-align: left; }
-.sheet-nav button i { width: 26px; height: 26px; border-radius: 8px; flex: 0 0 auto; }
-.sheet-nav button[aria-pressed="true"] { background: var(--pop); box-shadow: var(--shadow); }
-.sheet-body { overflow-y: auto; padding: 20px 24px 28px; }
-.sheet-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-.sheet-top h3 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+.popover.sheet::before {  /* the notch */
+  content: ""; position: absolute; top: -7px; left: calc(var(--notch-x, 40px) - 8px); width: 16px; height: 16px; transform: rotate(45deg);
+  border-radius: 4px 0 0 0; background: inherit; border-left: 0.5px solid var(--glass-edge); border-top: 0.5px solid var(--glass-edge);
+}
+.sheet-nav { padding: 22px 14px; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; border-right: 0.5px solid var(--sep); border-radius: 32px 0 0 32px; }
+.sheet-nav h2 { font-size: 28px; font-weight: 800; letter-spacing: -0.03em; padding: 0 12px 16px; }
+.sheet-nav button {
+  display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 999px; font-size: 16px; font-weight: 600; text-align: left;
+  color: var(--fg); transition: background 0.2s var(--ease), color 0.2s, transform 0.2s var(--spring);
+}
+.sheet-nav button svg { width: 22px; height: 22px; flex: 0 0 auto; color: var(--fg-2); transition: color 0.2s; }
+.sheet-nav button:active { transform: scale(1.04); }
+.sheet-nav button[aria-pressed="true"] { background: var(--blue); color: var(--on-tint); box-shadow: 0 6px 16px color-mix(in srgb, var(--blue) 35%, transparent); }
+.sheet-nav button[aria-pressed="true"] svg { color: var(--on-tint); }
+.sheet-body { overflow-y: auto; padding: 22px 22px 28px; border-radius: 0 32px 32px 0; }
+.sheet-body .group { background: var(--fill); }
+.sheet-top { display: flex; align-items: center; justify-content: space-between; margin: 0 6px 8px; }
+.sheet-top h3 { font-size: 14px; font-weight: 600; letter-spacing: 0; color: var(--fg-2); }
+.sheet-top .chip { display: none; }  /* a tap outside closes it */
 .sheet-body input[type="range"] { width: 100%; }
 .sheet-body .seg { width: 100%; max-width: 460px; }
 .set-help { font-size: 13px; color: var(--fg-2); line-height: 1.45; margin: 8px 4px 0; }
@@ -833,8 +851,11 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
 .press-ctl { flex: 1; min-width: 0; display: grid; }
 .shortcuts .item small { color: var(--fg-2); font-size: 13px; text-align: right; }
 @media (max-width: 760px) {
-  .popover.sheet { inset: 10px !important; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
-  .sheet-nav { flex-direction: row; overflow-x: auto; padding: 10px; }
+  .popover.sheet { inset: 10px !important; width: auto; height: auto; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .popover.sheet::before { display: none; }
+  .sheet-nav { flex-direction: row; overflow-x: auto; padding: 10px; border-right: 0; border-bottom: 0.5px solid var(--sep); border-radius: 32px 32px 0 0; }
+  .sheet-body { border-radius: 0 0 32px 32px; }
+  .sheet-top .chip { display: inline-flex; }
   .sheet-nav h2 { display: none; }
   .sheet-nav button { white-space: nowrap; }
   .press-item { flex-direction: column; align-items: stretch; }
@@ -1426,11 +1447,11 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   <section class="popover sheet" id="popBoard" hidden aria-label="Preferenze">
     <nav class="sheet-nav" id="setNav" aria-label="Categorie">
       <h2>Preferenze</h2>
-      <button data-cat="board" aria-pressed="true"><i style="background:var(--blue)"></i>Tavola</button>
-      <button data-cat="pen"><i style="background:var(--orange)"></i>Pennello e Pencil</button>
-      <button data-cat="audio"><i style="background:var(--green)"></i>Audio</button>
-      <button data-cat="ui"><i style="background:#af52de"></i>Interfaccia</button>
-      <button data-cat="info"><i style="background:#8e8e93"></i>Info e scorciatoie</button>
+      <button data-cat="board" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M3.5 10h17M3.5 15h17M9 4.5v15"/></svg>Tavola</button>
+      <button data-cat="pen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 4.5l4 4L9 19l-5 1 1-5z"/><path d="M13.5 6.5l4 4"/></svg>Pennello e Pencil</button>
+      <button data-cat="audio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>Audio</button>
+      <button data-cat="ui"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="12.5" rx="2.5"/><path d="M9 20.5h6"/></svg>Interfaccia</button>
+      <button data-cat="info"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><circle cx="12" cy="7.8" r="0.6" fill="currentColor"/></svg>Info e scorciatoie</button>
     </nav>
     <div class="sheet-body">
       <div class="sheet-top"><h3 id="setTitle">Tavola</h3><button class="chip primary" id="setDone">Fine</button></div>
@@ -5515,20 +5536,36 @@ function edgePath(zone) {
   else { line(Rt - R - tail, T, Rt - R, T, 0, 1); arc(Rt - R, T + R, -Math.PI / 2, 0); line(Rt, T + R, Rt, B - R, -1, 0); arc(Rt - R, B - R, 0, Math.PI / 2); line(Rt - R, B, Rt - R - tail, B, 0, -1); }
   return pts;
 }
+/* It fades in spreading out from the pointer along the edge, and fades out where it was. */
+const edgeGlow = { zone: null, t0: 0, out: 0, px: 0, py: 0, power: 0.6 };
 function paintEdge(c) {
   let zone = null, px = 0, py = 0, power = 0.6;
   if (edgeSwipe) { zone = edgeSwipe.zone; px = edgeSwipe.x; py = edgeSwipe.y; power = edgeSwipe.done ? 1 : 0.85; }
   else if (hover && !current && edgeLive() && edgeSwipeable(hover.x, hover.y)) { zone = edgeZone(hover.x, hover.y); px = hover.x; py = hover.y; }
-  if (!zone || zone !== (edgeSwipe ? edgeSwipe.zone : edgeHover.zone)) return;
+  if (zone && zone !== (edgeSwipe ? edgeSwipe.zone : edgeHover.zone)) zone = null;
+  const now = performance.now(), G = edgeGlow;
+  if (zone) {
+    if (zone !== G.zone || G.out) { G.zone = zone; G.t0 = now; }  // (re)appears: from here
+    G.out = 0; G.px = px; G.py = py; G.power = power;
+  } else {
+    if (!G.zone) return;
+    if (!G.out) G.out = now;
+    if (now - G.out > 260) { G.zone = null; G.out = 0; return; }
+    zone = G.zone; px = G.px; py = G.py; power = G.power;
+  }
+  const appear = 1 - (1 - Math.min(1, (now - G.t0) / 650)) ** 3;  // ease-out
+  const vanish = G.out ? 1 - (now - G.out) / 260 : 1;
   const pts = edgePath(zone);
   // where the pointer is along the path, then the thickness: thin sides, thick by the pointer
   let at = 0, best = Infinity;
   pts.forEach((q, i) => { const d = Math.hypot(q[0] - px, q[1] - py); if (d < best) { best = d; at = i; } });
   const n = pts.length, sigma = 55;  // in samples (3 px each): a long, gentle swell
+  const reach = appear * n;  // how far from the pointer it has spread so far
   const inner = pts.map((q, i) => {
     const u = (i - at) / sigma, k = 1 / (1 + u * u * 1.6) ** 2;  // smooth hump, wide shoulders
     const fade = Math.sin(Math.PI / 2 * Math.min(1, i / 10, (n - 1 - i) / 10));  // tapers through the end curves
-    const w = (2 + 13 * k * power) * fade;
+    const spread = clamp((reach - Math.abs(i - at)) / 40, 0, 1);
+    const w = (2 + 13 * k * power * (0.4 + 0.6 * appear)) * fade * spread;
     return [q[0] + q[2] * w, q[1] + q[3] * w];
   });
   const blue = SYS.blue[darkMode ? 1 : 0];
@@ -5538,10 +5575,10 @@ function paintEdge(c) {
   pts.forEach((q, i) => (i ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1])));
   for (let i = n - 1; i >= 0; i--) c.lineTo(inner[i][0], inner[i][1]);
   c.closePath();
-  c.fillStyle = blue; c.globalAlpha = 0.85 * power; c.shadowColor = blue; c.shadowBlur = 14;
+  c.fillStyle = blue; c.globalAlpha = 0.85 * power * Math.min(1, appear * 1.6) * vanish; c.shadowColor = blue; c.shadowBlur = 14;
   c.fill();
   c.restore();
-  if (!edgeSwipe) requestFrame();  // the hover glow lasts as long as edgeLive()
+  if (!edgeSwipe || appear < 1 || G.out) requestFrame();  // the hover glow lasts as long as edgeLive(); and while it fades
 }
 /* The row of the key just played stays lit for a moment after the finger lifts, so the
    Pencil can find it and draw on it. */
@@ -8393,8 +8430,12 @@ function openPopover(btnId, popId = POPS[btnId]) {
   if (wasOpen) return;
   const pop = $("#" + popId), btn = $("#" + btnId), app = $("#app").getBoundingClientRect(), r = btn.getBoundingClientRect();
   if (popId === "popLayers") { ui.layerOpen = null; ui.layerMenu = null; ui.swipeOpen = null; renderLayers(); }  // the picked layers stay picked: the lasso and Trasforma work on them
-  if (popId === "popBoard") {  // Impostazioni: a sheet in the middle, not a bubble
-    syncBoardForm(); syncBgControls(); pop.hidden = false; $("#scrim").hidden = false;
+  if (popId === "popBoard") {  // Preferenze: a panel that drops from the menu at the top left
+    syncBoardForm(); syncBgControls(); pop.hidden = false; $("#scrim").hidden = false; $("#scrim").classList.add("clear");
+    const cap = $(".cap-left").getBoundingClientRect(), menu = $("#btnMenu").getBoundingClientRect();
+    pop.style.setProperty("--sheet-top", (cap.bottom - app.top + 12) + "px");
+    pop.style.setProperty("--sheet-left", (cap.left - app.left) + "px");
+    pop.style.setProperty("--notch-x", (menu.left + menu.width / 2 - cap.left) + "px");
     btn.setAttribute("aria-expanded", "true"); ui.open = popId; ui.openBtn = btnId;
     return;
   }
@@ -8420,7 +8461,7 @@ function openPopover(btnId, popId = POPS[btnId]) {
 function closePopovers() {
   if (rec) stopRecording();
   $("#help").hidden = true; closeContextMenu();
-  $("#scrim").hidden = true;
+  $("#scrim").hidden = true; $("#scrim").classList.remove("clear");
   $("#popRec").hidden = true;
   $("#popBrush").hidden = true; $("#btnBrush").setAttribute("aria-expanded", "false");
   $("#popEraser").hidden = true; $("#btnEraser").setAttribute("aria-expanded", "false");
