@@ -4412,15 +4412,23 @@ function selectionBox() {
 function editLayers() {
   return state.layers.filter(l => (l.id === state.active || ui.picked.has(l.id)) && l.visible);
 }
-function selectInPolygon(poly) {
+function selectInPolygon(poly, add = false, quiet = false) {
   // the ink as you see it: with a modifier (Trasponi, Simmetria...) the drawn stroke may be elsewhere;
   // the copies keep the id of the stroke they come from
   const ids = new Set(editLayers().flatMap(layerStrokes)
     .filter(st => st.pts.some(q => inPolygon(xOf(q[0]), yOf(q[1]), poly))).map(st => st.id));
-  if (!ids.size) { toast("Nessun tratto qui: disegna un giro sopra i tratti dei livelli selezionati."); clearSelection(); return; }
+  if (add && sel) for (const id of sel.ids) ids.add(id);
+  if (!ids.size) { if (!quiet) toast("Nessun tratto qui: disegna un giro sopra i tratti dei livelli selezionati."); clearSelection(); return false; }
   sel = { ids, db: 0, dp: 0 };
   syncSelBar(); renderInk(); requestFrame();
+  return true;
 }
+/* Trasforma (the arrow): a tap outside the selection lets go of everything, a drag draws a box
+   that selects the strokes it touches; with CTRL (or Shift) they are added to the selection.
+   Picking the arrow selects the whole of the selected layers, as before. */
+let arrowEmpty = false;
+function arrowDeselect() { clearSelection(); arrowEmpty = true; requestFrame(); }
+const boxPts = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
 function clearSelection() {
   rollDrag = null; rollLasso = null;
   if (!sel && !lasso) return;
@@ -4613,7 +4621,7 @@ function paintGizmo(c) {
 }
 /* Trasforma with nothing lassoed: the gizmo takes every stroke of the selected layers. */
 function layerGizmo() {
-  if (ui.tool !== "transform" || ui.view !== "draw" || gz || drag) return;
+  if (ui.tool !== "transform" || ui.view !== "draw" || gz || drag || arrowEmpty) return;
   if (sel && !sel.whole) return;
   const ids = editLayers().flatMap(l => state.strokes.filter(st => st.layer === l.id)).map(st => st.id);
   const key = ids.join();
@@ -5064,8 +5072,9 @@ function boardDown(e, noEdge) {
   try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* pointer already gone */ }
   if (ui.tool === "eraser" && eraseLasso) { lasso = { pts: [[x, y]], pointer: e.pointerId, erase: true }; requestFrame(); return; }
   if (ui.tool === "eraser") { eraseSnap = snapshot(); erasing = true; erasePointer = e.pointerId; erasePen = isPen(e); eraseAt(x, y); return; }
-  if (ui.tool === "transform") {  // outside the gizmo: let go of the lasso selection (back to the whole layers)
-    if (sel && !sel.whole) clearSelection();
+  if (ui.tool === "transform") {  // outside the gizmo: a tap deselects, a drag is a box select
+    lasso = { pts: [[x, y]], pointer: e.pointerId, box: true, x0: x, y0: y, add: !!ctrl || e.shiftKey || e.ctrlKey || e.metaKey };
+    requestFrame();
     return;
   }
   if (ui.tool === "lasso") {
@@ -5105,7 +5114,10 @@ canvas.addEventListener("pointermove", e => {
   if (hover && onKeys(pos.x, pos.y) && !current) requestFrame();  // the key under the Pencil or the mouse lights up
   if (erasing && erasePointer === e.pointerId) { eraseAt(pos.x, pos.y); return; }
   if (gz && gz.pointer === e.pointerId) { gizmoMove(pos.x, pos.y); return; }
-  if (lasso && lasso.pointer === e.pointerId) { lasso.pts.push([pos.x, pos.y]); requestFrame(); return; }
+  if (lasso && lasso.pointer === e.pointerId) {
+    if (lasso.box) lasso.pts = boxPts(lasso.x0, lasso.y0, pos.x, pos.y); else lasso.pts.push([pos.x, pos.y]);
+    requestFrame(); return;
+  }
   if (drag && drag.pointer === e.pointerId) {
     const snap = moveSnap();
     let db = (pos.x - drag.x) / beatPx(), dp = (drag.y - pos.y) / rowPx();
@@ -5328,7 +5340,16 @@ function finish(e) {
   if (erasing) { erasing = false; eraseSnap = null; return; }
   if (gz && gz.pointer === e.pointerId) { gizmoEnd(e.type === "pointercancel"); return; }
   if (lasso && lasso.pointer === e.pointerId) {
-    const poly = lasso.pts, erase = lasso.erase; lasso = null;
+    const poly = lasso.pts, erase = lasso.erase, box = lasso.box ? lasso : null; lasso = null;
+    if (box) {
+      if (e.type !== "pointerup") { requestFrame(); return; }
+      const pos = pointerXY(e), small = Math.abs(pos.x - box.x0) < 6 && Math.abs(pos.y - box.y0) < 6;
+      if (small) { if (!box.add) arrowDeselect(); }
+      else if (selectInPolygon(boxPts(box.x0, box.y0, pos.x, pos.y), box.add, true)) arrowEmpty = false;
+      else arrowEmpty = true;
+      requestFrame();
+      return;
+    }
     if (poly.length > 4 && e.type === "pointerup") { if (erase) eraseInPolygon(poly); else selectInPolygon(poly); }
     requestFrame();
     return;
@@ -8830,6 +8851,7 @@ function syncMidiChip() {
 
 function setTool(tool) {
   if (tool === "transform" && ui.tool !== "transform") ui.toolBefore = ui.tool;
+  if (tool === "transform") arrowEmpty = false;
   ui.tool = tool;
   if (tool !== "lasso" && tool !== "transform") clearSelection();
   else if (tool === "lasso" && sel && sel.whole) clearSelection();  // the whole layers were Trasforma's, not a lasso selection
@@ -8862,6 +8884,7 @@ $("#btnLive").onclick = () => {
 $("#btnLasso").onclick = () => { closePopovers(); setTool(ui.tool === "lasso" ? "brush" : "lasso"); if (ui.tool === "lasso") toast("Cerchia i tratti dei livelli selezionati, poi trascinali"); };
 $("#btnTransform").onclick = () => {
   closePopovers();
+  if (ui.tool === "transform" && !sel) { arrowEmpty = false; layerGizmo(); requestFrame(); return; }  // nothing selected: the whole layers again
   if (ui.tool === "transform") { setTool(sel && !sel.whole ? "lasso" : (ui.toolBefore === "eraser" ? "eraser" : ui.toolBefore === "lasso" ? "lasso" : "brush")); return; }
   setTool("transform");
   layerGizmo();
