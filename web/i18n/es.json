@@ -862,5 +862,11 @@
  "Cartella creata": "Carpeta creada",
  "file .zip": "archivo .zip",
  "La cartella è vuota": "La carpeta está vacía",
- "Condividi": "Compartir"
+ "Condividi": "Compartir",
+ "Nuovo strumento": "Nuevo instrumento",
+ "Disegna uno strumento": "Dibuja un instrumento",
+ "Crea strumento": "Crear instrumento",
+ "Disegna la forma d'onda di un nuovo strumento": "Dibuja la forma de onda de un nuevo instrumento",
+ "disegna l'onda": "dibujar la onda",
+ "Disegna · Beat · MIDI · Esporta": "Dibujar · Beat · MIDI · Exportar"
 }

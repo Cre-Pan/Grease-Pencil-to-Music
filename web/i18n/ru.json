@@ -862,5 +862,11 @@
  "Cartella creata": "Папка создана",
  "file .zip": "файл .zip",
  "La cartella è vuota": "Папка пуста",
- "Condividi": "Поделиться"
+ "Condividi": "Поделиться",
+ "Nuovo strumento": "Новый инструмент",
+ "Disegna uno strumento": "Нарисуй инструмент",
+ "Crea strumento": "Создать инструмент",
+ "Disegna la forma d'onda di un nuovo strumento": "Нарисуй форму волны нового инструмента",
+ "disegna l'onda": "нарисовать волну",
+ "Disegna · Beat · MIDI · Esporta": "Рисунок · Бит · MIDI · Экспорт"
 }

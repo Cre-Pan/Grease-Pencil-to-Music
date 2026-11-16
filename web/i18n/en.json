@@ -862,5 +862,11 @@
  "Cartella creata": "Folder created",
  "file .zip": ".zip file",
  "La cartella è vuota": "The folder is empty",
- "Condividi": "Share"
+ "Condividi": "Share",
+ "Nuovo strumento": "New instrument",
+ "Disegna uno strumento": "Draw an instrument",
+ "Crea strumento": "Create instrument",
+ "Disegna la forma d'onda di un nuovo strumento": "Draw the waveform of a new instrument",
+ "disegna l'onda": "draw the wave",
+ "Disegna · Beat · MIDI · Esporta": "Draw · Beat · MIDI · Export"
 }

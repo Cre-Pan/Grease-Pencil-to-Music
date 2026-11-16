@@ -862,5 +862,11 @@
  "Cartella creata": "已创建文件夹",
  "file .zip": ".zip 文件",
  "La cartella è vuota": "文件夹是空的",
- "Condividi": "共享"
+ "Condividi": "共享",
+ "Nuovo strumento": "新乐器",
+ "Disegna uno strumento": "画一件乐器",
+ "Crea strumento": "创建乐器",
+ "Disegna la forma d'onda di un nuovo strumento": "为新乐器画出波形",
+ "disegna l'onda": "画波形",
+ "Disegna · Beat · MIDI · Esporta": "绘制 · 节拍 · MIDI · 导出"
 }
