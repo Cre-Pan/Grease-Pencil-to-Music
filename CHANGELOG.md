@@ -2,6 +2,10 @@
 
 ## Web app (iPad)
 
+- Esporta video: dove il browser ha WebCodecs (Safari recente, Chrome, Edge) il video è codificato
+  fotogramma per fotogramma con [Mediabunny](https://github.com/Vanilagy/mediabunny) invece di essere
+  registrato in tempo reale: è più veloce della durata del brano, non perde fotogrammi se l'iPad
+  rallenta e l'audio è esattamente a tempo. Dove non si può, resta la registrazione di prima.
 - Progetti: una galleria con tutte le composizioni salvate sul dispositivo, con le anteprime del
   disegno, le cartelle (anche una dentro l'altra) e la ricerca. Si apre dal tasto accanto a File
   o da *File → Progetti…*. Tocca un progetto per aprirlo, una cartella per entrarci; tieni premuto
