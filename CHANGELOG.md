@@ -2,6 +2,18 @@
 
 ## Web app (iPad)
 
+- Isola delle sezioni più fluida: cambiando sezione, o quando i nomi si chiudono mentre disegni,
+  i nomi e la pillola si muovono insieme sulla stessa curva (prima i nomi scattavano e la pillola li
+  rincorreva). Le isole in alto hanno tutte la stessa altezza; quelle che arrivano con una sezione
+  (Livelli, colore, trasporto) crescono al loro posto.
+- Switch come in iOS 26: toccato, il pallino diventa una lente di vetro sopra la levetta; si può
+  trascinare e lasciarlo dal lato voluto. Anche il pallino dei cursori diventa una lente mentre lo tieni.
+- Supercerchi ovunque: schede, gruppi, isole di Esporta, campi, pulsanti, anteprime e menu hanno gli
+  angoli a supercerchio, gli stessi in tutta l'app. Su Safari (che non ha ancora `corner-shape`)
+  la stessa curva è disegnata con `clip-path: shape()`.
+- Esporta: le scelte (Formato, Risoluzione, Codifica...) occupano tutta la riga. Ascoltando da In a
+  Out l'onda non viene più ridisegnata a ogni fotogramma: resta pronta e si aggiunge solo la testina.
+- Disegnando con la Pencil il suggerimento in basso non viene più riscritto a ogni campione.
 - Progetti: una galleria con tutte le composizioni salvate sul dispositivo, con le anteprime del
   disegno, le cartelle (anche una dentro l'altra) e la ricerca. Si apre dal tasto accanto a File
   o da *File → Progetti…*. Tocca un progetto per aprirlo, una cartella per entrarci; tieni premuto

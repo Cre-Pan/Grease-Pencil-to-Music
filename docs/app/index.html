@@ -65,6 +65,9 @@ img { max-width: 100%; }
   --font-round: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --spring: cubic-bezier(0.2, 0.9, 0.25, 1.12);
   --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  /* layout that moves (names that grow, the pill that slides under them): one curve for all, no overshoot,
+     so the pieces arrive together */
+  --glide: cubic-bezier(0.32, 0.72, 0, 1);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -147,6 +150,13 @@ canvas { display: block; }
 .ib.wide { width: auto; padding: 0 16px 0 12px; gap: 7px; display: inline-flex; border-radius: 999px; font-size: 14px; font-weight: 600; }
 .doc-input { width: 170px; margin: 0 6px 0 2px; padding: 8px 12px; border-radius: 12px; border: 0; background: var(--fill); color: var(--fg); font: 600 14px inherit; }
 .cap-sections { top: max(12px, env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); }
+/* The islands along the top edge are all one height, their contents centred: the row reads as one line. */
+@media (min-width: 441px) {
+  .top-left > .cap, .cap-sections, .top-right > .cap:not(.cap-tools) { height: 52px; }
+  .top-right > .cap:not(.cap-tools):not(.cap-layers) { width: 52px; justify-content: center; }
+  .cap-sections .tabs { height: 100%; }
+  .cap-sections .tab { height: 100%; padding-top: 0; padding-bottom: 0; }
+}
 
 .cap-transport { position: absolute; z-index: 6; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; align-items: center; }
 .cap-transport .cap, .cap-bl .cap { position: static; padding: 6px; gap: 4px; }
@@ -235,10 +245,12 @@ canvas { display: block; }
 .tabs { position: relative; display: flex; }
 .tab {
   position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 7px; padding: 11px 16px 11px 13px; border-radius: 999px;
-  font-size: 14px; font-weight: 600; color: var(--fg-2); transition: color 0.25s, padding 0.35s var(--spring); white-space: nowrap;
+  font-size: 14px; font-weight: 600; color: var(--fg-2); transition: color 0.25s, padding 0.42s var(--glide), column-gap 0.42s var(--glide); white-space: nowrap;
 }
+.tab svg { transition: transform 0.25s var(--spring); }
+.tab:active svg { transform: scale(0.86); }
 .tab svg { width: 19px; height: 19px; flex: 0 0 auto; }
-.tab .tl { display: inline-block; max-width: 90px; overflow: hidden; transition: max-width 0.35s var(--spring), opacity 0.25s; }
+.tab .tl { display: inline-block; max-width: 90px; overflow: hidden; transition: max-width 0.42s var(--glide), opacity 0.3s var(--ease); }
 /* While drawing the sections shrink to icons; a tap on them brings the names back. */
 .tabs.measure .tab, .tabs.measure .tl { transition: none !important; }
 .tabs.compact .tab, .tabs.squeeze .tab { padding: 11px 12px; gap: 0; }
@@ -250,8 +262,11 @@ canvas { display: block; }
 .tab-pill {
   position: absolute; z-index: 0; top: 0; bottom: 0; left: 0; width: 0; border-radius: 999px;
   background: var(--pill); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12), 0 0.5px 1px rgba(0, 0, 0, 0.1);
-  transition: transform 0.42s var(--spring), width 0.42s var(--spring), scale 0.25s var(--spring);
+  transition: transform 0.42s var(--glide), width 0.42s var(--glide), scale 0.25s var(--spring);
 }
+/* Islands that come with a section (Livelli, the colour, the transport...) grow into place. */
+.top-right > .cap:not([hidden]), .cap-transport:not([hidden]), #timeCap:not([hidden]) { animation: cap-in 0.42s var(--spring) both; }
+@keyframes cap-in { from { opacity: 0; scale: 0.84; } }
 /* Slid along with a finger (iOS 26): the pill swells into a lens and follows; let go to pick. */
 .tabs.sliding .tab-pill { transition: width 0.25s var(--spring), scale 0.25s var(--spring); scale: 1.12 1.18; box-shadow: var(--glass-rim), 0 8px 22px rgba(0, 0, 0, 0.18); }
 .tabs.sliding .tab { transition: color 0.15s; }
@@ -375,7 +390,6 @@ input[type="range"] {  /* 28 px tall to touch, the track is the 4 px band in the
 }
 /* At the magnet (the centre of Pan) the knob shows a full dot in the interface colour. */
 input[type="range"].at-magnet::-webkit-slider-thumb { background: radial-gradient(circle, var(--blue) 0 6px, var(--knob) 6.5px); }
-input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.12); }
 input[type="range"].at-magnet::-moz-range-thumb { background: radial-gradient(circle, var(--blue) 0 6px, var(--knob) 6.5px); }
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none; width: 38px; height: 24px; border-radius: 12px; background: var(--knob);
@@ -395,6 +409,26 @@ input[type="range"]::-moz-range-thumb {
 }
 .switch:checked { background: var(--green); }
 .switch:checked::before { transform: translateX(20px); }
+/* Touched (iOS 26), the knob lifts off the track as a clear glass lens, wider than the track is
+   tall, and follows the finger; the track takes the colour of the side it is on. Let go: white again. */
+.switch { touch-action: pan-y; }
+.switch::before { transition: transform 0.36s var(--spring), width 0.3s var(--spring), scale 0.3s var(--spring), background 0.22s var(--ease), box-shadow 0.22s var(--ease); }
+.switch.lens::before {
+  width: 35px; scale: 1.32; background: rgba(255, 255, 255, 0.22);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.95), inset 0 -1px 1.5px rgba(255, 255, 255, 0.55), inset 0 0 0 0.5px rgba(255, 255, 255, 0.7),
+    inset 0 0 6px rgba(255, 255, 255, 0.35), 0 4px 14px rgba(0, 0, 0, 0.16), 0 0.5px 1.5px rgba(0, 0, 0, 0.18);
+  -webkit-backdrop-filter: blur(1.5px) saturate(160%) brightness(1.08); backdrop-filter: blur(1.5px) saturate(160%) brightness(1.08);
+}
+.switch.lens:checked::before, .switch.lens[data-want="1"]::before { transform: translateX(12px); }
+.switch.lens[data-want="0"]::before { transform: none; }
+.switch.lens[data-want="1"] { background: var(--green); }
+.switch.lens[data-want="0"] { background: var(--fill-2); }
+/* the sliders' knobs do the same while held */
+input[type="range"]::-webkit-slider-thumb { transition: transform 0.2s var(--spring), background 0.2s var(--ease), box-shadow 0.2s var(--ease); }
+input[type="range"]:active::-webkit-slider-thumb {
+  transform: scale(1.3); background: rgba(255, 255, 255, 0.25);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.95), inset 0 0 0 0.5px rgba(255, 255, 255, 0.7), 0 4px 14px rgba(0, 0, 0, 0.18), 0 0.5px 1.5px rgba(0, 0, 0, 0.2);
+}
 .plus { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: var(--blue); background: var(--fill); }
 .plus svg { width: 18px; height: 18px; }
 
@@ -801,6 +835,9 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
 .ex-split .vid-preview[data-tall="true"] { width: auto; height: 460px; max-width: 100%; }
 .vid-preview.clear { background: repeating-conic-gradient(var(--fill-2) 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
 .ex-settings { display: grid; gap: 12px; min-width: 0; }
+.ex-panel .item.col { grid-template-columns: minmax(0, 1fr); }
+.ex-panel .item.col .seg { width: 100%; }  /* the choices span the row, as in the other panels */
+.ex-panel .item.col .seg button { flex: 1 1 0; }
 .text-in { width: min(220px, 55%); padding: 8px 12px; border-radius: 10px; border: 0; background: var(--fill); color: var(--fg); font: 500 15px var(--font); text-align: right; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .note-line { font-size: 13px; color: var(--fg-2); }
@@ -926,18 +963,52 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
 .layer.lifted .layer-row { transition: none; }
 .hint { position: absolute; z-index: 3; right: max(16px, env(safe-area-inset-right, 0px)); bottom: 28px; font-size: 12px; color: var(--fg-2); pointer-events: none; }
 
+/* Squircles (superellipses) for every rounded rectangle, the same way everywhere.
+   --sq is each corner's radius as a squircle: about 1.4 times the circular one, to look as round.
+   Circles and capsules (the round buttons, the islands, the pills) stay circles and capsules.
+   Where corner-shape is missing (Safari), the same curve is cut with clip-path: shape(); the
+   elements with a shadow around them keep it by painting their fill in a ::before that is cut instead. */
+.popover { --sq: 44px; } .card, .help-card { --sq: 40px; }
+.ctx-menu, .video-win, .gal-tile, .gal-slot, .ex-preview, #waveCanvas, .tap-btn, .btn.ex-big { --sq: 26px; }
+.group, .isle, .layer, .layer-row, .swipe, .inst, .layer-menu, .help-item, .wave-help, .seg.ex-seg { --sq: 22px; }
+.mode-grid, .mode-wheel, .mod, .brush, #wave, #waveScope, #recWave, #pressCurve, .clock { --sq: 20px; }
+.btn, .beat-name { --sq: 22px; }
+.pad, .seg.ex-seg button, .mode-grid button { --sq: 17px; }
+.mini-btn, .menu-item, .doc-input, .gal-search, .num-edit input, .side-ur, .sbtn, .side-ctrl, .vid-preview, .doc-name, .gal-crumbs button,
+select, input[type="text"], #popInst .inst { --sq: 17px; }
+.swatch.drum, .fam-tab, .text-in { --sq: 14px; }
+.thumb, .gal-name input, .gal-item.folder .gal-mini, .side-ctrl::after { --sq: 11px; }
+.ex-preview .vid-preview { --sq: 14px; }
 @supports (corner-shape: squircle) {
-  .popover, .card, .group, .btn, .pad, .swatch.drum, .sidebar, .layer, .layer-row, .inst, .beat-name, .key, #wave, .bubble, .thumb, .mini-btn {
-    corner-shape: squircle;
+  .popover, .card, .help-card, .ctx-menu, .video-win, .gal-tile, .gal-slot, .ex-preview, #waveCanvas, .tap-btn, .btn.ex-big,
+  .group, .isle, .layer, .layer-row, .swipe, .inst, .layer-menu, .help-item, .wave-help, .seg.ex-seg,
+  .mode-grid, .mode-wheel, .mod, .brush, #wave, #waveScope, #recWave, #pressCurve, .clock,
+  .btn, .beat-name, .pad, .seg.ex-seg button, .mode-grid button,
+  .mini-btn, .menu-item:not(.menu-item + .menu-item), .doc-input, .gal-search, .num-edit input, .side-ur, .sbtn, .side-ctrl, .vid-preview, .doc-name, .gal-crumbs button,
+  select, input[type="text"], #popInst .inst, .swatch.drum, .fam-tab, .text-in, .thumb, .gal-name input, .gal-item.folder .gal-mini, .side-ctrl::after {
+    corner-shape: squircle; border-radius: var(--sq);
   }
-  .popover { border-radius: 44px; }
-  .card { border-radius: 40px; }
-  .group, .layer, .layer-row, .inst { border-radius: 24px; }
-  .btn, .beat-name { border-radius: 22px; }
-  .pad { border-radius: 18px; }
+  .gal-item.folder .gal-tile { border-top-left-radius: 8px; }
+  .sheet-nav, .sheet-body, .sidebar, .vslider, .vthumb { corner-shape: squircle; }
+  .sheet-nav { border-radius: 44px 0 0 44px; } .sheet-body { border-radius: 0 44px 44px 0; }
   /* superellipse corners need larger radii to look as round; still concentric */
   .sidebar { --r-thumb: 9px; --r-well: calc(var(--r-thumb) * 1.5 + var(--in) * 1.5); --r-bar: calc(var(--r-well) + var(--in) * 1.5); }
-  .vslider { corner-shape: squircle; }
+}
+@supports not (corner-shape: squircle) {
+  @supports (clip-path: shape(from 0 0, hline to 1px)) {
+    .group, .isle, .layer-row, .swipe, .layer-menu, .help-item, .wave-help, .mode-grid, .mode-wheel, .mod, .brush, #wave, #waveScope, #recWave,
+    #pressCurve, #waveCanvas, .ex-preview, .tap-btn, .mini-btn, .doc-input, .gal-search, .num-edit input, .side-ur, .sbtn, .text-in,
+    .vid-preview, .fam-tab, .swatch.drum, .beat-name, .thumb, .inst:not(.playing), select, input[type="text"], .gal-name input {
+      border-radius: var(--sq); clip-path: shape(from var(--sq) 0, hline to calc(100% - var(--sq)), curve to 100% var(--sq) with calc(100% - var(--sq) * 0.09) 0 / 100% calc(var(--sq) * 0.09), vline to calc(100% - var(--sq)), curve to calc(100% - var(--sq)) 100% with 100% calc(100% - var(--sq) * 0.09) / calc(100% - var(--sq) * 0.09) 100%, hline to var(--sq), curve to 0 calc(100% - var(--sq)) with calc(var(--sq) * 0.09) 100% / 0 calc(100% - var(--sq) * 0.09), vline to var(--sq), curve to var(--sq) 0 with 0 calc(var(--sq) * 0.09) / calc(var(--sq) * 0.09) 0, close);
+    }
+    :is(.group, .isle, .mini-btn, .doc-input, .gal-search, .side-ur, .sbtn, .text-in, .tap-btn, .fam-tab, .beat-name, .inst, select, input[type="text"]):focus-visible { clip-path: none; }
+    /* with a shadow around: the fill is cut, the shadow (soft, wider than the corner) stays */
+    .card:not(.beat-grid):not(.keys-card), .seg.ex-seg, .btn.ex-big { position: relative; isolation: isolate; border-radius: var(--sq); background: none; }
+    .card:not(.beat-grid):not(.keys-card)::before, .seg.ex-seg::before, .btn.ex-big::before {
+      content: ""; position: absolute; z-index: -1; inset: 0; pointer-events: none; background: var(--card); clip-path: shape(from var(--sq) 0, hline to calc(100% - var(--sq)), curve to 100% var(--sq) with calc(100% - var(--sq) * 0.09) 0 / 100% calc(var(--sq) * 0.09), vline to calc(100% - var(--sq)), curve to calc(100% - var(--sq)) 100% with 100% calc(100% - var(--sq) * 0.09) / calc(100% - var(--sq) * 0.09) 100%, hline to var(--sq), curve to 0 calc(100% - var(--sq)) with calc(var(--sq) * 0.09) 100% / 0 calc(100% - var(--sq) * 0.09), vline to var(--sq), curve to var(--sq) 0 with 0 calc(var(--sq) * 0.09) / calc(var(--sq) * 0.09) 0, close);
+    }
+    .btn.ex-big::before { background: var(--blue); }
+  }
 }
 
 @media (max-width: 760px) {
@@ -955,7 +1026,7 @@ input.title-input { font-size: 26px !important; font-weight: 700; letter-spacing
   #wave { height: 112px; }
   .beat-row { grid-template-columns: 96px 32px auto; }
   .beat-name { font-size: 13px; padding: 7px 6px; }
-  .pad { width: 30px; height: 30px; border-radius: 9px; }
+  .pad { width: 30px; height: 30px; --sq: 13px; border-radius: var(--sq); }
   .keys-card { height: 140px; }
   .tempo span { min-width: 54px; }
   .clock { min-width: 52px; }
@@ -4770,7 +4841,7 @@ function gizmoStart(hit, e, x, y) {
   requestFrame();
 }
 function gizmoMove(x, y) {
-  const t = sel.tf, h = $("#hint"); clearTimeout(hintTimer);
+  const t = sel.tf, h = $("#hint"); clearTimeout(hintTimer); hintUntil = 0; hintText = "";
   if (gz.kind === "rot") {
     let a = Math.atan2(y - gz.py, x - gz.px) - Math.atan2(gz.y0 - gz.py, gz.x0 - gz.px);
     a = Math.atan2(Math.sin(a), Math.cos(a));
@@ -5247,12 +5318,24 @@ function widthFor(e, fallback) {
 }
 let hintTimer = 0;
 const HINT = "";  // nothing by default: the hint line only reports the Pencil and moves
+/* Called for every Pencil sample: the text is written only when it changes (pressure in 5% steps),
+   and a single timer puts the hint back 2.5 s after the last one. */
+let hintText = "", hintUntil = 0;
 function inputHint(e) {
   const h = $("#hint");
-  clearTimeout(hintTimer);
-  if (isPen(e)) h.textContent = `Apple Pencil · pressione ${Math.round(pressureOf(e) * 100)}%`;
-  else h.textContent = e.pointerType === "mouse" ? "Mouse: spessore fisso (cursore Spessore)" : "Dito: spessore fisso · con la Apple Pencil segue la pressione";
-  hintTimer = setTimeout(() => { h.textContent = HINT; }, 2500);
+  const text = isPen(e) ? `Apple Pencil · pressione ${Math.round(pressureOf(e) * 20) * 5}%`
+    : e.pointerType === "mouse" ? "Mouse: spessore fisso (cursore Spessore)" : "Dito: spessore fisso · con la Apple Pencil segue la pressione";
+  if (text !== hintText) h.textContent = hintText = text;
+  const first = !hintUntil;
+  hintUntil = performance.now() + 2500;
+  if (first) {
+    const back = () => {
+      const left = hintUntil - performance.now();
+      if (left > 0) { hintTimer = setTimeout(back, left); return; }
+      hintUntil = 0; h.textContent = hintText = HINT;
+    };
+    clearTimeout(hintTimer); hintTimer = setTimeout(back, 2500);
+  }
 }
 function toPoint(e, stabilized, fallback) {
   let { x, y } = pointerXY(e);
@@ -5421,7 +5504,7 @@ canvas.addEventListener("pointermove", e => {
     if (snap.b) db = Math.round(db / snap.b) * snap.b;
     dp = snap.p ? Math.round(dp / snap.p) * snap.p : +dp.toFixed(2);
     sel.db = db; sel.dp = dp;
-    const h = $("#hint"); clearTimeout(hintTimer);
+    const h = $("#hint"); clearTimeout(hintTimer); hintUntil = 0; hintText = "";
     h.textContent = `Sposta: ${sel.dp > 0 ? "+" : ""}${+sel.dp.toFixed(2)} semitoni · ${db > 0 ? "+" : ""}${+db.toFixed(2)} battiti`;
     requestFrame();
     return;
@@ -6826,38 +6909,64 @@ function tlGeom() {
 const tlX = (g, beat) => g.x0 + (g.x1 - g.x0) * beat / g.T;
 const tlBeat = (g, x) => clamp((x - g.x0) / (g.x1 - g.x0), 0, 1) * g.T;
 function drawWave() { syncExport(); }
-function drawTimeline() {
-  const { cv, r, x0, x1, T } = tlGeom();
+/* The waveform, the bar numbers and the In / Out frame change only with the mix, the range or the
+   size: they are painted once into a picture kept aside; while listening each frame copies it and
+   adds the playhead (it was all drawn again 60 times a second, with a layout read each time). */
+const tlCache = { cv: null, key: "", buf: null };
+function drawTimeline(headOnly) {
+  const cv = $("#wave");
+  if (!headOnly || !tlCache.r) tlCache.r = cv.getBoundingClientRect();
+  const r = tlCache.r, x0 = TL.pad, x1 = r.width - TL.pad, T = exTotal();
   if (!r.width) return;
   const d = Math.min(window.devicePixelRatio || 1, 2);
   if (cv.width !== Math.round(r.width * d) || cv.height !== Math.round(r.height * d)) { cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d); }
-  const c = cv.getContext("2d"); c.setTransform(d, 0, 0, d, 0, 0);
+  const c = cv.getContext("2d");
+  const g = { x0, x1, T }, rg = exRange(), top = TL.top, bottom = r.height - 6;
+  const key = [cv.width, cv.height, T, rg.a, rg.b, ui.repeats, loopBeats(), darkMode, colors["fg-2"]].join();
+  if (key !== tlCache.key || tlCache.buf !== loop.buffer) {
+    tlCache.key = key; tlCache.buf = loop.buffer;
+    if (!tlCache.cv) tlCache.cv = document.createElement("canvas");
+    tlCache.cv.width = cv.width; tlCache.cv.height = cv.height;
+    paintTimeline(tlCache.cv.getContext("2d"), d, r, g, rg);
+  }
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.clearRect(0, 0, cv.width, cv.height);
+  c.drawImage(tlCache.cv, 0, 0);
+  // listening from In to Out: the playhead
+  if (exPrev && live) {
+    c.setTransform(d, 0, 0, d, 0, 0);
+    const t = clamp(live.currentTime - exPrev.at, 0, exPrev.dur), x = tlX(g, rg.a + t / spb());
+    c.fillStyle = colors.playhead; c.fillRect(Math.round(x) - 1, top - 4, 2, bottom - top + 8);
+  }
+}
+function paintTimeline(c, d, r, g, rg) {
+  const { x0, x1, T } = g, top = TL.top, bottom = r.height - 6, mid = (top + bottom) / 2;
+  c.setTransform(d, 0, 0, d, 0, 0);
   c.clearRect(0, 0, r.width, r.height);
-  const g = { x0, x1, T }, rg = exRange(), top = TL.top, bottom = r.height - 6, mid = (top + bottom) / 2;
   const xa = tlX(g, rg.a), xb = tlX(g, rg.b);
   // bar numbers, and a line where each repetition of the loop begins
   c.font = "600 11px -apple-system, system-ui, sans-serif"; c.textBaseline = "alphabetic"; c.textAlign = "center";
   const bars = T / 4, every = Math.max(1, Math.ceil(bars / Math.max(1, (x1 - x0) / 34)));
-  for (let b = 0; b <= bars; b += every) {
-    const x = tlX(g, b * 4);
-    c.fillStyle = colors["fg-2"]; c.fillText(String(b + 1), clamp(x, x0 + 4, x1 - 4), 13);
-  }
+  c.fillStyle = colors["fg-2"];
+  for (let b = 0; b <= bars; b += every) c.fillText(String(b + 1), clamp(tlX(g, b * 4), x0 + 4, x1 - 4), 13);
   c.fillStyle = colors["grid-bar"];
   for (let k = 1; k < ui.repeats; k++) c.fillRect(Math.round(tlX(g, k * loopBeats())) - 0.5, top, 1, bottom - top);
-  // the waveform
+  // the waveform: one path for the bars outside In / Out, one (with the gradient) for those inside
   if (loop.buffer) {
     const L = loop.buffer.getChannelData(0), R = loop.buffer.getChannelData(1), N = L.length;
     const cols = Math.max(1, Math.floor((x1 - x0) / 3)), per = Math.max(1, Math.floor(N * ui.repeats / cols));
     const grad = c.createLinearGradient(x0, 0, x1, 0);
     grad.addColorStop(0, SYS.blue[darkMode ? 1 : 0]); grad.addColorStop(0.5, SYS.purple[darkMode ? 1 : 0]); grad.addColorStop(1, SYS.pink[darkMode ? 1 : 0]);
+    const inside = new Path2D(), outside = new Path2D();
     for (let i = 0; i < cols; i++) {
       const s0 = Math.floor(i * N * ui.repeats / cols);
       let peak = 0;
       for (let j = 0; j < per; j += 4) { const k = (s0 + j) % N, a = Math.max(Math.abs(L[k]), Math.abs(R[k])); if (a > peak) peak = a; }
       const x = x0 + i * 3 + 0.5, h = Math.max(1.5, peak * (bottom - top - 14));
-      c.fillStyle = x + 2 < xa || x > xb ? colors["grid-bar"] : grad;
-      roundRect(c, x, mid - h / 2, 2, h, 1); c.fill();
+      addRoundRect(x + 2 < xa || x > xb ? outside : inside, x, mid - h / 2, 2, h, 1);
     }
+    c.fillStyle = colors["grid-bar"]; c.fill(outside);
+    c.fillStyle = grad; c.fill(inside);
   }
   // the In / Out frame, with a handle on each side
   const yel = SYS.yellow[darkMode ? 1 : 0], hw = 14;
@@ -6868,11 +6977,6 @@ function drawTimeline() {
     const cx = x + side * hw / 2;
     c.strokeStyle = "rgba(0,0,0,0.55)"; c.lineWidth = 2.2; c.lineCap = "round"; c.lineJoin = "round";
     c.beginPath(); c.moveTo(cx + side * -2, mid - 6); c.lineTo(cx + side * 2, mid); c.lineTo(cx + side * -2, mid + 6); c.stroke();
-  }
-  // listening from In to Out: the playhead
-  if (exPrev && live) {
-    const t = clamp(live.currentTime - exPrev.at, 0, exPrev.dur), x = tlX(g, rg.a + t / spb());
-    c.fillStyle = colors.playhead; c.fillRect(Math.round(x) - 1, top - 4, 2, bottom - top + 8);
   }
 }
 /* Drag a handle (or the frame itself to move both); a tap outside moves the nearest handle there.
@@ -6928,7 +7032,7 @@ $("#exPlay").onclick = async () => {
   const free = src.onended;
   src.onended = () => { free(); if (exPrev === me) exPreviewStop(); };
   $("#exPlay").classList.add("on"); $("#exPlay").setAttribute("aria-label", "Stop");
-  const tick = () => { if (exPrev !== me) return; drawTimeline(); requestAnimationFrame(tick); };
+  const tick = () => { if (exPrev !== me) return; drawTimeline(true); requestAnimationFrame(tick); };
   requestAnimationFrame(tick);
 };
 
@@ -8198,7 +8302,6 @@ function showView(view, instant) {
     const el = $(sel), on = k === view;
     el.hidden = !on;
     el.classList.toggle("enter", on && !instant);
-    $(TAB[k]).setAttribute("aria-selected", String(on));
   }
   $("#tools").hidden = $("#liveCap").hidden = $("#editCap").hidden = $("#modsCap").hidden = view !== "draw"; $("#midiCap").hidden = view !== "midi";
   if (view !== "draw") showMods(false);
@@ -8206,9 +8309,8 @@ function showView(view, instant) {
   $("#timeCap").hidden = view === "export";  // Esporta has its own play (In to Out) and the big button at the bottom
   if (view !== "export") exPreviewStop();
   $("#layersCap").hidden = $("#colorCap").hidden = view !== "draw" && view !== "midi";
-  fitTabs();
+  tabsChange(() => { for (const k of Object.keys(TAB)) $(TAB[k]).setAttribute("aria-selected", String(k === view)); fitTabs(); });
   clearSelection();
-  movePill(); followPill();
   if (view === "draw") { applySideY(); layoutDraw(); }
   if (view === "beat") { buildBeatGrid(); syncBeatControls(); setBeatMode(ui.beatMode || "grid"); }
   if (view === "midi") { applyKbH(); buildKeys(); syncMidiChip(); connectMidi(); drawRoll(true); if (loop.dirty || !loop.buffer) ensureLoop(); }
@@ -8295,7 +8397,7 @@ for (const [k, sel] of Object.entries(TAB)) $(sel).onclick = () => {
 /* Sections as icons only: while drawing ("auto"), always, or never (Impostazioni). */
 /* When the islands left and right leave no room, the names give way (except the current one). */
 function fitTabs() {
-  const tabs = $("#tabs");
+  const tabs = $("#tabs"), nested = tabs.classList.contains("measure");
   tabs.classList.add("measure"); tabs.classList.remove("squeeze");
   void tabs.offsetWidth;
   const right = $("#topRight"), wasStacked = right.classList.contains("stacked");
@@ -8314,7 +8416,7 @@ function fitTabs() {
     if (clash()) right.classList.add("stacked");
   }
   $("#app").classList.toggle("right-stacked", right.classList.contains("stacked") && rightOn);
-  void tabs.offsetWidth; tabs.classList.remove("measure");
+  if (!nested) { void tabs.offsetWidth; tabs.classList.remove("measure"); }
   movePill();
   if (wasStacked !== right.classList.contains("stacked") && ui.view === "draw") layoutDraw();
 }
@@ -8322,14 +8424,33 @@ function setCompact(on) {
   const tabs = $("#tabs");
   on = ui.tabsMode === "always" || (ui.tabsMode !== "never" && on);
   if (tabs.classList.contains("compact") === on) return;
-  tabs.classList.toggle("compact", on);
-  followPill();
+  tabsChange(() => tabs.classList.toggle("compact", on));
 }
-/* The labels grow and shrink with a transition: the pill follows them while they move. */
-function followPill() {
-  const t0 = performance.now();
-  const follow = () => { movePill(); if (performance.now() - t0 < 450) requestAnimationFrame(follow); };
-  requestAnimationFrame(follow);
+/* The names of the sections grow and shrink, the island with them, and the pill goes straight to
+   where its tab will be, on the same curve: nothing follows a moving layout frame by frame.
+   The new layout is measured with the transitions off, then each name starts from where it was. */
+function tabsChange(mutate) {
+  const tabs = $("#tabs"), items = [...tabs.querySelectorAll(".tab")];
+  const was = items.map(t => {
+    const cs = getComputedStyle(t), l = t.querySelector(".tl");
+    return { pl: cs.paddingLeft, pr: cs.paddingRight, gap: cs.columnGap, w: l ? l.getBoundingClientRect().width + "px" : "", o: l ? getComputedStyle(l).opacity : "" };
+  });
+  tabs.classList.add("measure");
+  mutate();
+  void tabs.offsetWidth;
+  movePill();  // the end of the move: its transition carries it there
+  items.forEach((t, i) => {
+    const l = t.querySelector(".tl"), v = was[i];
+    t.style.paddingLeft = v.pl; t.style.paddingRight = v.pr; t.style.columnGap = v.gap;
+    if (l) { l.style.maxWidth = v.w; l.style.opacity = v.o; }
+  });
+  void tabs.offsetWidth;
+  tabs.classList.remove("measure");
+  void tabs.offsetWidth;
+  for (const t of items) {
+    t.style.paddingLeft = t.style.paddingRight = t.style.columnGap = "";
+    const l = t.querySelector(".tl"); if (l) l.style.maxWidth = l.style.opacity = "";
+  }
 }
 
 function vslider(el, get, set, label, fmt) {
@@ -10383,6 +10504,41 @@ if (!inArtifact && "serviceWorker" in navigator && (location.protocol === "https
     if (hadController) { save(); $("#updateBar").hidden = false; }
   });
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+}
+/* Switches (iOS 26): pressed, the knob becomes a glass lens over the track; slid sideways it
+   follows the finger and letting go picks the side it is on (a tap still just toggles). */
+{
+  let sw = null;
+  const want = (e, r) => (e.clientX - r.left > r.width / 2 ? "1" : "0");
+  document.addEventListener("pointerdown", e => {
+    const el = e.target.closest && e.target.closest("input.switch");
+    if (!el || el.disabled || e.button > 0) return;
+    sw = { el, id: e.pointerId, x: e.clientX, r: el.getBoundingClientRect(), moved: false, was: el.checked };
+    el.classList.add("lens");
+  }, true);
+  document.addEventListener("pointermove", e => {
+    if (!sw || e.pointerId !== sw.id) return;
+    if (!sw.moved && Math.abs(e.clientX - sw.x) < 4) return;
+    sw.moved = true;
+    sw.el.dataset.want = want(e, sw.r);
+  }, true);
+  const end = e => {
+    if (!sw || e.pointerId !== sw.id) return;
+    const s0 = sw; sw = null;
+    s0.el.classList.remove("lens");
+    if (!s0.moved) return;
+    const on = s0.el.dataset.want === "1";
+    delete s0.el.dataset.want;
+    // the click that follows the drag would toggle it: it sets the side the knob was let go on instead
+    const click = ev => { if (ev.target === s0.el) ev.preventDefault(); };
+    s0.el.addEventListener("click", click, { once: true, capture: true });
+    setTimeout(() => {
+      s0.el.removeEventListener("click", click, true);
+      if (s0.el.checked !== on) { s0.el.checked = on; s0.el.dispatchEvent(new Event("input", { bubbles: true })); s0.el.dispatchEvent(new Event("change", { bubbles: true })); }
+    }, 0);
+  };
+  document.addEventListener("pointerup", end, true);
+  document.addEventListener("pointercancel", e => { if (sw && e.pointerId === sw.id) { sw.el.classList.remove("lens"); delete sw.el.dataset.want; sw = null; } }, true);
 }
 // No page zoom from pinches on the interface (Safari).
 document.addEventListener("gesturestart", e => e.preventDefault());
