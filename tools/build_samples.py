@@ -1,8 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Build the sampled instruments of the web app from VS Chamber Orchestra: Community Edition.
+"""Build the sampled instruments of the web app from VS Chamber Orchestra: Community Edition
+and the Versilian Community Sample Library (both CC0 1.0, public domain).
 
-    git clone https://github.com/sgossner/VSCO-2-CE        # CC0 1.0 (public domain)
-    python tools/build_samples.py path/to/VSCO-2-CE         # -> docs/app/samples/, web/app.html
+    git clone https://github.com/sgossner/VSCO-2-CE        # orchestra, percussion
+    git clone https://github.com/sgossner/VCSL             # grand piano, harpsichord, mallets, sax...
+    python tools/build_samples.py path/to/VSCO-2-CE path/to/VCSL      # -> docs/app/samples/, web/app.html
+    python tools/build_samples.py path/to/VSCO-2-CE path/to/VCSL GRAND,XYLO   # only these
+
+With a list of instruments only those are rebuilt; the others keep their files and zones.
 
 One velocity layer per instrument, a few notes per octave, mono MP3. Every file is trimmed
 to its first sound, cut to a few seconds with a fade, levelled note by note, and named
@@ -94,6 +99,27 @@ PERC = {
     "GLASS": ("Miscellania Raw/Misc 1/glass_break.wav", 2.5, 0.5),
 }
 PIANO_MAP = "Keys/Upright Piano/MappingChart.txt"
+# From VCSL, in the same form as SETS and PERC
+VCSL_SETS = {
+    "GRAND": ("Chordophones/Zithers/Grand Piano, Steinway B/Sus", r"_Close_([A-G]#?\d)_vl(\d)_rr1\.wav", ("3",), 6.0, 0.6),
+    "HARPSI": ("Chordophones/Zithers/Harpsichord, Flemish/Sustains/Low", r"HarpsiRH_Low_Far_([A-G]#?\d)_rr(\d)\.wav", ("1", "2"), 4.0, 0.5),
+    "PIPEORGAN": ("Aerophones/Edge-blown Aerophones/Pipe Organ/Quiet", r"_Man3Quiet_([A-G]#?\d)_rr1\.wav", (), 5.0, 0.4),
+    "MARIMBA": ("Idiophones/Struck Idiophones/Marimba", r"_Outrigger_([A-G]#?\d)_(\w+)_01\.wav", ("med", "loud", "soft"), 3.0, 0.4),
+    "VIBES": ("Idiophones/Struck Idiophones/Vibraphone/Soft Mallets", r"_soft_([A-G]#?\d)_v(\d)_rr\d_Main\.wav", ("2", "1"), 5.0, 0.8),
+    "XYLO": ("Idiophones/Struck Idiophones/Xylophone/Medium Mallets", r"_Medium_([A-G]#?\d)_(\w+)_01_far\.wav", ("ff",), 2.0, 0.3),
+    "TUBULAR": ("Idiophones/Struck Idiophones/Tubular Bells 2", r"TB_hit_([A-G]#?\d)_v(\d)_\d\.wav", ("4", "2"), 6.0, 1.5),
+    "KALIMBA": ("Idiophones/Plucked Idiophones/Kalimba, Tanzania", r"_Main_([A-G]#?\d)_k\d+_50_100", (), 3.0, 0.5),
+    "OCARINA": ("Aerophones/Edge-blown Aerophones/Ocarina, Typical/Sustains/SusVib", r"_SusVib_([A-G]#?\d)\.wav", (), 4.0, 0.3),
+    "RECORDER": ("Aerophones/Edge-blown Aerophones/Baroque Alto Recorder/Sustain", r"_Sus_([A-G]#?\d)_rr1_Main\.wav", (), 4.0, 0.3),
+    "HARMONICA": ("Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Sustains/Normal", r"_Normal_([A-G]#?\d)\.wav", (), 4.0, 0.3),
+    "SAX": ("Aerophones/Reed Aerophones/Tenor Saxophone/Vibrato", r"_Vib_Main_([A-G]#?\d)_var\d\.wav", (), 4.0, 0.3),
+}
+VCSL_PERC = {
+    "CONGA": ("Membranophones/Struck Membranophones/Conga/Conga_HitN_v2_rr1_Sum.wav", 1.2, 0.2),
+    "CAJON": ("Idiophones/Struck Idiophones/Cajon/Cajon_hit1_f_rr1.wav", 1.0, 0.2),
+    "DARBUKA": ("Membranophones/Struck Membranophones/Darbuka/Darbuka_1_hit_vl2_rr1.wav", 1.0, 0.2),
+}
+THIN = {"GRAND": 4}  # at least this many semitones between two recorded notes (fewer files)
 
 
 def load(path):
@@ -150,18 +176,32 @@ def mp3(x, path):
                     "-codec:a", "libmp3lame", "-q:a", "4", str(path)], input=pcm, check=True)
 
 
-def main(src):
-    src = Path(src)
-    if OUT.exists():
+def fresh(ident):
+    if (OUT / ident).exists():
+        shutil.rmtree(OUT / ident)
+    (OUT / ident).mkdir(parents=True)
+
+
+def main(vsco, vcsl, only=None):
+    vsco, vcsl = Path(vsco), Path(vcsl)
+    html = APP.read_text(encoding="utf-8")
+    zones = {}
+    if only:  # keep the other instruments as they are
+        zones = json.loads(re.search(r"const SAMPLE_ZONES = (.*?);\n// SAMPLES:END", html, flags=re.S).group(1))
+        unknown = set(only) - set(SETS) - set(PERC) - set(VCSL_SETS) - set(VCSL_PERC)
+        assert not unknown, f"unknown instruments: {sorted(unknown)}"
+    elif OUT.exists():
         shutil.rmtree(OUT)
-    OUT.mkdir(parents=True)
+    OUT.mkdir(parents=True, exist_ok=True)
     piano_map = {}
-    for line in (src / PIANO_MAP).read_text().splitlines():
+    for line in ((vsco / PIANO_MAP).read_text().splitlines() if not only or "PIANO" in only else []):
         if "=" in line and line[:3].isdigit():
             k, v = line.split("=")
             piano_map[k] = int(v)
-    zones = {}
-    for ident, spec in SETS.items():
+    sets = [(ident, spec, vsco) for ident, spec in SETS.items()] + [(ident, spec, vcsl) for ident, spec in VCSL_SETS.items()]
+    for ident, spec, src in sets:
+        if only and ident not in only:
+            continue
         if isinstance(spec, tuple):
             folder, pattern, layers, longest, fade = spec
             parts = [(folder, pattern, layers, 0, 127)]
@@ -202,9 +242,15 @@ def main(src):
                     print(f"  {ident} {fname}: {midi}, measured {heard:.2f} (pitch detection disagrees)")
                 notes.append((midi, cut(x, longest, fade)))
         notes.sort(key=lambda n: n[0])
+        if ident in THIN:
+            kept = []
+            for n in notes:
+                if not kept or n[0] - kept[-1][0] >= THIN[ident]:
+                    kept.append(n)
+            notes = kept
         # every note equally loud over its first second and a half (so neighbouring notes
         # match), without clipping
-        (OUT / ident).mkdir()
+        fresh(ident)
         for midi, x in notes:
             head = x[: int(SR * 1.5)]
             gain = min(0.16 / (np.sqrt(np.mean(head ** 2)) or 1), 0.95 / (np.max(np.abs(x)) or 1))
@@ -212,19 +258,23 @@ def main(src):
         zones[ident] = [m for m, _ in notes]
         size = sum(p.stat().st_size for p in (OUT / ident).iterdir())
         print(f"{ident}: {len(notes)} notes {zones[ident][0]}-{zones[ident][-1]}, {size / 1e6:.2f} MB")
-    for ident, (path, longest, fade) in PERC.items():
+    percs = [(ident, spec, vsco) for ident, spec in PERC.items()] + [(ident, spec, vcsl) for ident, spec in VCSL_PERC.items()]
+    for ident, (path, longest, fade), src in percs:
+        if only and ident not in only:
+            continue
         x = load(src / path)
         x = cut(x[onset(x):], longest, fade)
-        (OUT / ident).mkdir()
+        fresh(ident)
         mp3(x * (0.9 / (np.max(np.abs(x)) or 1)), OUT / ident / "0.mp3")  # hits: the peak, not the body
         zones[ident] = [0]
         print(f"{ident}: {len(x) / SR:.1f} s, {(OUT / ident / '0.mp3').stat().st_size / 1e3:.0f} kB")
     (OUT / "LICENSE.txt").write_text(
         "Samples from VS Chamber Orchestra: Community Edition (https://github.com/sgossner/VSCO-2-CE),\n"
         "recorded by Sam Gossner and Simon Dalzell (upright piano: Simon Dalzell, Ivy Audio),\n"
-        "Versilian Studios. Released under CC0 1.0 Universal (public domain). Converted to mono MP3\n"
-        "by tools/build_samples.py.\n", encoding="utf-8")
-    html = APP.read_text(encoding="utf-8")
+        "and from the Versilian Community Sample Library (https://github.com/sgossner/VCSL)\n"
+        "(grand piano, harpsichord, pipe organ, mallets, kalimba, ocarina, recorder, harmonica,\n"
+        "tenor saxophone, conga, cajon, darbuka), Versilian Studios. Released under CC0 1.0 Universal\n"
+        "(public domain). Converted to mono MP3 by tools/build_samples.py.\n", encoding="utf-8")
     block = "// SAMPLES:BEGIN\nconst SAMPLE_ZONES = " + json.dumps(zones, separators=(",", ":")) + ";\n// SAMPLES:END"
     html, n = re.subn(r"// SAMPLES:BEGIN\n.*?// SAMPLES:END", lambda _: block, html, flags=re.S)
     assert n == 1, "SAMPLES markers not found in web/app.html"
@@ -234,6 +284,6 @@ def main(src):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
+    if len(sys.argv) not in (3, 4):
         sys.exit(__doc__)
-    main(sys.argv[1])
+    main(sys.argv[1], sys.argv[2], sys.argv[3].split(",") if len(sys.argv) == 4 else None)

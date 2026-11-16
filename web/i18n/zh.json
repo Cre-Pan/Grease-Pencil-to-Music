@@ -862,5 +862,15 @@
  "Cartella creata": "已创建文件夹",
  "file .zip": ".zip 文件",
  "La cartella è vuota": "文件夹是空的",
- "Condividi": "共享"
+ "Condividi": "共享",
+ "Pianoforte a coda": "三角钢琴",
+ "Clavicembalo": "羽管键琴",
+ "Organo a canne": "管风琴",
+ "Xilofono": "木琴",
+ "Campane tubolari": "管钟",
+ "Kalimba": "卡林巴琴",
+ "Flauto dolce": "竖笛",
+ "Armonica": "口琴",
+ "Darbuka": "达布卡鼓",
+ "Cajón": "卡洪鼓"
 }

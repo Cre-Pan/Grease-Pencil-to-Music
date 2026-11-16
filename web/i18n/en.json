@@ -862,5 +862,15 @@
  "Cartella creata": "Folder created",
  "file .zip": ".zip file",
  "La cartella è vuota": "The folder is empty",
- "Condividi": "Share"
+ "Condividi": "Share",
+ "Pianoforte a coda": "Grand piano",
+ "Clavicembalo": "Harpsichord",
+ "Organo a canne": "Pipe organ",
+ "Xilofono": "Xylophone",
+ "Campane tubolari": "Tubular bells",
+ "Kalimba": "Kalimba",
+ "Flauto dolce": "Recorder",
+ "Armonica": "Harmonica",
+ "Darbuka": "Darbuka",
+ "Cajón": "Cajón"
 }
