@@ -7014,7 +7014,7 @@ function buildTrackHeads(rows) {
     const nm = document.createElement("div"); nm.className = "trk-name";
     const sub = document.createElement("div"); sub.className = "trk-sub";
     const mute = document.createElement("button"); mute.className = "lbtn trk-mute";
-    const vol = document.createElement("input"); vol.type = "range"; vol.className = "trk-vol"; vol.min = 0; vol.max = 1.5; vol.step = 0.01;
+    const vol = document.createElement("input"); vol.type = "range"; vol.className = "trk-vol"; vol.min = 0; vol.max = r.kind === "audio" ? 1.5 : 1; vol.step = 0.01;  // as in Livelli and Beat; an audio track can go louder
     let get, setMute, setVol;
     if (r.kind === "layer") {
       const l = r.layer, insts = [...new Set(state.strokes.filter(s => s.layer === l.id).map(s => s.inst))];
