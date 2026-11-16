@@ -862,5 +862,11 @@
  "Cartella creata": "已创建文件夹",
  "file .zip": ".zip 文件",
  "La cartella è vuota": "文件夹是空的",
- "Condividi": "共享"
+ "Condividi": "共享",
+ "Ambiente del riverbero": "混响空间",
+ "Sala": "大厅",
+ "Stanza": "房间",
+ "Auditorium": "音乐厅",
+ "Chiesa": "教堂",
+ "L'ambiente del riverbero vale per tutta la composizione e si salva con lei: Sala è sintetica; Stanza, Auditorium e Chiesa sono risposte all'impulso di ambienti realistici.": "混响空间作用于整首作品并随之保存：大厅是合成的；房间、音乐厅和教堂是真实感空间的脉冲响应。"
 }

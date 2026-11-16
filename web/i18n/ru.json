@@ -862,5 +862,11 @@
  "Cartella creata": "Папка создана",
  "file .zip": "файл .zip",
  "La cartella è vuota": "Папка пуста",
- "Condividi": "Поделиться"
+ "Condividi": "Поделиться",
+ "Ambiente del riverbero": "Помещение реверберации",
+ "Sala": "Зал",
+ "Stanza": "Комната",
+ "Auditorium": "Концертный зал",
+ "Chiesa": "Церковь",
+ "L'ambiente del riverbero vale per tutta la composizione e si salva con lei: Sala è sintetica; Stanza, Auditorium e Chiesa sono risposte all'impulso di ambienti realistici.": "Помещение реверберации действует на всю композицию и сохраняется вместе с ней: Зал синтетический; Комната, Концертный зал и Церковь — импульсные характеристики реалистичных помещений."
 }

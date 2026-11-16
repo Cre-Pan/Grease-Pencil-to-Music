@@ -102,6 +102,13 @@ ma servono wheel `cp313` per Windows x64.
 | [PySynth](https://mdoege.github.io/PySynth/), [Karplus-Strong (EPFL)](https://exoset.epfl.ch/media/notebooks/COM303/KarplusStrong/KarplusStrong.html), [guitar synth (Real Python)](https://realpython.com/python-guitar-synthesizer/) | Riferimenti per la sintesi | Chitarra (Karplus-Strong), FM, onde band-limited |
 | [jfxr](https://github.com/ttencate/jfxr), [bfxr](https://sourceforge.net/mirror/bfxr/) | Suoni 8-bit | Riferimento per lo strumento 8-bit e le percussioni |
 
+## Risposte all'impulso (riverbero)
+
+| Fonte | Licenza | Decisione |
+|---|---|---|
+| [HybridReverb2 impulse response database](https://github.com/jpcima/hybridreverb2-impulse-response-database) | CC BY-SA 4.0 | **Inclusa** (Stanza, Auditorium, Chiesa; `tools/build_rooms.py`). Ambienti modellati con tinyAVE alla Ruhr-Universität Bochum |
+| [OpenAIR](https://www.openair.hosted.york.ac.uk/) | Creative Commons, diversa per ogni risposta | Da rivalutare: misure di ambienti veri, ma la licenza va controllata una per una |
+
 ## Blender: cose imparate
 
 - **Grease Pencil v3**: dopo `drawing.add_strokes` va chiamato

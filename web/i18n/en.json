@@ -862,5 +862,11 @@
  "Cartella creata": "Folder created",
  "file .zip": ".zip file",
  "La cartella è vuota": "The folder is empty",
- "Condividi": "Share"
+ "Condividi": "Share",
+ "Ambiente del riverbero": "Reverb room",
+ "Sala": "Hall",
+ "Stanza": "Room",
+ "Auditorium": "Auditorium",
+ "Chiesa": "Church",
+ "L'ambiente del riverbero vale per tutta la composizione e si salva con lei: Sala è sintetica; Stanza, Auditorium e Chiesa sono risposte all'impulso di ambienti realistici.": "The reverb room applies to the whole composition and is saved with it: Hall is synthetic; Room, Auditorium and Church are impulse responses of realistic spaces."
 }

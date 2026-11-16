@@ -1,0 +1,6 @@
+Room impulse responses from the HybridReverb2 impulse response database
+(https://github.com/jpcima/hybridreverb2-impulse-response-database), by Christian Borß,
+Institute of Communication Acoustics, Ruhr-Universität Bochum, Germany.
+Licensed under Creative Commons Attribution-ShareAlike 4.0 International
+(https://creativecommons.org/licenses/by-sa/4.0/). Shortened, faded and converted to MP3
+by tools/build_rooms.py; these files are shared under the same license.
