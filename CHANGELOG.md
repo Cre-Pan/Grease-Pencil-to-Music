@@ -27,6 +27,19 @@
   riverbero sintetico di prima), Stanza, Auditorium o Chiesa, dalle risposte all'impulso del
   database di HybridReverb2 (Ruhr-Universität Bochum, CC BY-SA 4.0). Si salva con la composizione
   e vale anche per gli export.
+- **Importa MIDI** ora apre una finestra con le tracce del file: le scegli una per una (con lo
+  strumento che suoneranno), poi decidi se farne una nuova composizione o nuovi livelli in
+  quella aperta, se quantizzare (1/4, 1/8, 1/16), se usare il tempo del file e se allargare
+  battute e ottave perché ci stia tutto. Anche da *File → Importa MIDI…* o trascinando il .mid
+  nella sezione MIDI (o in Tracce).
+- Lettura dei MIDI più fedele: pedale di risonanza (CC 64), note ripetute sulla stessa nota,
+  note senza fine, cambi di strumento a metà traccia (diventano livelli separati), file di tipo 0
+  divisi per canale, metro e numero di cambi di tempo mostrati. Aggiungendo a una composizione,
+  la batteria va sulle sue righe invece che tutta su una.
+- **Esporta MIDI**: un canale per livello e strumento, con volume (CC 7) e pan (CC 10) del
+  livello, e il titolo della composizione nel file.
+- Tastiera MIDI (Chrome, Edge): il pedale di risonanza tiene le note (e le registra lunghe);
+  i pad di batteria sul canale 10 suonano il Beat e, in Pad, registrano nel pattern.
 - Nuova sezione **Tracce** (tasto 4), come la linea del tempo di un programma di montaggio: una
   riga per livello, il beat e le tracce audio, con volume e muto a sinistra. I tratti vicini di un
   livello formano una clip: trascinala per spostarla nel tempo o su un altro livello (doppio
