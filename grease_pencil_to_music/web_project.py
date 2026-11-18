@@ -67,6 +67,14 @@ WEB_TO_ADDON = {
     "VIOLIN_PIZZ": ("PLUCK",),
     "CELLO_STAC": ("STRINGS",),
     "CELLO_PIZZ": ("PLUCK",),
+    "GRAND": ("EPIANO", "BELL"),
+    "HARPSI": ("PLUCK",),
+    "PIPEORGAN": ("SINE",),
+    "XYLO": ("MARIMBA", "BELL"),
+    "TUBULAR": ("BELL",),
+    "KALIMBA": ("MARIMBA", "PLUCK"),
+    "RECORDER": ("SINE",),
+    "HARMONICA": ("SQUARE",),
 }
 # Recorded percussion of the web app → the add-on drum of its synth stand-in.
 WEB_TO_ADDON.update({
@@ -104,6 +112,8 @@ WEB_TO_ADDON.update({
     "BRICK": WEB_TO_ADDON["SHAKER"],
     "BUBBLES": WEB_TO_ADDON["SHAKER"],
     "GLASS": WEB_TO_ADDON["CRASH"],
+    "DARBUKA": WEB_TO_ADDON["CONGA"],
+    "CAJON": WEB_TO_ADDON["SNARE"],
 })
 ADDON_TO_WEB = {
     "SINE": "FLUTE", "TRIANGLE": "OCARINA", "SQUARE": "SQUARE", "SAW": "SAW",

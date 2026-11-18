@@ -18,6 +18,11 @@
   fotogramma per fotogramma con [Mediabunny](https://github.com/Vanilagy/mediabunny) invece di essere
   registrato in tempo reale: è più veloce della durata del brano, non perde fotogrammi se l'iPad
   rallenta e l'audio è esattamente a tempo. Dove non si può, resta la registrazione di prima.
+- Strumenti: nuovi strumenti registrati dalla [Versilian Community Sample Library](https://github.com/sgossner/VCSL)
+  (CC0): Pianoforte a coda (Steinway B), Clavicembalo, Organo a canne, Xilofono, Campane tubolari,
+  Kalimba, Flauto dolce, Armonica, Darbuka e Cajón. Marimba, Vibrafono, Ocarina, Sassofono (tenore)
+  e Conga, che erano sintetizzati, ora sono registrati. Anche l'import MIDI li usa (clavicembalo,
+  xilofono, campane, organo a canne, armonica, flauto dolce, kalimba).
 - Progetti: una galleria con tutte le composizioni salvate sul dispositivo, con le anteprime del
   disegno, le cartelle (anche una dentro l'altra) e la ricerca. Si apre dal tasto accanto a File
   o da *File → Progetti…*. Tocca un progetto per aprirlo, una cartella per entrarci; tieni premuto

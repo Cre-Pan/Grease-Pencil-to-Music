@@ -78,7 +78,8 @@ scritto apposta (`libraries.py`, in puro Python + NumPy).
 
 | Libreria | Formato | Licenza | Note |
 |---|---|---|---|
-| [VCSL, Versilian Community Sample Library](https://github.com/sgossner/VCSL) ([sito](https://versilian-studios.com/vcsl/)) | SFZ + WAV | CC0 (pubblico dominio) | Strumenti acustici registrati |
+| [VCSL, Versilian Community Sample Library](https://github.com/sgossner/VCSL) ([sito](https://versilian-studios.com/vcsl/)) | SFZ + WAV | CC0 (pubblico dominio) | Strumenti acustici registrati. La web app ne usa 15 (pianoforte a coda Steinway B, clavicembalo, percussioni intonate, fiati, conga, cajón, darbuka), convertiti da `tools/build_samples.py` |
+| [Salamander Grand Piano](https://sfzinstruments.github.io/pianos/salamander) | SFZ + WAV | CC-BY-3.0 | Scartato per la web app: lo Steinway B di VCSL è CC0 e non richiede attribuzione |
 | [GeneralUser GS](https://github.com/mrbumpy409/GeneralUser-GS/blob/main/documentation/README.md) | SF2 | Libera (vedi README della libreria) | Set General MIDI completo |
 | FluidR3 GM ([licenza](https://github.com/musescore/MuseScore/blob/master/share/sound/FluidR3Mono_License.md), [FreshPorts](https://www.freshports.org/audio/fluid-soundfont)) | SF2 | MIT | Il SoundFont di MuseScore |
 

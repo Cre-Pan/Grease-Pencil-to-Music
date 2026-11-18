@@ -862,5 +862,15 @@
  "Cartella creata": "Папка создана",
  "file .zip": "файл .zip",
  "La cartella è vuota": "Папка пуста",
- "Condividi": "Поделиться"
+ "Condividi": "Поделиться",
+ "Pianoforte a coda": "Рояль",
+ "Clavicembalo": "Клавесин",
+ "Organo a canne": "Духовой орган",
+ "Xilofono": "Ксилофон",
+ "Campane tubolari": "Колокола",
+ "Kalimba": "Калимба",
+ "Flauto dolce": "Блокфлейта",
+ "Armonica": "Губная гармоника",
+ "Darbuka": "Дарбука",
+ "Cajón": "Кахон"
 }

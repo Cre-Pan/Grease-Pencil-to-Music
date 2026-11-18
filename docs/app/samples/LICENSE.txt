@@ -1,4 +1,6 @@
 Samples from VS Chamber Orchestra: Community Edition (https://github.com/sgossner/VSCO-2-CE),
 recorded by Sam Gossner and Simon Dalzell (upright piano: Simon Dalzell, Ivy Audio),
-Versilian Studios. Released under CC0 1.0 Universal (public domain). Converted to mono MP3
-by tools/build_samples.py.
+and from the Versilian Community Sample Library (https://github.com/sgossner/VCSL)
+(grand piano, harpsichord, pipe organ, mallets, kalimba, ocarina, recorder, harmonica,
+tenor saxophone, conga, cajon, darbuka), Versilian Studios. Released under CC0 1.0 Universal
+(public domain). Converted to mono MP3 by tools/build_samples.py.
