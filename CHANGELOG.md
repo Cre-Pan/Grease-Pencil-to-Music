@@ -27,6 +27,15 @@
   riverbero sintetico di prima), Stanza, Auditorium o Chiesa, dalle risposte all'impulso del
   database di HybridReverb2 (Ruhr-Universität Bochum, CC BY-SA 4.0). Si salva con la composizione
   e vale anche per gli export.
+- Nuova sezione **Tracce** (tasto 4), come la linea del tempo di un programma di montaggio: una
+  riga per livello, il beat e le tracce audio, con volume e muto a sinistra. I tratti vicini di un
+  livello formano una clip: trascinala per spostarla nel tempo o su un altro livello (doppio
+  tocco: la apre nel Disegna). Aggancio a battuta, battito o libero.
+- **Importa audio** (o trascina i file nella sezione): WAV, MP3, M4A diventano una traccia con la
+  forma d'onda, dal cursore del tempo; se il file è più lungo del loop la durata si allunga (fino
+  a 32 battute). Le clip audio si spostano, si accorciano dai bordi, si dividono sul cursore, si
+  duplicano e si eliminano. Le tracce audio suonano nel loop, finiscono nell'export (anche nelle
+  tracce separate) e nel file .json del progetto; sul dispositivo stanno in IndexedDB.
 - Onda non è più una sezione: disegnare la forma d'onda è il modo di creare uno strumento, quindi
   si fa in una finestra che si apre da *Strumento → Crea strumento* (o da *Onde disegnate → Disegna
   un'onda*, o tenendo premuta un'onda → Modifica). *Disegna con questa onda* chiude la finestra e
