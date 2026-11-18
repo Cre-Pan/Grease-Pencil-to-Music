@@ -355,6 +355,16 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.9
+
+- **Progetti della web app (.json)**: importando una composizione della web app, i nuovi strumenti
+  (strumenti campionati di pianoforte, archi, fiati e ottoni, percussioni registrate, articolazioni
+  degli archi, pianoforte a coda, clavicembalo, organo a canne, xilofono, campane tubolari, kalimba,
+  flauto dolce, armonica, darbuka e cajón) diventano il suono più vicino dell'add-on invece di
+  perdersi.
+- Esportando verso la web app, triangolo, crash e campanaccio diventano ocarina, piatto crash e
+  campanaccio della web app (prima flauto, charleston aperto e rimshot).
+
 ## 0.0.8
 
 Blender 5.3
