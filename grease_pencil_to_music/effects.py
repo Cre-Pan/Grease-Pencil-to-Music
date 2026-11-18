@@ -9,18 +9,68 @@ Pure Python + NumPy: no ``bpy`` import.
 import numpy as np
 
 
-def _fft_convolve(signal, kernel):
-    """Overlap-add FFT convolution: memory stays bounded for long loops."""
-    n = len(signal) + len(kernel) - 1
-    size = 1 << int(np.ceil(np.log2(max(2 * len(kernel), 1024))))
-    block = size - len(kernel) + 1
-    kernel_spectrum = np.fft.rfft(kernel, size)
-    out = np.zeros(n + size)
+_SPECTRA = {}  # (kernel key, fft size) -> spectrum of the kernel(s)
+
+
+def _fft_size(kernel_length):
+    # Blocks four times the kernel: fewer, larger FFTs (the loop runs in Python).
+    return 1 << int(np.ceil(np.log2(max(4 * kernel_length, 1024))))
+
+
+def _fft_convolve(signal, kernel, key=None):
+    """Overlap-add FFT convolution: memory stays bounded for long loops.
+
+    ``signal``: (n,) or (n, channels); ``kernel``: (m,) or (m, channels), one
+    kernel per channel. ``key`` names a kernel that does not change (the reverb
+    impulse responses): its spectrum is computed once and reused."""
+    signal = np.asarray(signal, dtype=np.float64)
+    kernel = np.asarray(kernel, dtype=np.float64)
+    m = len(kernel)
+    n = len(signal) + m - 1
+    size = _fft_size(m)
+    block = size - m + 1
+    cache_key = None if key is None else (key, size)
+    kernel_spectrum = _SPECTRA.get(cache_key) if cache_key is not None else None
+    if kernel_spectrum is None:
+        kernel_spectrum = np.fft.rfft(kernel, size, axis=0)
+        if kernel.ndim == 1 and signal.ndim == 2:  # the same kernel on every channel
+            kernel_spectrum = kernel_spectrum[:, None]
+        if cache_key is not None:
+            if len(_SPECTRA) > 8:
+                _SPECTRA.clear()
+            _SPECTRA[cache_key] = kernel_spectrum
+    out = np.zeros((n + size,) + signal.shape[1:])
     for start in range(0, len(signal), block):
         chunk = signal[start:start + block]
-        out[start:start + size] += np.fft.irfft(np.fft.rfft(chunk, size) * kernel_spectrum,
-                                                size)
+        out[start:start + size] += np.fft.irfft(
+            np.fft.rfft(chunk, size, axis=0) * kernel_spectrum, size, axis=0)
     return out[:n]
+
+
+_IRS = {}  # (length, decay, seed) -> (length, 2) impulse responses, unit energy
+
+
+def reverb_ir(sample_rate, size=0.5, seed=7):
+    """The synthetic stereo impulse response of :func:`reverb` (cached)."""
+    decay = 0.3 + float(np.clip(size, 0.0, 1.0)) * 2.7  # ~RT60 in seconds
+    length = int(decay * sample_rate)
+    key = (length, round(decay, 9), int(sample_rate), seed)
+    found = _IRS.get(key)
+    if found is None:
+        t = np.arange(length) / sample_rate
+        rng = np.random.default_rng(seed)
+        envelope = np.exp(-t * 6.9 / decay)
+        channels = []
+        for _ch in range(2):
+            ir = rng.uniform(-1.0, 1.0, length) * envelope
+            ir /= max(np.sqrt(np.sum(ir ** 2)), 1e-9)
+            channels.append(ir)
+        found = np.stack(channels, axis=1)
+        found.flags.writeable = False
+        if len(_IRS) > 8:
+            _IRS.clear()
+        _IRS[key] = found
+    return found, key
 
 
 def delay(buffer, sample_rate, time_seconds, feedback, mix, ping_pong=True, max_tail=4.0):
@@ -45,19 +95,13 @@ def reverb(buffer, sample_rate, mix, size=0.5, seed=7):
     """Convolution with a synthetic, exponentially decaying noise tail."""
     if mix <= 0.0 or len(buffer) == 0:
         return buffer
-    decay = 0.3 + float(np.clip(size, 0.0, 1.0)) * 2.7  # ~RT60 in seconds
-    length = int(decay * sample_rate)
-    t = np.arange(length) / sample_rate
-    rng = np.random.default_rng(seed)
-    envelope = np.exp(-t * 6.9 / decay)
+    ir, key = reverb_ir(sample_rate, size, seed)
+    length = len(ir)
     predelay = int(0.015 * sample_rate)
     out = np.zeros((len(buffer) + length + predelay - 1, 2), dtype=np.float32)
     out[:len(buffer)] += buffer
-    for ch in range(2):
-        ir = rng.uniform(-1.0, 1.0, length) * envelope
-        ir /= max(np.sqrt(np.sum(ir ** 2)), 1e-9)
-        wet = _fft_convolve(buffer[:, ch].astype(np.float64), ir)
-        out[predelay:predelay + len(wet), ch] += (wet * mix).astype(np.float32)
+    wet = _fft_convolve(np.asarray(buffer[:, :2], dtype=np.float64), ir, key=key)
+    out[predelay:predelay + len(wet)] += (wet * mix).astype(np.float32)
     return out
 
 
@@ -177,14 +221,48 @@ def limit(buffer, rate, ceiling_db=-1.0, lookahead=0.004, release=0.08):
     return np.clip(out, -ceiling, ceiling)
 
 
+def _lowpass_kernel(rate, cutoff):
+    """Sampled impulse response of the zero-phase low pass 1 / (1 + (f/cutoff)^4).
+
+    Its inverse Fourier transform is known in closed form; it decays as
+    exp(-b|t|), so it is cut where it is below 1e-13 of its peak."""
+    a = 2.0 * np.pi * cutoff
+    b = a / np.sqrt(2.0)
+    half = int(np.ceil(30.0 / b * rate))
+    t = np.arange(-half, half + 1) / rate
+    kernel = (a / (2.0 * np.sqrt(2.0)) * np.exp(-b * np.abs(t))
+              * (np.cos(b * t) + np.sin(b * np.abs(t)))) / rate
+    return kernel, half
+
+
+def _fast_fft_length(n):
+    """True when ``n`` has only small prime factors (a fast FFT length)."""
+    for factor in (2, 3, 5, 7, 11):
+        while n % factor == 0:
+            n //= factor
+    return n == 1
+
+
 def low_cut(buffer, rate, cutoff=30.0):
-    """Removes rumble and DC offset (circular: a loop stays seamless)."""
-    if len(buffer) < 4:
+    """Removes rumble and DC offset (circular: a loop stays seamless).
+
+    The filter is 1 - 1 / (1 + (f/cutoff)^4). A single FFT as long as the loop
+    is very slow when that length has large prime factors (most loop lengths
+    in samples): those loops subtract the low pass, computed as a circular
+    convolution with its short kernel, in power-of-two blocks instead."""
+    n = len(buffer)
+    if n < 4:
         return buffer
-    spectrum = np.fft.rfft(buffer, axis=0)
-    f = np.maximum(np.fft.rfftfreq(len(buffer), 1.0 / rate), 1e-3)
-    spectrum *= ((f / cutoff) ** 4 / (1.0 + (f / cutoff) ** 4))[:, None]
-    return np.fft.irfft(spectrum, n=len(buffer), axis=0)
+    kernel, half = _lowpass_kernel(rate, cutoff)
+    if n < 2 * len(kernel) or _fast_fft_length(n):  # the exact FFT is fast
+        spectrum = np.fft.rfft(buffer, axis=0)
+        f = np.maximum(np.fft.rfftfreq(n, 1.0 / rate), 1e-3)
+        spectrum *= ((f / cutoff) ** 4 / (1.0 + (f / cutoff) ** 4))[:, None]
+        return np.fft.irfft(spectrum, n=n, axis=0)
+    x = np.asarray(buffer, dtype=np.float64)
+    wrapped = np.concatenate((x[-half:], x, x[:half]))  # the loop continues on both sides
+    low = _fft_convolve(wrapped, kernel, key=("low_cut", rate, cutoff))
+    return x - low[2 * half:2 * half + n]
 
 
 def _fold(buffer, length):

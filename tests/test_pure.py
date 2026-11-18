@@ -904,3 +904,44 @@ def test_web_project_rejects_other_json():
         web_project.parse('{"layers": []}', set())
     with pytest.raises(web_project.ProjectError):
         web_project.parse("not json", set())
+
+
+# --- 0.0.10: robustness and speed --------------------------------------------------
+
+@pytest.mark.parametrize("height", [0, 1, 5, 11])
+def test_timeline_collapsed_to_a_bar_draws_nothing(height):
+    assert timeline.wave_band(height, 0.6) is None
+
+
+@pytest.mark.parametrize("height", [12, 20, 40, 79, 80, 300, 1200])
+@pytest.mark.parametrize("fraction", [0.05, 0.6, 1.0])
+def test_timeline_wave_stays_inside_the_region(height, fraction):
+    y0, y1 = timeline.wave_band(height, fraction)
+    assert 0.0 <= y0 < y1 <= height
+
+
+def _exact_low_cut(buffer, rate, cutoff=30.0):
+    spectrum = np.fft.rfft(buffer, axis=0)
+    f = np.maximum(np.fft.rfftfreq(len(buffer), 1.0 / rate), 1e-3)
+    spectrum *= ((f / cutoff) ** 4 / (1.0 + (f / cutoff) ** 4))[:, None]
+    return np.fft.irfft(spectrum, n=len(buffer), axis=0)
+
+
+@pytest.mark.parametrize("n", [3000, 44100 * 3 + 1, 48000 * 4 + 3, 44100 * 8])
+def test_low_cut_matches_the_exact_circular_filter(n):
+    """Long loops use the short-kernel convolution: same result as one FFT as
+    long as the loop (any length, prime factors included), DC removed."""
+    rng = np.random.default_rng(3)
+    buffer = rng.standard_normal((n, 2)) * 0.3 + 0.2
+    out = effects.low_cut(buffer, 48000)
+    assert out.shape == buffer.shape
+    assert np.max(np.abs(out - _exact_low_cut(buffer, 48000))) < 1e-9
+    assert np.max(np.abs(out.mean(axis=0))) < 1e-9
+
+
+def test_reverb_impulse_is_computed_once():
+    ir, key = effects.reverb_ir(SR, 0.55)
+    again, key_again = effects.reverb_ir(SR, 0.55)
+    assert again is ir and key == key_again and not ir.flags.writeable
+    assert ir.shape == (int((0.3 + 0.55 * 2.7) * SR), 2)
+    assert np.sum(ir[:, 0] ** 2) == pytest.approx(1.0)

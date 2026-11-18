@@ -215,11 +215,12 @@ def _show_popups():
     _popup_queue.clear()
     if bpy.app.background:  # no UI: a popup would crash Blender
         return
-    wm = bpy.context.window_manager
-    if wm is None or not wm.windows:
+    wm = getattr(bpy.context, "window_manager", None)
+    window = next((w for w in wm.windows if w.screen is not None), None) if wm else None
+    if window is None:
         return
     try:
-        with bpy.context.temp_override(window=wm.windows[0]):
+        with bpy.context.temp_override(window=window):
             wm.popup_menu(_draw_stack_popup, title="Doodle Music", icon="INFO")
     except Exception:
         pass  # the warning is also shown in the N panel
@@ -318,18 +319,30 @@ def on_undo_pre(*_args):
 
 
 def _resume_playback():
+    """Restart the playback stopped by Ctrl+Z.
+
+    ``screen.animation_play`` only needs a window with a screen: it works
+    without a Timeline, with a Timeline collapsed to its header, or with only
+    a Properties editor open. An editor of the screen is preferred when there
+    is one, as Blender itself would do."""
     if is_playing():
         return None
-    wm = bpy.context.window_manager
+    wm = getattr(bpy.context, "window_manager", None)
+    if wm is None:
+        return None
     for window in wm.windows:
-        for area in window.screen.areas:
-            if area.type in ("VIEW_3D", "DOPESHEET_EDITOR", "SEQUENCE_EDITOR"):
-                try:
-                    with bpy.context.temp_override(window=window, area=area):
-                        bpy.ops.screen.animation_play()
-                except Exception:
-                    continue
-                return None
+        screen = window.screen
+        if screen is None:
+            continue
+        areas = [area for area in screen.areas
+                 if area.type in ("VIEW_3D", "DOPESHEET_EDITOR", "SEQUENCE_EDITOR")]
+        for override in [{"area": area} for area in areas] + [{}]:
+            try:
+                with bpy.context.temp_override(window=window, **override):
+                    if bpy.ops.screen.animation_play() == {"FINISHED"}:
+                        return None
+            except Exception:
+                continue
     return None
 
 

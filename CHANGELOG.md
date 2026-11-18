@@ -355,6 +355,38 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.10
+
+Timeline e finestre
+- **Senza Timeline** (nessun Dope Sheet, Sequencer o 3D Viewport aperto, ad esempio solo
+  Proprietà): la riproduzione fermata da Ctrl+Z riparte lo stesso (prima non ripartiva) e
+  l'avviso dei modificatori sceglie una finestra con uno schermo valido. Tutti i giri sulle
+  finestre saltano quelle senza schermo.
+- **Timeline ridotta a barra** (solo l'intestazione): il suono nella Timeline non viene più
+  calcolato né disegnato in una regione alta pochi pixel; in una Timeline bassa la forma d'onda
+  resta dentro la regione invece di uscire sopra i numeri dei fotogrammi.
+- *Suona con la tastiera*: il testo di aiuto va nell'intestazione dell'editor da cui è partito e
+  viene tolto da lì all'uscita, anche se nel frattempo il mouse è su un altro editor; se l'editor
+  non c'è (o è stato chiuso) va nella barra di stato.
+- Creando una composizione, la vista frontale salta gli editor 3D senza vista; la composizione
+  si crea anche quando il contesto non ha una collezione attiva (nella collezione della scena).
+- Una composizione non collegata a nessuna scena non fa più fallire la rigenerazione chiamata da
+  un timer senza finestra.
+
+Prestazioni
+- Il suono nella Timeline non rilegge più tutte le strip e i file audio (un `os.stat` per strip)
+  e non ricrea la geometria a ogni ridisegno: durante la riproduzione disegna ciò che ha già
+  pronto e ricalcola solo quando cambia qualcosa (suono rigenerato, strip spostate, impostazioni,
+  zoom o scorrimento della vista).
+- Linee della Timeline (curve del flusso ottico, contorni) con lo shader `POLYLINE_UNIFORM_COLOR`:
+  restano spesse 2 px anche con Vulkan e Metal, dove `line_width_set` non ha effetto.
+- **Suono finito più veloce**: il taglio dei bassi del master usava una sola FFT lunga quanto il
+  loop, lentissima quando la lunghezza in campioni ha fattori primi grandi (quasi sempre, con
+  durate libere): ora è una convoluzione circolare equivalente (differenza < 1e-9). Il master di
+  un loop di 30 s passa da 1,7 s a 0,4 s, uno di 16 s da 0,6 a 0,2 s.
+- La risposta all'impulso del riverbero e il suo spettro si calcolano una volta sola e i due
+  canali si convolvono insieme.
+
 ## 0.0.9
 
 - **Progetti della web app (.json)**: importando una composizione della web app, i nuovi strumenti

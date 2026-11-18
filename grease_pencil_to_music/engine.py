@@ -222,11 +222,13 @@ def export(obj, scene, path, fmt):
 
 def scene_of(obj):
     """The scene that shows the composition (the active one if it is there)."""
-    current = bpy.context.scene
+    current = getattr(bpy.context, "scene", None)
     users = obj.users_scene
     if current is not None and (not users or current in users):
         return current
-    return users[0]
+    if users:
+        return users[0]
+    return bpy.data.scenes[0] if bpy.data.scenes else None  # timers with no window
 
 
 def cleanup_orphans():
