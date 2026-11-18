@@ -7224,7 +7224,9 @@ async function exportPng() {
     await saveFile(fileBase() + " livelli.zip", zipBlob(files));
   });
 }
-/* Video: the board while the mix plays, recorded in real time.
+/* Video: the board while the mix plays. Encoded frame by frame with Mediabunny where the
+   browser has WebCodecs (faster than real time, the sound exactly in step), otherwise
+   recorded in real time with MediaRecorder.
    Format: the board's own shape, 16:9, 1:1 or 9:16 (the resolution is the short side).
    Framing: the whole board, or following the time: the board scrolls past the playhead
    like a score, the loop repeated one after the other, with the piano keys kept on the left.
@@ -7232,7 +7234,7 @@ async function exportPng() {
 let vidRec = null;
 const VID_TYPES = { mp4: ["video/mp4;codecs=avc1.42E01E,mp4a.40.2", "video/mp4"], webm: ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"] };
 const vidTypeOf = k => (window.MediaRecorder ? VID_TYPES[k].find(t => MediaRecorder.isTypeSupported(t)) : null);
-const videoCodecs = () => Object.keys(VID_TYPES).filter(vidTypeOf);
+const videoCodecs = () => Object.keys(VID_TYPES).filter(k => vidTypeOf(k) || fastVideoOK());
 function videoCodec() { const all = videoCodecs(); return all.includes(ui.vidCodec) ? ui.vidCodec : all[0] || "mp4"; }
 function videoType() { return vidTypeOf(videoCodec()) || (window.MediaRecorder ? [...VID_TYPES.mp4, ...VID_TYPES.webm].find(t => MediaRecorder.isTypeSupported(t)) : null); }
 const VID_RATIO = { wide: 16 / 9, square: 1, tall: 9 / 16 };
@@ -7453,9 +7455,92 @@ for (const id of ["#exVidDots", "#exVidTitle", "#exVidBg", "#exVidBoard", "#exVi
 });
 $("#exVidAuthor").addEventListener("input", e => { ui.vidAuthor = e.target.value; saveSoon(); previewVideoSoon(); });
 $("#exPngBg").addEventListener("change", () => previewPngSoon());
+/* Mediabunny (MPL-2.0, loaded only when needed from mediabunny.min.js next to the page; not
+   in claude.ai): WebCodecs encoders and the MP4 / WebM writer. */
+let mbReady = null;
+function loadMediabunny() {
+  if (window.Mediabunny) return Promise.resolve(window.Mediabunny);
+  return mbReady || (mbReady = new Promise((res, rej) => {
+    const sc = document.createElement("script"); sc.src = "mediabunny.min.js";
+    sc.onload = () => (window.Mediabunny ? res(window.Mediabunny) : rej(new Error("mediabunny")));
+    sc.onerror = () => { mbReady = null; rej(new Error("mediabunny.min.js")); };
+    document.head.append(sc);
+  }));
+}
+const fastVideoOK = () => !inArtifact && typeof VideoEncoder !== "undefined" && typeof AudioEncoder !== "undefined";
+const MB_CODECS = { mp4: { video: ["avc"], audio: ["aac"] }, webm: { video: ["vp9", "vp8"], audio: ["opus"] } };
+const vidBitrate = L => (Math.min(L.w, L.h) >= 1080 ? 10e6 : 5e6);
+/* The codecs this browser can encode for the chosen container at this size, or null. */
+async function fastVideoPlan(kind, L) {
+  if (!fastVideoOK()) return null;
+  try {
+    const mb = await loadMediabunny(), want = MB_CODECS[kind], bitrate = vidBitrate(L);
+    let vc = null, ac = null;
+    for (const c of want.video) if (await mb.canEncodeVideo(c, { width: L.w, height: L.h, bitrate })) { vc = c; break; }
+    for (const c of want.audio) if (await mb.canEncodeAudio(c, { numberOfChannels: 2, sampleRate: SR, bitrate: 192e3 })) { ac = c; break; }
+    return vc && ac ? { mb, kind, vc, ac, bitrate } : null;
+  } catch (e) { return null; }
+}
+/* Move a background video to a time and wait for the new picture (at most 1 s). */
+function seekVideo(el, t) {
+  if (Math.abs(el.currentTime - t) < 1e-3) return Promise.resolve();
+  return new Promise(res => {
+    const done = () => { clearTimeout(to); el.removeEventListener("seeked", done); res(); };
+    const to = setTimeout(done, 1000);
+    el.addEventListener("seeked", done); el.currentTime = t;
+  });
+}
+const vidShowProgress = (time, length) => {
+  $("#vidBar").style.width = Math.min(100, Math.max(0, time) / length * 100) + "%";
+  $("#vidInfo").textContent = `${Math.min(length, Math.max(0, time)).toFixed(1)} / ${length.toFixed(1)} s`;
+};
+/* Frame by frame: paint a frame, hand it to the encoder, go on; the sound is added a second
+   at a time next to the frames. Returns the file, or null when cancelled. */
+async function encodeVideo(plan, out, paint, audioBuf, vA, length) {
+  const { mb, kind, vc, ac, bitrate } = plan, fps = 30;
+  const target = new mb.BufferTarget();
+  const output = new mb.Output({ format: kind === "mp4" ? new mb.Mp4OutputFormat({ fastStart: "in-memory" }) : new mb.WebMOutputFormat(), target });
+  const video = new mb.CanvasSource(out, { codec: vc, bitrate, keyFrameInterval: 2 });
+  const audio = new mb.AudioBufferSource({ codec: ac, bitrate: 192e3 });
+  output.addVideoTrack(video, { frameRate: fps });
+  output.addAudioTrack(audio);
+  vidRec = { cancelled: false };
+  const videos = [...media.values()].filter(m => m.el.tagName === "VIDEO" && m.el.duration).map(m => m.el);
+  for (const el of videos) el.pause();
+  const rate = audioBuf.sampleRate, chans = audioBuf.numberOfChannels;
+  let audioAt = 0;  // samples already handed over
+  const addAudio = async upTo => {  // the sound up to this sample
+    upTo = Math.min(audioBuf.length, upTo);
+    if (upTo <= audioAt) return;
+    const piece = new AudioBuffer({ length: upTo - audioAt, numberOfChannels: chans, sampleRate: rate });
+    for (let c = 0; c < chans; c++) piece.copyToChannel(audioBuf.getChannelData(c).subarray(audioAt, upTo), c);
+    audioAt = upTo;
+    await audio.add(piece);
+  };
+  try {
+    await output.start();
+    const frames = Math.max(1, Math.ceil(length * fps));
+    for (let i = 0; i < frames; i++) {
+      if (vidRec.cancelled) { await output.cancel(); return null; }
+      const time = i / fps;
+      if (i % fps === 0) await addAudio(Math.round((time + 1) * rate));
+      for (const el of videos) await seekVideo(el, (vA + time) % loopSec() % el.duration);
+      paint(vA + Math.min(time, length - 1e-3));
+      await video.add(time, 1 / fps);
+      if (i % 5 === 4) { vidShowProgress(time, length); await new Promise(r => setTimeout(r)); }  // keep the page responsive
+    }
+    await addAudio(audioBuf.length);
+    await output.finalize();
+  } catch (e) {
+    if (output.state !== "finalized" && output.state !== "canceled") await output.cancel().catch(() => {});
+    throw e;
+  }
+  return new Blob([target.buffer], { type: output.format.mimeType });
+}
 async function exportVideo() {
   const type = videoType(), cv0 = document.createElement("canvas");
-  if (!type || !cv0.captureStream) { toast("Questo browser non sa registrare video: aggiorna iPadOS o usa Safari."); return; }
+  const recOK = !!type && !!cv0.captureStream;
+  if (!recOK && !fastVideoOK()) { toast("Questo browser non sa registrare video: aggiorna iPadOS o usa Safari."); return; }
   if (ui.playing) stop();
   $("#vidProgress").hidden = false; $("#vidBar").style.width = "0%"; $("#vidInfo").textContent = "Preparo il file…";
   if (exPrev) exPreviewStop();
@@ -7469,10 +7554,23 @@ async function exportVideo() {
     const L = videoLayout(o), out = document.createElement("canvas");
     out.width = L.w; out.height = L.h;
     const paint = makeVideoPainter(out, o, L, [vA, vB]);
+    const plan = await fastVideoPlan(videoCodec(), L);
+    if (plan) {
+      let blob = null;
+      try { blob = await encodeVideo(plan, out, paint, audioBuf, vA, length); }
+      catch (e) { console.warn("video encoder", e); vidRec = null; if (!recOK) { $("#vidProgress").hidden = true; toast("Questo browser non sa registrare video: aggiorna iPadOS o usa Safari."); return; } }
+      if (blob || (vidRec && vidRec.cancelled)) {
+        vidRec = null; $("#vidProgress").hidden = true;
+        if (!blob) { toast("Video annullato"); return; }
+        await saveFile(fileBase() + "." + plan.kind, blob);
+        return;
+      }
+    }
+    if (!recOK) { $("#vidProgress").hidden = true; toast("Questo browser non sa registrare video: aggiorna iPadOS o usa Safari."); return; }
     const ctx = new AudioContext(), dest = ctx.createMediaStreamDestination();
     const src = ctx.createBufferSource(); src.buffer = audioBuf; src.connect(dest); src.connect(ctx.destination);
     const stream = new MediaStream([...out.captureStream(30).getVideoTracks(), ...dest.stream.getAudioTracks()]);
-    const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: Math.min(L.w, L.h) >= 1080 ? 10e6 : 5e6 });
+    const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: vidBitrate(L) });
     const chunks = [];
     rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
     const done = new Promise(res => { rec.onstop = res; });
@@ -7491,8 +7589,7 @@ async function exportVideo() {
           if (m.el.paused) m.el.play().catch(() => {});
         }
         paint(vA + Math.max(0, Math.min(time, length - 1e-3)));
-        $("#vidBar").style.width = Math.min(100, Math.max(0, time) / length * 100) + "%";
-        $("#vidInfo").textContent = `${Math.min(length, Math.max(0, time)).toFixed(1)} / ${length.toFixed(1)} s`;
+        vidShowProgress(time, length);
         requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);

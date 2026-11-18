@@ -102,6 +102,13 @@ ma servono wheel `cp313` per Windows x64.
 | [PySynth](https://mdoege.github.io/PySynth/), [Karplus-Strong (EPFL)](https://exoset.epfl.ch/media/notebooks/COM303/KarplusStrong/KarplusStrong.html), [guitar synth (Real Python)](https://realpython.com/python-guitar-synthesizer/) | Riferimenti per la sintesi | Chitarra (Karplus-Strong), FM, onde band-limited |
 | [jfxr](https://github.com/ttencate/jfxr), [bfxr](https://sourceforge.net/mirror/bfxr/) | Suoni 8-bit | Riferimento per lo strumento 8-bit e le percussioni |
 
+## Librerie JavaScript (web app)
+
+| Libreria | Uso | Decisione |
+|---|---|---|
+| [lamejs](https://github.com/zhuker/lamejs) | Export MP3 | **Inclusa** (`web/vendor/lame.min.js`), LGPL |
+| [Mediabunny](https://github.com/Vanilagy/mediabunny) | Export video con WebCodecs, file MP4 e WebM | **Inclusa** (`web/vendor/mediabunny.min.js`, ~72 KB gzip), MPL-2.0, ricostruita con `tools/build_mediabunny.sh`. Dove WebCodecs manca si registra con MediaRecorder |
+
 ## Blender: cose imparate
 
 - **Grease Pencil v3**: dopo `drawing.add_strokes` va chiamato
