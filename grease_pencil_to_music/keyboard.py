@@ -161,8 +161,22 @@ class GP2M_OT_play_keyboard(bpy.types.Operator):
         midi = f" · MIDI: {self.midi.name}" if self.midi is not None else ""
         text = (f"Tastiera: A W S E D F T G Y H U J K = {music.note_name(self.base, style)}… "
                 f"· Z/X ottava · {state} · Spazio = play · Esc = esci{midi}")
-        if context.area is not None:
-            context.area.header_text_set(text)
+        area = self._area(context)
+        if area is not None:
+            area.header_text_set(text)
+        elif context.workspace is not None:  # started without an editor: the status bar
+            context.workspace.status_text_set(text)
+
+    def _area(self, context):
+        """The editor the operator started in, still open (None if it was closed).
+
+        During a modal operator ``context.area`` may be another editor, or None
+        when the operator was started from a collapsed one."""
+        screen = context.screen
+        pointer = getattr(self, "area_pointer", 0)
+        if screen is None or not pointer:
+            return None
+        return next((a for a in screen.areas if a.as_pointer() == pointer), None)
 
     def _open_midi(self):
         from . import midi_input, prefs
@@ -179,6 +193,7 @@ class GP2M_OT_play_keyboard(bpy.types.Operator):
     def invoke(self, context, _event):
         comp = active_composition(context)
         self.comp_name = comp.name
+        self.area_pointer = context.area.as_pointer() if context.area is not None else 0
         self.base = min(max((comp.gp2m.low_note // 12 + 1) * 12, 12), 108)
         self.recording = False
         self.sustain = False
@@ -203,8 +218,11 @@ class GP2M_OT_play_keyboard(bpy.types.Operator):
         if self.midi is not None:
             self.midi.close()
             self.midi = None
-        if context.area is not None:
-            context.area.header_text_set(None)
+        area = self._area(context)
+        if area is not None:
+            area.header_text_set(None)
+        if context.workspace is not None:
+            context.workspace.status_text_set(None)
 
     def cancel(self, context):
         """Blender stops the operator (file loaded, window closed): free port and timer."""

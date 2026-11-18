@@ -42,12 +42,15 @@ def frame_view(context, comp):
     for area in screen.areas:
         if area.type != "VIEW_3D":
             continue
-        region_3d = area.spaces.active.region_3d
+        space = area.spaces.active
+        region_3d = getattr(space, "region_3d", None)
+        if region_3d is None:
+            continue
         region_3d.view_perspective = "ORTHO"
         region_3d.view_rotation = Euler((math.pi / 2.0, 0.0, 0.0)).to_quaternion()
         region_3d.view_location = center
         region_3d.view_distance = max(width + kw, top) * 0.85
-        shading = area.spaces.active.shading
+        shading = space.shading
         shading.type = "SOLID"
         shading.color_type = "TEXTURE"  # flat material colors: the board reads well
         area.tag_redraw()
@@ -70,7 +73,8 @@ class GP2M_OT_add_composition(bpy.types.Operator):
         name = _next_name()
         gp = bpy.data.grease_pencils.new(name)
         obj = bpy.data.objects.new(name, gp)
-        context.collection.objects.link(obj)
+        collection = getattr(context, "collection", None) or scene.collection
+        collection.objects.link(obj)
         obj.location = scene.cursor.location
         obj.show_in_front = True
         obj.gp2m.is_composition = True

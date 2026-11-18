@@ -688,6 +688,100 @@ def test_timeline_header_and_popover_draw(comp):
 
 
 
+class _FakeView2D:
+    def __init__(self, frames_per_pixel=0.5):
+        self.fpp = frames_per_pixel
+
+    def view_to_region(self, x, _y, clip=True):
+        return (x / self.fpp, 0)
+
+    def region_to_view(self, x, _y):
+        return (x * self.fpp, 0.0)
+
+
+class _FakeRegion:
+    type = "WINDOW"
+
+    def __init__(self, width, height):
+        self.width, self.height = width, height
+        self.view2d = _FakeView2D()
+
+    def as_pointer(self):
+        return id(self)
+
+
+class _FakeContext:
+    def __init__(self, region):
+        self.scene = bpy.context.scene
+        self.region = region
+        self.active_object = bpy.context.view_layer.objects.active
+
+
+@pytest.mark.parametrize("region", [None, _FakeRegion(800, 0), _FakeRegion(800, 6),
+                                    _FakeRegion(0, 200), _FakeRegion(4, 200)])
+def test_timeline_overlay_without_room_does_no_work(comp, monkeypatch, region):
+    """No Timeline region, or a Timeline collapsed to a thin bar (or squeezed
+    sideways): the overlay returns at once, without collecting any sound."""
+    timeline = sub("timeline")
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
+    sub("engine").regenerate(comp)
+    calls = []
+    monkeypatch.setattr(timeline, "collect", lambda *a: calls.append(a) or ([], [], []))
+    assert timeline.draw_overlay(_FakeContext(region)) is None
+    assert not calls
+    timeline._draw()  # the real handler, in background (no region): no error
+
+
+def test_timeline_overlay_collects_once_until_something_changes(comp, monkeypatch):
+    timeline = sub("timeline")
+    calls = []
+    monkeypatch.setattr(timeline, "collect", lambda *a: calls.append(a) or ([], [], []))
+    timeline.invalidate()
+    region = _FakeRegion(800, 120)
+    for _ in range(5):  # every frame of the playback
+        assert timeline.draw_overlay(_FakeContext(region)) == 0
+    assert len(calls) == 1
+    timeline.tag_redraw()  # a new sound (regenerate, arrange, settings)
+    timeline.draw_overlay(_FakeContext(region))
+    assert len(calls) == 2
+    bpy.context.view_layer.update()
+    comp.location.x += 1.0
+    bpy.context.view_layer.update()  # any depsgraph change (strips, sounds...)
+    timeline.draw_overlay(_FakeContext(region))
+    assert len(calls) == 3
+
+
+def test_resume_playback_and_popups_without_windows(comp):
+    """Background mode has no window, screen or Timeline: nothing breaks."""
+    handlers, operators = sub("handlers"), sub("operators")
+    assert handlers._resume_playback() is None
+    handlers._popup_queue.append(comp.name)
+    handlers._show_popups()
+    assert not handlers._popup_queue
+    operators.frame_view(bpy.context, comp)  # no screen: nothing to frame
+    assert sub("engine").scene_of(comp) == bpy.context.scene
+    sub("timeline").tag_redraw()
+
+
+def test_keyboard_header_without_an_editor(comp):
+    """Started with no editor (or from one that was closed meanwhile), the
+    keyboard player neither fails nor writes in another editor's header."""
+    keyboard = sub("keyboard")
+
+    class Op:
+        recording = False
+        midi = None
+        base = 60
+        area_pointer = 0
+        _area = keyboard.GP2M_OT_play_keyboard._area
+
+    op = Op()
+    assert op._area(bpy.context) is None
+    keyboard.GP2M_OT_play_keyboard._header(op, bpy.context)
+    op.area_pointer = 12345  # an editor that no longer exists
+    assert op._area(bpy.context) is None
+
+
 def test_array_modifier_leaves_the_board_alone(comp):
     board, handlers = sub("board"), sub("handlers")
     add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
