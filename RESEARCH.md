@@ -109,6 +109,12 @@ ma servono wheel `cp313` per Windows x64.
 |---|---|---|
 | [lamejs](https://github.com/zhuker/lamejs) | Export MP3 | **Inclusa** (`web/vendor/lame.min.js`), LGPL |
 | [Mediabunny](https://github.com/Vanilagy/mediabunny) | Export video con WebCodecs, file MP4 e WebM | **Inclusa** (`web/vendor/mediabunny.min.js`, ~72 KB gzip), MPL-2.0, ricostruita con `tools/build_mediabunny.sh`. Dove WebCodecs manca si registra con MediaRecorder |
+## Risposte all'impulso (riverbero)
+
+| Fonte | Licenza | Decisione |
+|---|---|---|
+| [HybridReverb2 impulse response database](https://github.com/jpcima/hybridreverb2-impulse-response-database) | CC BY-SA 4.0 | **Inclusa** (Stanza, Auditorium, Chiesa; `tools/build_rooms.py`). Ambienti modellati con tinyAVE alla Ruhr-Universität Bochum |
+| [OpenAIR](https://www.openair.hosted.york.ac.uk/) | Creative Commons, diversa per ogni risposta | Da rivalutare: misure di ambienti veri, ma la licenza va controllata una per una |
 
 ## Blender: cose imparate
 

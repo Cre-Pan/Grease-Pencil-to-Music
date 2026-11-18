@@ -872,5 +872,11 @@
  "Flauto dolce": "Recorder",
  "Armonica": "Harmonica",
  "Darbuka": "Darbuka",
- "Cajón": "Cajón"
+ "Cajón": "Cajón",
+ "Ambiente del riverbero": "Reverb room",
+ "Sala": "Hall",
+ "Stanza": "Room",
+ "Auditorium": "Auditorium",
+ "Chiesa": "Church",
+ "L'ambiente del riverbero vale per tutta la composizione e si salva con lei: Sala è sintetica; Stanza, Auditorium e Chiesa sono risposte all'impulso di ambienti realistici.": "The reverb room applies to the whole composition and is saved with it: Hall is synthetic; Room, Auditorium and Church are impulse responses of realistic spaces."
 }

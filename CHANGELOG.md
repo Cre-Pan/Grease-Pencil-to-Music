@@ -23,6 +23,10 @@
   Kalimba, Flauto dolce, Armonica, Darbuka e Cajón. Marimba, Vibrafono, Ocarina, Sassofono (tenore)
   e Conga, che erano sintetizzati, ora sono registrati. Anche l'import MIDI li usa (clavicembalo,
   xilofono, campane, organo a canne, armonica, flauto dolce, kalimba).
+- Riverbero: in *Preferenze → Audio* si sceglie l'ambiente di tutta la composizione: Sala (il
+  riverbero sintetico di prima), Stanza, Auditorium o Chiesa, dalle risposte all'impulso del
+  database di HybridReverb2 (Ruhr-Universität Bochum, CC BY-SA 4.0). Si salva con la composizione
+  e vale anche per gli export.
 - Progetti: una galleria con tutte le composizioni salvate sul dispositivo, con le anteprime del
   disegno, le cartelle (anche una dentro l'altra) e la ricerca. Si apre dal tasto accanto a File
   o da *File → Progetti…*. Tocca un progetto per aprirlo, una cartella per entrarci; tieni premuto

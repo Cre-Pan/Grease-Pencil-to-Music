@@ -74,7 +74,8 @@ self.addEventListener("message", event => {{
 }});
 self.addEventListener("fetch", event => {{
   if (event.request.method !== "GET" || new URL(event.request.url).origin !== location.origin) return;
-  if (new URL(event.request.url).pathname.includes("/samples/")) {{
+  const path = new URL(event.request.url).pathname;
+  if (path.includes("/samples/") || path.includes("/rooms/")) {{
     event.respondWith(caches.open(SAMPLES).then(cache => cache.match(event.request, {{ ignoreSearch: true }})
       .then(hit => hit || fetch(event.request).then(res => {{ if (res.ok) cache.put(event.request, res.clone()); return res; }}))));
     return;
@@ -178,10 +179,11 @@ def build(out=OUT):
     for size in (32, 64):
         small_icon(size).save(out / f"favicon-{size}.png")
     version = hashlib.sha256(page.encode()).hexdigest()[:12]
-    # sampled instruments (written next to the page by tools/build_samples.py), cached apart
+    # sampled instruments and reverb rooms (written next to the page by tools/build_samples.py
+    # and tools/build_rooms.py), cached apart
     sounds, digest = [], hashlib.sha256()
-    if (out / "samples").exists():
-        for f in sorted((out / "samples").rglob("*.mp3")):
+    for folder in ("samples", "rooms"):
+        for f in sorted((out / folder).rglob("*.mp3")) if (out / folder).exists() else ():
             rel = f.relative_to(out).as_posix()
             sounds.append("./" + rel)
             digest.update(rel.encode() + f.read_bytes())
