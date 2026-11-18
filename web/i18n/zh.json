@@ -878,5 +878,11 @@
  "Stanza": "房间",
  "Auditorium": "音乐厅",
  "Chiesa": "教堂",
- "L'ambiente del riverbero vale per tutta la composizione e si salva con lei: Sala è sintetica; Stanza, Auditorium e Chiesa sono risposte all'impulso di ambienti realistici.": "混响空间作用于整首作品并随之保存：大厅是合成的；房间、音乐厅和教堂是真实感空间的脉冲响应。"
+ "L'ambiente del riverbero vale per tutta la composizione e si salva con lei: Sala è sintetica; Stanza, Auditorium e Chiesa sono risposte all'impulso di ambienti realistici.": "混响空间作用于整首作品并随之保存：大厅是合成的；房间、音乐厅和教堂是真实感空间的脉冲响应。",
+ "Nuovo strumento": "新乐器",
+ "Disegna uno strumento": "画一件乐器",
+ "Crea strumento": "创建乐器",
+ "Disegna la forma d'onda di un nuovo strumento": "为新乐器画出波形",
+ "disegna l'onda": "画波形",
+ "Disegna · Beat · MIDI · Esporta": "绘制 · 节拍 · MIDI · 导出"
 }

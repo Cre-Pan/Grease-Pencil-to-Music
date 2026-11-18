@@ -27,6 +27,11 @@
   riverbero sintetico di prima), Stanza, Auditorium o Chiesa, dalle risposte all'impulso del
   database di HybridReverb2 (Ruhr-Universität Bochum, CC BY-SA 4.0). Si salva con la composizione
   e vale anche per gli export.
+- Onda non è più una sezione: disegnare la forma d'onda è il modo di creare uno strumento, quindi
+  si fa in una finestra che si apre da *Strumento → Crea strumento* (o da *Onde disegnate → Disegna
+  un'onda*, o tenendo premuta un'onda → Modifica). *Disegna con questa onda* chiude la finestra e
+  sceglie lo strumento; *Fine*, Esc o un tocco fuori la chiudono. Le sezioni in alto sono quattro
+  (tasti 1–4); il link #onda apre la finestra.
 - Progetti: una galleria con tutte le composizioni salvate sul dispositivo, con le anteprime del
   disegno, le cartelle (anche una dentro l'altra) e la ricerca. Si apre dal tasto accanto a File
   o da *File → Progetti…*. Tocca un progetto per aprirlo, una cartella per entrarci; tieni premuto

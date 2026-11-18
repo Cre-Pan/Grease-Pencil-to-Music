@@ -878,5 +878,11 @@
  "Stanza": "Pièce",
  "Auditorium": "Auditorium",
  "Chiesa": "Église",
- "L'ambiente del riverbero vale per tutta la composizione e si salva con lei: Sala è sintetica; Stanza, Auditorium e Chiesa sono risposte all'impulso di ambienti realistici.": "La salle de la réverbération vaut pour toute la composition et est enregistrée avec elle : Salle est synthétique ; Pièce, Auditorium et Église sont des réponses impulsionnelles d'espaces réalistes."
+ "L'ambiente del riverbero vale per tutta la composizione e si salva con lei: Sala è sintetica; Stanza, Auditorium e Chiesa sono risposte all'impulso di ambienti realistici.": "La salle de la réverbération vaut pour toute la composition et est enregistrée avec elle : Salle est synthétique ; Pièce, Auditorium et Église sont des réponses impulsionnelles d'espaces réalistes.",
+ "Nuovo strumento": "Nouvel instrument",
+ "Disegna uno strumento": "Dessine un instrument",
+ "Crea strumento": "Créer un instrument",
+ "Disegna la forma d'onda di un nuovo strumento": "Dessine la forme d'onde d'un nouvel instrument",
+ "disegna l'onda": "dessiner l'onde",
+ "Disegna · Beat · MIDI · Esporta": "Dessin · Beat · MIDI · Exporter"
 }

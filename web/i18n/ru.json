@@ -878,5 +878,11 @@
  "Stanza": "Комната",
  "Auditorium": "Концертный зал",
  "Chiesa": "Церковь",
- "L'ambiente del riverbero vale per tutta la composizione e si salva con lei: Sala è sintetica; Stanza, Auditorium e Chiesa sono risposte all'impulso di ambienti realistici.": "Помещение реверберации действует на всю композицию и сохраняется вместе с ней: Зал синтетический; Комната, Концертный зал и Церковь — импульсные характеристики реалистичных помещений."
+ "L'ambiente del riverbero vale per tutta la composizione e si salva con lei: Sala è sintetica; Stanza, Auditorium e Chiesa sono risposte all'impulso di ambienti realistici.": "Помещение реверберации действует на всю композицию и сохраняется вместе с ней: Зал синтетический; Комната, Концертный зал и Церковь — импульсные характеристики реалистичных помещений.",
+ "Nuovo strumento": "Новый инструмент",
+ "Disegna uno strumento": "Нарисуй инструмент",
+ "Crea strumento": "Создать инструмент",
+ "Disegna la forma d'onda di un nuovo strumento": "Нарисуй форму волны нового инструмента",
+ "disegna l'onda": "нарисовать волну",
+ "Disegna · Beat · MIDI · Esporta": "Рисунок · Бит · MIDI · Экспорт"
 }
