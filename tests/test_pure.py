@@ -973,9 +973,11 @@ def test_every_web_instrument_has_its_own_addon_instrument():
 
 
 def test_recorded_zones_are_the_bundled_files():
+    synth.SAMPLES.pop("S_CELLO", None)
     zones = synth.recorded_zones("S_CELLO")
     assert [z.root for z in zones] == list(synth.RECORDINGS["S_CELLO"].zones)
-    assert all(z.rate == 44100 and len(z.data) > z.offset for z in zones)
+    assert all(z.data is None for z in zones)  # read when they first play
+    assert all(z.rate == 44100 and len(synth.zone_ready(z).data) > z.offset for z in zones)
     assert len(synth.recorded_zones("S_GONG")) == 1
 
 

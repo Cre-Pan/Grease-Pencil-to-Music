@@ -6,7 +6,6 @@ folder and (re)places it as a sound strip in the Video Sequencer, so pressing
 Play in Blender plays the drawing.
 """
 
-import hashlib
 import os
 import re
 import tempfile
@@ -485,8 +484,12 @@ def _remove_layer_strips(scene, obj, keep=()):
             _remove_strip(editor, strip)
 
 
-def _digest(audio):
-    return hashlib.blake2b(np.ascontiguousarray(audio).tobytes(), digest_size=16).hexdigest()
+def _same_audio(previous, audio):
+    """True when a layer sounds exactly as before (cheaper than hashing the samples)."""
+    if previous is None:
+        return False
+    return previous is audio or (previous.shape == audio.shape
+                                 and bool(np.array_equal(previous, audio)))
 
 
 def _forget_file(path):
@@ -508,14 +511,14 @@ def _place_layer_strips(scene, obj, result):
         if strip.get(LAYER_KEY) is None or strip[LAYER_KEY] not in names:
             _remove_strip(editor, strip)
     strips = layer_strips(scene, obj)
-    paths, digests = st.setdefault("layer_paths", {}), st.setdefault("layer_digests", {})
+    # The audio of each layer file (read-only arrays, shared with the mixer's cache).
+    paths, sounds = st.setdefault("layer_paths", {}), st.setdefault("layer_audio", {})
     base = _channel_block(editor, obj, len(names))
     fps = scene.render.fps / scene.render.fps_base
     for index, (name, audio) in enumerate(result.stems):
         strip, channel = strips.get(name), base + index
         frames = max(1, int(round(len(audio) / result.sample_rate * fps)))
-        digest = _digest(audio)
-        same_sound = digest == digests.get(name) and _strip_file_ok(strip)
+        same_sound = _same_audio(sounds.get(name), audio) and _strip_file_ok(strip)
         if same_sound and strip.channel == channel and strip.duration == frames:
             continue
         path = paths.get(name)
@@ -532,10 +535,10 @@ def _place_layer_strips(scene, obj, result):
             strip.mute = strip.mute or bool(st.get("muted"))
         if paths.get(name) != path:
             _forget_file(paths.get(name))
-        paths[name], digests[name] = path, digest
+        paths[name], sounds[name] = path, audio
     for name in [name for name in paths if name not in names]:
         _forget_file(paths.pop(name))
-        digests.pop(name, None)
+        sounds.pop(name, None)
     if obj.gp2m.channel != base:
         obj.gp2m.channel = base
 
@@ -712,8 +715,11 @@ def timeline_data(result, settings):
     audio = result.audio
     hop = max(1, result.sample_rate // PEAKS_PER_SECOND)
     usable = len(audio) // hop * hop
-    mono = np.abs(audio[:usable]).max(axis=1) if usable else np.zeros(0)
-    peaks = mono.reshape(-1, hop).max(axis=1) if usable else np.zeros(0)
+    if usable:  # max |x| per block, without a copy of the whole buffer for abs()
+        blocks = audio[:usable].reshape(-1, hop * audio.shape[1])
+        peaks = np.maximum(blocks.max(axis=1), -blocks.min(axis=1))
+    else:
+        peaks = np.zeros(0)
     top = max(float(peaks.max()) if len(peaks) else 0.0, 1e-6)
     notes = [(n.start, n.end, n.pitch, synth.get_instrument(n.instrument).color)
              for n in result.notes]
@@ -776,7 +782,7 @@ def regenerate(obj, scene=None, force=False, only_active=False):
             st["path"] = path
             for name in list(st.get("layer_paths", {})):
                 _forget_file(st["layer_paths"].pop(name))
-            st.get("layer_digests", {}).clear()
+            st.get("layer_audio", {}).clear()
         st["key"] = key
         st["sections"] = result.sections
         st["duration"] = result.duration or s.length

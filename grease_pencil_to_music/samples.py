@@ -142,15 +142,55 @@ def _onset(data, rate):
     return max(0, first - int(0.004 * rate))
 
 
+def _recorded_note(path):
+    """``() -> (data, rate, onset)`` of one recorded note, for :func:`synth.zone_ready`."""
+    def read():
+        data, rate = read_audio(path)
+        return data, rate, _onset(data, rate)
+    return read
+
+
+ALIASES = "aliases.txt"  # in the zip, identical recordings are stored once (tools/build_zip.py)
+_aliases = {}
+
+
+def _sample_path(folder, name):
+    """The file of a recorded note; a copy left out of the zip is read from its twin."""
+    path = os.path.join(folder, name)
+    if os.path.exists(path):
+        return path
+    samples_dir = os.path.dirname(folder)
+    if samples_dir not in _aliases:
+        table = {}
+        try:
+            with open(os.path.join(samples_dir, ALIASES), encoding="utf-8") as handle:
+                for row in handle:
+                    if row.strip():
+                        copy, original = row.split()
+                        table[copy] = original
+        except OSError:
+            pass
+        _aliases[samples_dir] = table
+    original = _aliases[samples_dir].get(f"{os.path.basename(folder)}/{name}")
+    return os.path.join(samples_dir, *original.split("/")) if original else path
+
+
+RECORDED_RATE = 44100.0  # every bundled recording (tools/build_samples.py)
+
+
 def load_recorded(ident):
-    """Zones of a recorded instrument (``synth.SAMPLE_LOADER``)."""
+    """Zones of a recorded instrument (``synth.SAMPLE_LOADER``). Only the key map is
+    built here: each note is decoded the first time it plays."""
     rec = synth.RECORDINGS[ident]
     folder = os.path.join(sounds_dir(), "samples", rec.web_id)
     zones = []
     for note in rec.zones:
-        data, rate = read_audio(os.path.join(folder, f"{note}.mp3"))
-        zones.append(synth.Zone(data, rate, float(note), 0, 127, False, 0, len(data), 1.0,
-                                _onset(data, rate)))
+        path = _sample_path(folder, f"{note}.mp3")
+        if not os.path.exists(path):
+            raise FileNotFoundError(path)
+        # The rate is the recordings' own until the note is read (synth.zone_ready).
+        zones.append(synth.Zone(None, RECORDED_RATE, float(note), 0, 127, False, 0, 0, 1.0,
+                                0, _recorded_note(path)))
     return zones
 
 

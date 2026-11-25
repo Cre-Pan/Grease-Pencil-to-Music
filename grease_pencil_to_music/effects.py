@@ -9,7 +9,9 @@ Pure Python + NumPy: no ``bpy`` import.
 import numpy as np
 
 
-_SPECTRA = {}  # (kernel key, fft size) -> spectrum of the kernel(s)
+_SPECTRA = {}  # (kernel key, fft size) -> spectrum of the kernel(s), most recent last
+_SPECTRA_MAX_BYTES = 96 * 1024 * 1024
+SINGLE_FFT_MAX = 1 << 22  # longer convolutions go in blocks (memory stays bounded)
 
 
 def _fft_size(kernel_length):
@@ -17,8 +19,42 @@ def _fft_size(kernel_length):
     return 1 << int(np.ceil(np.log2(max(4 * kernel_length, 1024))))
 
 
+_FAST_STEPS = (8, 9, 10, 12, 14, 15, 16)  # eighths of a power of two: factors 2, 3, 5, 7
+
+
+def _fast_size(n):
+    """A fast FFT length >= ``n``: a power of two times 1, 9/8, 5/4, 3/2, 7/4 or 15/8.
+
+    Few lengths (at most 1/7 longer than needed), so the spectrum of a reverb is
+    reused while the length of what it plays changes a little."""
+    n = max(int(n), 1)
+    if n <= 16:
+        return n
+    shift = max((n - 1).bit_length() - 4, 0)
+    for step in _FAST_STEPS:
+        if step << shift >= n:
+            return step << shift
+    return 16 << shift
+
+
+def _kernel_spectrum(kernel, size, key):
+    cache_key = None if key is None else (key, size)
+    spectrum = _SPECTRA.get(cache_key) if cache_key is not None else None
+    if spectrum is None:
+        spectrum = np.fft.rfft(kernel, size, axis=-1)
+        if cache_key is not None:
+            _SPECTRA[cache_key] = spectrum
+            while len(_SPECTRA) > 1 and sum(v.nbytes for v in _SPECTRA.values()) > \
+                    _SPECTRA_MAX_BYTES:
+                del _SPECTRA[next(iter(_SPECTRA))]
+    else:
+        _SPECTRA[cache_key] = _SPECTRA.pop(cache_key)  # most recently used
+    return spectrum
+
+
 def _fft_convolve(signal, kernel, key=None):
-    """Overlap-add FFT convolution: memory stays bounded for long loops.
+    """FFT convolution: one FFT of a fast length, or (very long signals) overlap-add
+    blocks, so memory stays bounded.
 
     ``signal``: (n,) or (n, channels); ``kernel``: (m,) or (m, channels), one
     kernel per channel. ``key`` names a kernel that does not change (the reverb
@@ -27,24 +63,25 @@ def _fft_convolve(signal, kernel, key=None):
     kernel = np.asarray(kernel, dtype=np.float64)
     m = len(kernel)
     n = len(signal) + m - 1
+    # Channels first: the FFTs run over contiguous rows.
+    sig = np.ascontiguousarray(signal.T)
+    ker = np.ascontiguousarray(kernel.T)
+    if kernel.ndim == 1 and signal.ndim == 2:  # the same kernel on every channel
+        ker = ker[None, :]
+    if n <= SINGLE_FFT_MAX:
+        size = _fast_size(n)
+        spectrum = _kernel_spectrum(ker, size, key)
+        out = np.fft.irfft(np.fft.rfft(sig, size, axis=-1) * spectrum, size, axis=-1)[..., :n]
+        return out.T
     size = _fft_size(m)
     block = size - m + 1
-    cache_key = None if key is None else (key, size)
-    kernel_spectrum = _SPECTRA.get(cache_key) if cache_key is not None else None
-    if kernel_spectrum is None:
-        kernel_spectrum = np.fft.rfft(kernel, size, axis=0)
-        if kernel.ndim == 1 and signal.ndim == 2:  # the same kernel on every channel
-            kernel_spectrum = kernel_spectrum[:, None]
-        if cache_key is not None:
-            if len(_SPECTRA) > 8:
-                _SPECTRA.clear()
-            _SPECTRA[cache_key] = kernel_spectrum
-    out = np.zeros((n + size,) + signal.shape[1:])
-    for start in range(0, len(signal), block):
-        chunk = signal[start:start + block]
-        out[start:start + size] += np.fft.irfft(
-            np.fft.rfft(chunk, size, axis=0) * kernel_spectrum, size, axis=0)
-    return out[:n]
+    spectrum = _kernel_spectrum(ker, size, key)
+    out = np.zeros(sig.shape[:-1] + (n + size,))
+    for start in range(0, sig.shape[-1], block):
+        chunk = sig[..., start:start + block]
+        out[..., start:start + size] += np.fft.irfft(
+            np.fft.rfft(chunk, size, axis=-1) * spectrum, size, axis=-1)
+    return out[..., :n].T
 
 
 _IRS = {}  # (length, decay, seed) -> (length, 2) impulse responses, unit energy
@@ -232,9 +269,14 @@ SOFT_CLIP_KNEE = 0.6
 
 def soft_clip(buffer, knee=SOFT_CLIP_KNEE):
     """Linear below ``knee``, then a tanh shoulder that never reaches 1 (web: softClip)."""
-    a = np.abs(buffer)
-    shoulder = knee + (1.0 - knee) * np.tanh((a - knee) / (1.0 - knee))
-    return np.sign(buffer) * np.where(a < knee, a, shoulder)
+    buffer = np.asarray(buffer)
+    out = buffer.copy() if buffer.dtype.kind == "f" else buffer.astype(np.float64)
+    over = np.abs(out) >= knee
+    if over.any():  # the shoulder only where it is reached (tanh is slow)
+        loud = out[over]
+        a = np.abs(loud)
+        out[over] = np.sign(loud) * (knee + (1.0 - knee) * np.tanh((a - knee) / (1.0 - knee)))
+    return out
 
 
 LIMIT_CEILING_DB = -1.0
@@ -300,10 +342,11 @@ def low_cut(buffer, rate, cutoff=30.0):
         return buffer
     kernel, half = _lowpass_kernel(rate, cutoff)
     if n < 2 * len(kernel) or _fast_fft_length(n):  # the exact FFT is fast
-        spectrum = np.fft.rfft(buffer, axis=0)
+        # Channels first: the FFTs run over contiguous rows.
+        spectrum = np.fft.rfft(np.ascontiguousarray(np.asarray(buffer).T), axis=-1)
         f = np.maximum(np.fft.rfftfreq(n, 1.0 / rate), 1e-3)
-        spectrum *= ((f / cutoff) ** 4 / (1.0 + (f / cutoff) ** 4))[:, None]
-        return np.fft.irfft(spectrum, n=n, axis=0)
+        spectrum *= (f / cutoff) ** 4 / (1.0 + (f / cutoff) ** 4)
+        return np.fft.irfft(spectrum, n=n, axis=-1).T
     x = np.asarray(buffer, dtype=np.float64)
     wrapped = np.concatenate((x[-half:], x, x[:half]))  # the loop continues on both sides
     low = _fft_convolve(wrapped, kernel, key=("low_cut", rate, cutoff))
@@ -370,20 +413,26 @@ def master_dynamics(stems, rate, loop=True, wrap=2.0, want_stems=False):
     glue = compress_gain(x, rate)[:, None] * MASTER_MAKEUP
     driven = x * glue
     saturated = soft_clip(driven)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        shape = np.where(np.abs(driven) > 1e-12, saturated / driven, 1.0)
     final = limit_gain(saturated, rate)[:, None]
     ceiling = 10.0 ** (LIMIT_CEILING_DB / 20.0)
-    mix = np.clip(saturated * final, -ceiling, ceiling)
-    gain = glue * shape * final
-    if pre:
-        mix, gain = mix[pre:], gain[pre:]
+    # Only the loop itself from here (the wrap was there for the dynamics).
+    driven, saturated, glue, final = driven[pre:], saturated[pre:], glue[pre:], final[pre:]
+    mix = saturated * final
+    np.clip(mix, -ceiling, ceiling, out=mix)
+    # gain = glue * (saturated / driven) * final; the ratio is exactly 1 below the knee,
+    # where soft_clip is the identity, so it is computed only above it.
+    gain = np.empty_like(driven)
+    gain[:] = glue * final
+    over = np.abs(driven) >= SOFT_CLIP_KNEE
+    if over.any():
+        rows = np.nonzero(over)[0]
+        gain[over] = glue[rows, 0] * (saturated[over] / driven[over]) * final[rows, 0]
     outs = None
     if want_stems:
         outs = []
         for stem in stems:
-            stem = np.asarray(stem, dtype=np.float64)
             if len(stem) < n:
-                stem = np.concatenate((stem, np.zeros((n - len(stem), 2))))
-            outs.append((stem * gain).astype(np.float32))
+                stem = np.concatenate((np.asarray(stem, dtype=np.float64),
+                                       np.zeros((n - len(stem), 2))))
+            outs.append(np.multiply(stem, gain, dtype=np.float64).astype(np.float32))
     return mix.astype(np.float32), outs
