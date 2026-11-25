@@ -109,7 +109,7 @@ def test_add_composition_is_one_object(comp):
     assert comp.data.layers.active.name == "Livello 1"
     instruments = [slot.material.gp2m_instrument for slot in comp.material_slots
                    if not board.is_board_material(slot.material)]
-    assert len(instruments) == 22 and {"PLUCK", "KICK", "SNARE", "HIHAT"} <= set(instruments)
+    assert len(instruments) == 25 and {"PLUCK", "KICK", "SNARE", "HIHAT"} <= set(instruments)
     labels = comp.data.layers.get("GP2M Etichette").frames[0].drawing
     assert len(labels.strokes) > 10
     # Empty composition: a silent strip already exists and the scene loops 8 s.
@@ -397,6 +397,9 @@ def test_panels_menus_and_preferences_draw(comp):
     settings.show_fx = False
     menu = _Drawer(log)
     ui.GP2M_MT_add_instrument.draw(menu, bpy.context)
+    ui.GP2M_MT_change_instrument.draw(_Drawer(log), bpy.context)
+    for recorded in ui.CHANGE_RECORDED_MENUS:  # the web app's families, in submenus
+        recorded.draw(_Drawer(log), bpy.context)
     ui.VIEW3D_MT_gp2m_add.draw(_Drawer(log), bpy.context)
     ui.draw_export_menu(_Drawer(log), bpy.context)
     ui.draw_add_menu(_Drawer(log), bpy.context)
@@ -410,7 +413,9 @@ def test_panels_menus_and_preferences_draw(comp):
             "gp2m_sample", "gp2m_sample_root", "gp2m.load_sample", "gp2m.play_keyboard",
             "channel", "new_bpm", "volume_feedback", "gp2m.import_midi", "gp2m.export_web",
             "GP2M_PT_help_main", "GP2M_PT_help_reading", "GP2M_PT_help_instrument",
-            "GP2M_PT_help_export"} <= drawn
+            "GP2M_PT_help_export", "GP2M_UL_layers", "GP2M_MT_change_instrument",
+            "gp2m.set_instrument", ui.CHANGE_RECORDED_MENUS[0].bl_idname,
+            "solo", "mute", "use_onion_skinning", "lock"} <= drawn
     assert sum(1 for entry in log if entry[0] == "markdown") == len(sub("help").classes)
 
 
@@ -533,6 +538,99 @@ def test_instrument_and_layer_list_operators(comp):
                                                               "Livello 3"]
 
 
+def test_change_instrument_keeps_strokes(comp):
+    engine, board = sub("engine"), sub("board")
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60), material_index=0)
+    material = comp.material_slots[0].material
+    before = material.gp2m_instrument
+    target = "BELL" if before != "BELL" else "PLUCK"
+    first = engine.regenerate(comp)
+    assert bpy.ops.gp2m.set_instrument(instrument=target, index=0) == {"FINISHED"}
+    assert material.gp2m_instrument == target
+    inst = sub("synth").INSTRUMENT_BY_ID[target]
+    assert board.material_label(material) == inst.label
+    assert tuple(round(c, 3) for c in material.grease_pencil.color[:3]) == \
+        tuple(round(c, 3) for c in inst.color[:3])
+    second = engine.regenerate(comp)
+    assert [n.pitch for n in second.notes] == [n.pitch for n in first.notes] == [60]
+    assert second.key != first.key
+    # A colour chosen by hand stays.
+    material.grease_pencil.color = (0.1, 0.9, 0.1, 1.0)
+    bpy.ops.gp2m.set_instrument(instrument="SINE", index=0)
+    assert material.gp2m_instrument == "SINE"
+    assert round(material.grease_pencil.color[1], 3) == 0.9
+    assert sub("ui").layer_instrument_slot(comp, "Livello 1") == 0
+
+
+def test_layer_list_mute_and_solo(comp):
+    engine, props, board = sub("engine"), sub("props"), sub("board")
+    gp = comp.data
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60), material_index=0)
+    add_stroke(comp, 1, line(comp, 3.0, 4.0, 64), material_index=3)
+    assert len(engine.regenerate(comp).notes) == 2
+    one, two = (props.find_layer_settings(gp, n) for n in ("Livello 1", "Livello 2"))
+    layers = {l.name: l for l in board.user_layers(gp)}
+    # Mute: visible, silent.
+    one.mute = True
+    assert [n.pitch for n in engine.regenerate(comp).notes] == [64]
+    assert not layers["Livello 1"].hide
+    one.mute = False
+    # Solo: the others are silent and dimmed to 10%, then restored.
+    layers["Livello 1"].opacity = 0.8
+    two.solo = True
+    assert [n.pitch for n in engine.regenerate(comp).notes] == [64]
+    assert abs(layers["Livello 1"].opacity - props.SOLO_OPACITY) < 1e-6
+    assert abs(layers["Livello 2"].opacity - 1.0) < 1e-6
+    assert abs(props.layer_volume(gp, layers["Livello 1"]) - 0.8) < 1e-6
+    two.solo = False
+    assert abs(layers["Livello 1"].opacity - 0.8) < 1e-6
+    assert len(engine.regenerate(comp).notes) == 2
+    # The list's active index follows the active layer, both ways.
+    index = [item.name for item in gp.gp2m_layers].index("Livello 2")
+    gp.gp2m_layer_index = index
+    assert gp.layers.active.name == "Livello 2"
+    assert gp.gp2m_layer_index == index
+    # Top layer first, like Blender's list.
+    flags, order = sub("ui").GP2M_UL_layers.filter_items(
+        type("L", (), {"bitflag_filter_item": 1})(), bpy.context, gp, "gp2m_layers")
+    shown = sorted((o, item.name) for o, item, f in zip(order, gp.gp2m_layers, flags) if f)
+    assert [name for _o, name in shown] == [l.name for l in reversed(board.user_layers(gp))]
+
+
+def test_preview_range_darkens_the_grid_only(comp):
+    engine, board = sub("engine"), sub("board")
+    scene = bpy.context.scene
+    add_stroke(comp, 0, line(comp, 0.5, 3.5, 60))
+    sound = engine.regenerate(comp).key
+    shade = comp.data.layers.get(board.SHADE_LAYER)
+    assert shade is not None and board.is_board_layer(shade)
+    assert len(shade.frames[0].drawing.strokes) == 0
+    fps = scene.render.fps / scene.render.fps_base
+    s = comp.gp2m
+    scene.use_preview_range = True
+    scene.frame_preview_start = scene.frame_start + int(round(1.0 * fps))
+    scene.frame_preview_end = scene.frame_start + int(round(2.0 * fps)) - 1
+    try:
+        assert board.update_preview_shade(comp, scene)
+        drawing = shade.frames[0].drawing
+        assert len(drawing.strokes) == 2
+        xs = sorted(round(p.position.x / s.seconds_width, 2)
+                    for stroke in drawing.strokes for p in stroke.points)
+        assert xs[0] == 0.0 and xs[-1] == round(s.length, 2)
+        assert 1.0 in xs and 2.0 in xs
+        assert not board.update_preview_shade(comp, scene)  # nothing changed
+        assert engine.regenerate(comp).key == sound  # the music is the same
+        # A rebuilt board keeps the shading.
+        board.rebuild(comp, scene)
+        shade = comp.data.layers.get(board.SHADE_LAYER)
+        assert len(shade.frames[0].drawing.strokes) == 2
+        assert board.board_materials_ok(comp)
+    finally:
+        scene.use_preview_range = False
+    assert board.update_preview_shade(comp, scene)
+    assert len(comp.data.layers.get(board.SHADE_LAYER).frames[0].drawing.strokes) == 0
+
+
 def _fresh(addon):
     assert bpy.ops.gp2m.add_composition() == {"FINISHED"}
     return bpy.context.view_layer.objects.active
@@ -545,7 +643,7 @@ def test_compositions_have_their_own_instruments(comp):
     theirs = {slot.material.name for slot in other.material_slots
               if not board.is_board_material(slot.material)}
     assert not (mine & theirs)  # muting/volume in one never touches the other
-    assert board.material_label(other.material_slots[0].material) == "Flauto"
+    assert board.material_label(other.material_slots[0].material) == "Flauto (synth)"
 
 
 def test_duplicates_become_independent(comp):
@@ -688,6 +786,100 @@ def test_timeline_header_and_popover_draw(comp):
 
 
 
+class _FakeView2D:
+    def __init__(self, frames_per_pixel=0.5):
+        self.fpp = frames_per_pixel
+
+    def view_to_region(self, x, _y, clip=True):
+        return (x / self.fpp, 0)
+
+    def region_to_view(self, x, _y):
+        return (x * self.fpp, 0.0)
+
+
+class _FakeRegion:
+    type = "WINDOW"
+
+    def __init__(self, width, height):
+        self.width, self.height = width, height
+        self.view2d = _FakeView2D()
+
+    def as_pointer(self):
+        return id(self)
+
+
+class _FakeContext:
+    def __init__(self, region):
+        self.scene = bpy.context.scene
+        self.region = region
+        self.active_object = bpy.context.view_layer.objects.active
+
+
+@pytest.mark.parametrize("region", [None, _FakeRegion(800, 0), _FakeRegion(800, 6),
+                                    _FakeRegion(0, 200), _FakeRegion(4, 200)])
+def test_timeline_overlay_without_room_does_no_work(comp, monkeypatch, region):
+    """No Timeline region, or a Timeline collapsed to a thin bar (or squeezed
+    sideways): the overlay returns at once, without collecting any sound."""
+    timeline = sub("timeline")
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
+    sub("engine").regenerate(comp)
+    calls = []
+    monkeypatch.setattr(timeline, "collect", lambda *a: calls.append(a) or ([], [], []))
+    assert timeline.draw_overlay(_FakeContext(region)) is None
+    assert not calls
+    timeline._draw()  # the real handler, in background (no region): no error
+
+
+def test_timeline_overlay_collects_once_until_something_changes(comp, monkeypatch):
+    timeline = sub("timeline")
+    calls = []
+    monkeypatch.setattr(timeline, "collect", lambda *a: calls.append(a) or ([], [], []))
+    timeline.invalidate()
+    region = _FakeRegion(800, 120)
+    for _ in range(5):  # every frame of the playback
+        assert timeline.draw_overlay(_FakeContext(region)) == 0
+    assert len(calls) == 1
+    timeline.tag_redraw()  # a new sound (regenerate, arrange, settings)
+    timeline.draw_overlay(_FakeContext(region))
+    assert len(calls) == 2
+    bpy.context.view_layer.update()
+    comp.location.x += 1.0
+    bpy.context.view_layer.update()  # any depsgraph change (strips, sounds...)
+    timeline.draw_overlay(_FakeContext(region))
+    assert len(calls) == 3
+
+
+def test_resume_playback_and_popups_without_windows(comp):
+    """Background mode has no window, screen or Timeline: nothing breaks."""
+    handlers, operators = sub("handlers"), sub("operators")
+    assert handlers._resume_playback() is None
+    handlers._popup_queue.append(comp.name)
+    handlers._show_popups()
+    assert not handlers._popup_queue
+    operators.frame_view(bpy.context, comp)  # no screen: nothing to frame
+    assert sub("engine").scene_of(comp) == bpy.context.scene
+    sub("timeline").tag_redraw()
+
+
+def test_keyboard_header_without_an_editor(comp):
+    """Started with no editor (or from one that was closed meanwhile), the
+    keyboard player neither fails nor writes in another editor's header."""
+    keyboard = sub("keyboard")
+
+    class Op:
+        recording = False
+        midi = None
+        base = 60
+        area_pointer = 0
+        _area = keyboard.GP2M_OT_play_keyboard._area
+
+    op = Op()
+    assert op._area(bpy.context) is None
+    keyboard.GP2M_OT_play_keyboard._header(op, bpy.context)
+    op.area_pointer = 12345  # an editor that no longer exists
+    assert op._area(bpy.context) is None
+
+
 def test_array_modifier_leaves_the_board_alone(comp):
     board, handlers = sub("board"), sub("handlers")
     add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
@@ -795,7 +987,9 @@ def test_midi_import_creates_layers_and_instruments(addon, tmp_path):
     assert [l.name for l in board.user_layers(comp.data)] == ["Archi", "Batteria"]
     assert comp.gp2m.bpm == pytest.approx(100.0, abs=0.01) and comp.gp2m.length == 4.0
     result = sub("engine").regenerate(comp)
-    assert sorted(n.pitch for n in result.notes if n.instrument == "STRINGS") == list(range(60, 68))
+    # GM 48 (string ensemble): the recorded strings of the web app.
+    assert sorted(n.pitch for n in result.notes if n.instrument == "S_STRINGS") == list(
+        range(60, 68))
     assert sum(1 for n in result.notes if n.instrument == "KICK") == 4
 
 
@@ -1275,3 +1469,47 @@ def test_web_project_rejects_other_files(addon, tmp_path):
     path.write_text('{"hello": 1}', encoding="utf-8")
     with pytest.raises(RuntimeError):
         bpy.ops.gp2m.import_web(filepath=str(path))
+
+
+def test_installed_addon_plays_the_web_app_recordings(comp):
+    """The zip carries the recordings and the rooms; old .blend values keep their instrument."""
+    import os
+    samples, synth, props, engine = sub("samples"), sub("synth"), sub("props"), sub("engine")
+    sounds = samples.sounds_dir()
+    assert sounds.endswith("sounds") and os.path.isfile(os.path.join(sounds, "rooms", "church.mp3"))
+    assert len([d for d in os.listdir(os.path.join(sounds, "samples"))
+                if os.path.isdir(os.path.join(sounds, "samples", d))]) == 69
+    items = bpy.types.Material.bl_rna.properties["gp2m_instrument"].enum_items
+    values = {item.identifier: item.value for item in items}
+    old = ("SINE", "TRIANGLE", "SQUARE", "SAW", "STRINGS", "PLUCK", "BELL", "EPIANO", "MARIMBA",
+           "PAD", "BASS", "DRUM", "KICK", "SNARE", "HIHAT", "OPENHAT", "CRASH", "CLAP", "TOM",
+           "COWBELL", "RIM", "SHAKER", "SAMPLE", "LIBRARY")  # the 0.0.10 list, in its order
+    assert [values[ident] for ident in old] == list(range(len(old)))
+    assert len(values) == len(synth.INSTRUMENTS) == 96
+    material = sub("board").instrument_material(synth.get_instrument("S_HARP"))
+    assert material.gp2m_instrument == "S_HARP" and material.name.startswith("Arpa")
+    sub("operators").append_instrument(comp, material)
+    material.gp2m_layer = "Livello 1"
+    index = list(comp.data.materials).index(material)
+    add_stroke(comp, 0, line(comp, 0.5, 1.5, 62), material_index=index)
+    comp.gp2m.room = "CHURCH"
+    result = engine.regenerate(comp)
+    assert any(n.instrument == "S_HARP" for n in result.notes)
+    assert np.max(np.abs(result.audio)) > 0.05
+
+
+def test_auto_update_waits_for_a_running_transform(comp, monkeypatch):
+    """Regenerating while G/R/S or Alt+S is still dragging crashed Blender 5.3
+    (the transform holds pointers into the drawings): the timer waits for it."""
+    engine, handlers = sub("engine"), sub("handlers")
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
+    engine.state(comp).pop("key", None)
+    handlers.mark_dirty(comp)
+    handlers._last_change[0] = 0.0
+    monkeypatch.setattr(handlers, "transform_running", lambda: True)
+    assert handlers._tick() == handlers.TRANSFORM_POLL
+    assert comp.name in handlers._dirty  # still pending
+    assert engine.state(comp).get("key") is None  # nothing regenerated yet
+    monkeypatch.setattr(handlers, "transform_running", lambda: False)
+    assert handlers._tick() is None
+    assert engine.state(comp).get("key") is not None  # regenerated once it ended

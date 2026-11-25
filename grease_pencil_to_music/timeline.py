@@ -18,6 +18,7 @@ import os
 
 import bpy
 import numpy as np
+from bpy.app.handlers import persistent
 
 _handles = []
 _reported = [False]
@@ -307,71 +308,179 @@ def collect(context, settings):
 
 # --- Drawing -----------------------------------------------------------------------
 
+# The overlay is redrawn at every frame of the playback, by every Timeline and
+# Dope Sheet. Collecting the sounds (one ``os.stat`` per strip) and rebuilding
+# the GPU batches each time is wasted work: the sounds are collected again only
+# when something changed (``_version``), and the batches only when the view or
+# the settings changed too.
+_version = [0]
+_collected = {}  # (version, scene, settings) -> collect() result
+_batches = {}  # region pointer -> (key, [(primitive, batch, rgba, line width)])
+_shaders = {}
+MIN_WIDTH = 16  # pixels: narrower regions (a Timeline squeezed sideways) draw nothing
+MIN_HEIGHT = 12  # pixels: a Timeline collapsed to its header has no room for a wave
+_CACHE_SIZE = 16
+
+
+def invalidate(*_args):
+    """Something that the overlay shows may have changed: collect it again."""
+    _version[0] += 1
+    _collected.clear()
+
+
+def wave_band(height, fraction):
+    """``(y0, y1)`` of the overlay in a region ``height`` pixels tall, or None
+    when the region is too short to show anything (collapsed Timeline).
+
+    The band leaves room for the frame numbers at the top of tall regions and
+    always stays inside the region, also when the Timeline is only a few rows
+    high."""
+    if height < MIN_HEIGHT:
+        return None
+    margin = 32.0 if height >= 80 else height * 0.25
+    y0 = min(6.0, height * 0.1)
+    usable = max(height - margin - y0, 2.0)
+    return y0, y0 + max(usable * fraction, min(8.0, usable))
+
+
+def _settings_key(settings):
+    composition = settings.composition.name_full if settings.composition else ""
+    return (settings.source, composition, settings.channel, settings.wave_style,
+            tuple(settings.audio_color), tuple(settings.wave_color), settings.show_notes,
+            settings.show_optical, round(settings.height, 4), round(settings.opacity, 4))
+
+
+def _collect_cached(context, scene, settings, skey):
+    active = getattr(context, "active_object", None)
+    key = (_version[0], scene.as_pointer(), skey,
+           active.name_full if active is not None and settings.source == "ACTIVE" else "")
+    found = _collected.get(key)
+    if found is None:
+        if len(_collected) > _CACHE_SIZE:
+            _collected.clear()
+        found = _collected[key] = collect(context, settings)
+    return found
+
+
+def _shader(name):
+    import gpu
+    shader = _shaders.get(name)
+    if shader is None:
+        shader = _shaders[name] = gpu.shader.from_builtin(name)
+    return shader
+
+
+def _build(context, scene, settings, skey, region, view):
+    """Batches to draw: ``[(primitive, batch, rgba, line width)]``, primitive
+    "TRIS" or "LINES"."""
+    from gpu_extras.batch import batch_for_shader
+    audio, composed, items = _collect_cached(context, scene, settings, skey)
+    if not audio and not composed and not items:
+        return []
+    fps, x0, ppf, frame_min, frame_max, y0, y1 = view
+    alpha = settings.opacity
+    fill = _shader("UNIFORM_COLOR")
+    poly = _shader("POLYLINE_UNIFORM_COLOR")
+    out = []
+
+    def to_x(frames):
+        return x0 + np.asarray(frames) * ppf
+
+    def add(primitive, vertices, rgba, width=1.0):
+        if not len(vertices):
+            return
+        shader = fill if primitive == "TRIS" else poly
+        out.append((primitive, batch_for_shader(shader, primitive, {"pos": vertices}),
+                    rgba, width))
+
+    bins = max(1.0, min(4.0, ppf))
+    for segments, color in ((audio, settings.audio_color), (composed, settings.wave_color)):
+        if not segments:
+            continue
+        frames, amplitude = build_wave(segments, frame_min, frame_max, fps, bins_per_frame=bins)
+        for primitive, vertices, weight in wave_geometry(
+                to_x(frames), amplitude, y0, y1, settings.wave_style):
+            add(primitive, vertices, (*color, 0.35 * alpha * weight))
+
+    for data, start, _end in items:
+        tris, lines = note_geometry(data, start, fps, to_x, region.width, y0, y1,
+                                    settings.show_notes, settings.show_optical)
+        for color, vertices in tris.items():
+            add("TRIS", vertices, (*color, alpha))
+        for color, vertices in lines.items():
+            add("LINES", vertices, (*color, alpha), 2.0)
+    return out
+
+
 def _draw():
-    context = bpy.context
+    draw_overlay(bpy.context)
+
+
+def draw_overlay(context):
+    """Draw handler body. Returns what was done, for the tests: None (nothing
+    to draw: no region, a region squeezed to a thin bar, overlay off...) or the
+    number of batches drawn."""
     try:
         scene = context.scene
         if scene is None:
             return
-        settings = scene.gp2m_timeline
-        if not settings.enabled:
+        settings = getattr(scene, "gp2m_timeline", None)
+        if settings is None or not settings.enabled:
             return
         region = context.region
         if region is None or region.type != "WINDOW" or region.view2d is None:
             return
-        audio, composed, items = collect(context, settings)
-        if not audio and not composed and not items:
+        width, height = region.width, region.height
+        if width < MIN_WIDTH:
             return
-        import gpu
-        from gpu_extras.batch import batch_for_shader
+        band = wave_band(height, settings.height)
+        if band is None:
+            return  # collapsed to a thin bar: nothing would be visible
+        y0, y1 = band
 
         fps = scene.render.fps / scene.render.fps_base
         view2d = region.view2d
         x0 = view2d.view_to_region(0.0, 0.0, clip=False)[0]
         x100 = view2d.view_to_region(100.0, 0.0, clip=False)[0]
         ppf = (x100 - x0) / 100.0
-        if ppf <= 0:
+        if ppf <= 0 or fps <= 0:
             return
         frame_min = view2d.region_to_view(0, 0)[0]
-        frame_max = view2d.region_to_view(region.width, 0)[0]
+        frame_max = view2d.region_to_view(width, 0)[0]
+        if frame_max <= frame_min:
+            return
 
-        def to_x(frames):
-            return x0 + np.asarray(frames) * ppf
+        skey = _settings_key(settings)
+        view = (fps, x0, ppf, frame_min, frame_max, y0, y1)
+        key = (_version[0], scene.as_pointer(), skey, width, height,
+               round(x0, 2), round(ppf, 6))
+        pointer = region.as_pointer()
+        cached = _batches.get(pointer)
+        if cached is None or cached[0] != key:
+            if len(_batches) > _CACHE_SIZE:
+                _batches.clear()
+            cached = _batches[pointer] = (key, _build(context, scene, settings, skey,
+                                                      region, view))
+        draws = cached[1]
+        if not draws:
+            return 0
 
-        y0 = 6.0
-        y1 = y0 + max((region.height - 32.0) * settings.height, 8.0)
-        shader = gpu.shader.from_builtin("UNIFORM_COLOR")
+        import gpu
         gpu.state.blend_set("ALPHA")
-        alpha = settings.opacity
-
-        bins = max(1.0, min(4.0, ppf))
-        for segments, color in ((audio, settings.audio_color),
-                                (composed, settings.wave_color)):
-            if not segments:
-                continue
-            frames, amplitude = build_wave(segments, frame_min, frame_max, fps,
-                                           bins_per_frame=bins)
-            for primitive, vertices, weight in wave_geometry(
-                    to_x(frames), amplitude, y0, y1, settings.wave_style):
-                batch = batch_for_shader(shader, primitive, {"pos": vertices})
-                shader.uniform_float("color", (*color, 0.35 * alpha * weight))
+        try:
+            viewport = (float(width), float(height))
+            for primitive, batch, rgba, line_width in draws:
+                if primitive == "TRIS":
+                    shader = _shader("UNIFORM_COLOR")
+                else:  # wide lines also on Vulkan and Metal, where line_width_set is ignored
+                    shader = _shader("POLYLINE_UNIFORM_COLOR")
+                    shader.uniform_float("viewportSize", viewport)
+                    shader.uniform_float("lineWidth", line_width)
+                shader.uniform_float("color", rgba)
                 batch.draw(shader)
-
-        for data, start, _end in items:
-            tris, lines = note_geometry(data, start, fps, to_x, region.width, y0, y1,
-                                        settings.show_notes, settings.show_optical)
-            for color, vertices in tris.items():
-                batch = batch_for_shader(shader, "TRIS", {"pos": vertices})
-                shader.uniform_float("color", (*color, alpha))
-                batch.draw(shader)
-            if lines:
-                gpu.state.line_width_set(2.0)
-                for color, vertices in lines.items():
-                    batch = batch_for_shader(shader, "LINES", {"pos": vertices})
-                    shader.uniform_float("color", (*color, alpha))
-                    batch.draw(shader)
-                gpu.state.line_width_set(1.0)
-        gpu.state.blend_set("NONE")
+        finally:
+            gpu.state.blend_set("NONE")
+        return len(draws)
     except Exception as error:  # never break Blender's drawing
         if not _reported[0]:
             _reported[0] = True
@@ -379,11 +488,16 @@ def _draw():
 
 
 def tag_redraw():
+    """Collect the sounds again and redraw every Timeline / Dope Sheet (if any)."""
+    invalidate()
     wm = getattr(bpy.context, "window_manager", None)
     if wm is None:
         return
     for window in wm.windows:
-        for area in window.screen.areas:
+        screen = window.screen
+        if screen is None:
+            continue
+        for area in screen.areas:
             if area.type == "DOPESHEET_EDITOR":
                 area.tag_redraw()
 
@@ -436,14 +550,40 @@ def draw_header_button(self, context):
 classes = (GP2M_PT_timeline,)
 
 
+@persistent
+def _on_change(*_args):
+    invalidate()
+
+
+_HANDLERS = (
+    bpy.app.handlers.depsgraph_update_post,  # strips moved, muted, sounds loaded...
+    bpy.app.handlers.load_post,
+    bpy.app.handlers.undo_post,
+    bpy.app.handlers.redo_post,
+)
+
+
+def _clear_caches():
+    invalidate()
+    _batches.clear()
+    _shaders.clear()
+
+
 def register():
     if not _handles:
         _handles.append(bpy.types.SpaceDopeSheetEditor.draw_handler_add(
             _draw, (), "WINDOW", "POST_PIXEL"))
+    for handler_list in _HANDLERS:
+        if _on_change not in handler_list:
+            handler_list.append(_on_change)
     bpy.types.DOPESHEET_HT_header.append(draw_header_button)
 
 
 def unregister():
     bpy.types.DOPESHEET_HT_header.remove(draw_header_button)
+    for handler_list in _HANDLERS:
+        if _on_change in handler_list:
+            handler_list.remove(_on_change)
     while _handles:
         bpy.types.SpaceDopeSheetEditor.draw_handler_remove(_handles.pop(), "WINDOW")
+    _clear_caches()

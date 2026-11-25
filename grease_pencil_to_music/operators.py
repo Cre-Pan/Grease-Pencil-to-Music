@@ -42,12 +42,15 @@ def frame_view(context, comp):
     for area in screen.areas:
         if area.type != "VIEW_3D":
             continue
-        region_3d = area.spaces.active.region_3d
+        space = area.spaces.active
+        region_3d = getattr(space, "region_3d", None)
+        if region_3d is None:
+            continue
         region_3d.view_perspective = "ORTHO"
         region_3d.view_rotation = Euler((math.pi / 2.0, 0.0, 0.0)).to_quaternion()
         region_3d.view_location = center
         region_3d.view_distance = max(width + kw, top) * 0.85
-        shading = area.spaces.active.shading
+        shading = space.shading
         shading.type = "SOLID"
         shading.color_type = "TEXTURE"  # flat material colors: the board reads well
         area.tag_redraw()
@@ -70,7 +73,8 @@ class GP2M_OT_add_composition(bpy.types.Operator):
         name = _next_name()
         gp = bpy.data.grease_pencils.new(name)
         obj = bpy.data.objects.new(name, gp)
-        context.collection.objects.link(obj)
+        collection = getattr(context, "collection", None) or scene.collection
+        collection.objects.link(obj)
         obj.location = scene.cursor.location
         obj.show_in_front = True
         obj.gp2m.is_composition = True
@@ -295,6 +299,32 @@ class GP2M_OT_add_instrument(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class GP2M_OT_set_instrument(bpy.types.Operator):
+    """Cambia lo strumento: i tratti restano dove sono e suonano con quello nuovo"""
+
+    bl_idname = "gp2m.set_instrument"
+    bl_label = "Cambia strumento"
+    bl_options = {"REGISTER", "UNDO", "INTERNAL"}
+
+    instrument: EnumProperty(name="Strumento", items=props.INSTRUMENT_ITEMS)
+    index: IntProperty(default=-1, description="Slot dello strumento (-1 = strumento attivo)")
+
+    @classmethod
+    def poll(cls, context):
+        return _composition_poll(context)
+
+    def execute(self, context):
+        comp = active_composition(context)
+        index = comp.active_material_index if self.index < 0 else self.index
+        if not 0 <= index < len(comp.material_slots):
+            return {"CANCELLED"}
+        material = comp.material_slots[index].material
+        if material is None or board.is_board_material(material) or material.grease_pencil is None:
+            return {"CANCELLED"}
+        board.change_instrument(material, synth.get_instrument(self.instrument))
+        return {"FINISHED"}
+
+
 class GP2M_OT_use_instrument(bpy.types.Operator):
     """Disegna su questo livello con questo strumento"""
 
@@ -482,6 +512,7 @@ classes = (
     GP2M_OT_rebuild_board,
     GP2M_OT_export,
     GP2M_OT_add_instrument,
+    GP2M_OT_set_instrument,
     GP2M_OT_use_instrument,
     GP2M_OT_load_sample,
     GP2M_OT_remove_instrument,

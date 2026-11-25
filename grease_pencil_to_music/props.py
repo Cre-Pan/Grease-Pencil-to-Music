@@ -79,10 +79,66 @@ FILL_MODES = (
 )
 
 
+SOLO_OPACITY = 0.1  # opacity of the other layers while a layer is in Solo
+
+
+def _solo_changed(self, _context):
+    apply_solo(self.id_data)
+    _sound_changed(self, _context)
+
+
+def apply_solo(gp_data):
+    """Dim the layers that are not in Solo to 10% opacity, restore them after.
+
+    The opacity a layer had is kept in its settings: the volume of the layer is
+    still that one (a dimmed layer is silent anyway, and exports read the saved
+    value). If the opacity was changed by hand while dimmed, that value wins.
+    """
+    settings = list(gp_data.gp2m_layers)
+    any_solo = any(item.solo for item in settings)
+    for item in settings:
+        layer = gp_data.layers.get(item.name)
+        if layer is None:
+            continue
+        dim = any_solo and not item.solo
+        if dim and item.solo_saved_opacity < 0.0:
+            item.solo_saved_opacity = layer.opacity
+            layer.opacity = SOLO_OPACITY
+        elif not dim and item.solo_saved_opacity >= 0.0:
+            if abs(layer.opacity - SOLO_OPACITY) < 1e-4:
+                layer.opacity = item.solo_saved_opacity
+            item.solo_saved_opacity = -1.0
+
+
+def layer_volume(gp_data, layer):
+    """The volume of a layer: its opacity, or the one it had before a Solo dimmed it."""
+    item = find_layer_settings(gp_data, layer.name)
+    if item is not None and item.solo_saved_opacity >= 0.0:
+        return float(item.solo_saved_opacity)
+    return float(layer.opacity)
+
+
+def layer_silent(gp_data, layer_name):
+    """Muted, or another layer is in Solo."""
+    settings = gp_data.gp2m_layers
+    item = find_layer_settings(gp_data, layer_name)
+    if item is not None and item.mute:
+        return True
+    return any(other.solo for other in settings) and (item is None or not item.solo)
+
+
 class GP2M_LayerSettings(bpy.types.PropertyGroup):
     """Settings of one Grease Pencil layer, matched by layer name."""
 
     name: StringProperty()
+    mute: BoolProperty(name="Muto", default=False, update=_sound_changed,
+                       description="Il livello resta visibile ma non suona (anche negli export)")
+    solo: BoolProperty(name="Solo", default=False, update=_solo_changed,
+                       description="Ascolta solo questo livello: gli altri tacciono e scendono "
+                       "al 10% di opacità (anche negli export)")
+    solo_saved_opacity: FloatProperty(default=-1.0, options={"HIDDEN"},
+                                      description="Opacità del livello prima del Solo "
+                                      "(-1 = non attenuato)")
     expanded: BoolProperty(name="Mostra strumenti", default=True)
     show_fx: BoolProperty(name="Mostra volume ed effetti", default=False)
     mode: EnumProperty(name="Lettura", items=LAYER_MODES, default="QUANTIZED",
@@ -147,6 +203,14 @@ class GP2M_Effects(bpy.types.PropertyGroup):
 SAMPLE_RATES = (("44100", "44.1 kHz", ""), ("48000", "48 kHz", ""))
 
 
+ROOM_ITEMS = (
+    ("HALL", "Sala", "Il riverbero sintetico (la sua grandezza si regola)"),
+    ("ROOM", "Stanza", "Un soggiorno registrato (HybridReverb2, CC BY-SA 4.0)"),
+    ("CONCERT", "Auditorium", "Una grande sala da concerto registrata (HybridReverb2)"),
+    ("CHURCH", "Chiesa", "Una chiesa registrata, coda lunga (HybridReverb2)"),
+)
+
+
 class GP2M_CompositionSettings(bpy.types.PropertyGroup):
     is_composition: BoolProperty(default=False)
     channel: IntProperty(name="Canale Sequencer", default=0, min=0, max=128,
@@ -205,6 +269,10 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
     ambience: FloatProperty(name="Ambiente", default=0.25, min=0.0, max=1.0,
                             subtype="FACTOR", description="Quanto si sente la sala comune "
                             "(un riverbero che lega tutti i livelli)", update=_sound_changed)
+    room: EnumProperty(name="Ambiente del riverbero", items=ROOM_ITEMS, default="HALL",
+                       description="La sala di tutti i riverberi della composizione (livelli, "
+                       "strumenti e ambiente comune), come nella web app",
+                       update=_sound_changed)
     loop: BoolProperty(name="Loop", default=True,
                        description="Le code (eco, riverbero, note lunghe) rientrano "
                        "dall'inizio del loop",
@@ -220,7 +288,44 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
                               update=_sound_changed)
 
 
-INSTRUMENT_ITEMS = [(i.ident, i.label, i.description) for i in synth.INSTRUMENTS]
+def _instrument_items():
+    """Every instrument, by family. The numbers are the instruments' places in
+    ``synth.INSTRUMENTS``, so .blend files saved by older versions (where the list was
+    shorter) keep their instruments."""
+    number = {inst.ident: index for index, inst in enumerate(synth.INSTRUMENTS)}
+    items, listed = [], set()
+    for title, idents in INSTRUMENT_FAMILIES:
+        items.append(("", title, ""))
+        for ident in idents:
+            inst = synth.INSTRUMENT_BY_ID[ident]
+            items.append((ident, inst.label, inst.description, number[ident]))
+            listed.add(ident)
+    rest = [i for i in synth.INSTRUMENTS if i.ident not in listed]
+    if rest:
+        items.append(("", "Altri", ""))
+        items += [(i.ident, i.label, i.description, number[i.ident]) for i in rest]
+    return items
+
+
+def _families():
+    """(title, add-on idents): the synths, then the web app's recorded families."""
+    from . import web_instruments
+    synths = (
+        ("Synth melodici", ("EPIANO", "ORGAN", "SINE", "TRIANGLE", "MARIMBA", "BELL", "PLUCK",
+                            "STRINGS", "CHOIR", "PAD", "BRASS", "SAW", "SQUARE", "BASS")),
+        ("Batteria synth", ("DRUM", "KICK", "SNARE", "CLAP", "HIHAT", "OPENHAT", "TOM", "RIM",
+                            "SHAKER", "CRASH", "COWBELL")),
+    )
+    recorded = tuple(
+        (title, tuple(synth.SAMPLED_PREFIX + w for w in ids
+                      if synth.SAMPLED_PREFIX + w in synth.RECORDINGS))
+        for title, ids in web_instruments.MELODIC_FAMILIES + web_instruments.DRUM_FAMILIES)
+    return synths + tuple(f for f in recorded if f[1]) + (
+        ("Suoni", ("SAMPLE", "LIBRARY")),)
+
+
+INSTRUMENT_FAMILIES = _families()
+INSTRUMENT_ITEMS = _instrument_items()
 
 
 def _get_active_layer(gp_data):
@@ -319,6 +424,9 @@ def register_properties():
     bpy.types.Scene.gp2m_play = PointerProperty(type=GP2M_PlaySettings)
     bpy.types.Scene.gp2m_timeline = PointerProperty(type=GP2M_TimelineSettings)
     bpy.types.GreasePencil.gp2m_layers = CollectionProperty(type=GP2M_LayerSettings)
+    bpy.types.GreasePencil.gp2m_layer_index = IntProperty(
+        name="Livello attivo", get=_get_layer_index, set=_set_layer_index,
+        options={"SKIP_SAVE"})
     bpy.types.Material.gp2m_instrument = EnumProperty(
         name="Strumento", items=INSTRUMENT_ITEMS, default=synth.DEFAULT_INSTRUMENT,
         update=_instrument_changed)
@@ -359,10 +467,36 @@ def unregister_properties():
     del bpy.types.Material.gp2m_fx
     del bpy.types.Material.gp2m_layer
     del bpy.types.Material.gp2m_instrument
+    del bpy.types.GreasePencil.gp2m_layer_index
     del bpy.types.GreasePencil.gp2m_layers
     del bpy.types.Scene.gp2m_timeline
     del bpy.types.Scene.gp2m_play
     del bpy.types.Object.gp2m
+
+
+def _get_layer_index(self):
+    """Index in ``gp2m_layers`` of the active layer (for the UI list)."""
+    active = self.layers.active
+    if active is None:
+        return -1
+    for index, item in enumerate(self.gp2m_layers):
+        if item.name == active.name:
+            return index
+    return -1
+
+
+def _set_layer_index(self, value):
+    if not 0 <= value < len(self.gp2m_layers):
+        return
+    from . import board, operators
+    layer = self.layers.get(self.gp2m_layers[value].name)
+    if layer is None or board.is_board_layer(layer):
+        return
+    for obj in bpy.data.objects:
+        if obj.data == self and obj.gp2m.is_composition:
+            operators.use_instrument(obj, layer.name)
+            return
+    self.layers.active = layer
 
 
 def find_layer_settings(gp_data, layer_name):
@@ -391,3 +525,5 @@ def ensure_layer_settings(gp_data):
         return
     for name in missing:
         gp_data.gp2m_layers.add().name = name
+    if any(item.solo for item in gp_data.gp2m_layers):
+        apply_solo(gp_data)  # a new layer joins the dimmed ones

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from . import music
+from . import music, web_instruments
 from .interpret import CONTROL_RATE, NOISE_BAND
 
 
@@ -30,15 +30,15 @@ class Instrument:
 
 
 INSTRUMENTS = (
-    Instrument("SINE", "Flauto", "Sinusoide morbida con un filo di armoniche",
+    Instrument("SINE", "Flauto (synth)", "Sinusoide morbida con un filo di armoniche",
                (0.45, 0.78, 1.0, 1.0), 73, 0.06, 0.55),
-    Instrument("TRIANGLE", "Ocarina", "Onda triangolare, dolce e rotonda",
+    Instrument("TRIANGLE", "Ocarina (synth)", "Onda triangolare, dolce e rotonda",
                (0.35, 1.0, 0.8, 1.0), 79, 0.06, 0.55),
     Instrument("SQUARE", "8-bit", "Onda quadra da console anni '80",
                (0.4, 1.0, 0.3, 1.0), 80, 0.03, 0.22),
     Instrument("SAW", "Synth", "Dente di sega brillante",
                (1.0, 0.55, 0.15, 1.0), 81, 0.08, 0.3),
-    Instrument("STRINGS", "Archi", "Tre seghe leggermente stonate, attacco lento e vibrato",
+    Instrument("STRINGS", "Archi (synth)", "Tre seghe leggermente stonate, attacco lento e vibrato",
                (1.0, 0.3, 0.4, 1.0), 48, 0.2, 0.32),
     Instrument("PLUCK", "Chitarra", "Corda pizzicata (Karplus-Strong)",
                (1.0, 0.85, 0.25, 1.0), 24, 0.25, 0.8),
@@ -46,7 +46,7 @@ INSTRUMENTS = (
                (0.72, 0.5, 1.0, 1.0), 14, 1.2, 0.45),
     Instrument("EPIANO", "Piano elettrico", "Piano elettrico (FM): attacco morbido, coda "
                "che si spegne piano", (0.3, 0.55, 1.0, 1.0), 4, 0.35, 0.75),
-    Instrument("MARIMBA", "Marimba", "Barre di legno percosse, suono caldo e breve",
+    Instrument("MARIMBA", "Marimba (synth)", "Barre di legno percosse, suono caldo e breve",
                (1.0, 0.62, 0.2, 1.0), 12, 0.25, 0.8),
     Instrument("PAD", "Pad", "Tappeto morbido: tre seghe stonate, filtrate, attacco lento",
                (0.42, 0.4, 0.95, 1.0), 89, 1.0, 0.3),
@@ -78,8 +78,62 @@ INSTRUMENTS = (
                "intonato sulle righe", (0.55, 0.9, 0.95, 1.0), 0, 0.08, 0.8),
     Instrument("LIBRARY", "Libreria", "Strumento campionato da un SoundFont (.sf2) o .sfz: "
                "pianoforti, archi, chitarre…", (0.95, 0.75, 0.55, 1.0), 0, 0.15, 0.9),
+    # The web app's other synths (0.0.11).
+    Instrument("ORGAN", "Organo", "Organo elettrico: armoniche sinusoidali, un click sul tasto "
+               "e un lento effetto rotary", (1.0, 0.18, 0.33, 1.0), 16, 0.08, 0.6),
+    Instrument("CHOIR", "Coro", "Voci: seghe stonate attraverso le formanti di una \"a\" aperta",
+               (0.0, 0.78, 0.7, 1.0), 52, 0.5, 0.75),
+    Instrument("BRASS", "Ottoni", "Sezione di ottoni: il filtro si apre col fiato e la nota "
+               "scivola dentro", (0.49, 0.71, 0.11, 1.0), 61, 0.18, 0.75),
 )
+
+# The web app's recorded instruments (VS Chamber Orchestra CE and Versilian Community Sample
+# Library, CC0): identifier "S_<web id>". Their sounds are in the add-on (sounds/samples) and
+# are read the first time they play (SAMPLE_LOADER, set by samples.py).
+SAMPLED_PREFIX = "S_"
+SAMPLED_GAIN = 1.6  # the recordings are quieter than the synths (RMS 0.16)
+SAMPLED_DRUM_GAIN = 1.0
+
+
+@dataclass(frozen=True)
+class Recording:
+    web_id: str
+    zones: tuple  # MIDI notes recorded; (0,) = one hit
+    sustained: bool  # loops its middle when the note outlasts the recording
+    hold: bool  # a hit (scrape, roll) that lasts as long as the line
+    kind: str  # the web app's synth kind (piano, pluck, …)
+
+
+RECORDINGS = {}
+
+
+def _recorded_instruments():
+    out = []
+    for row in web_instruments.INSTRUMENTS:
+        if not row["zones"]:
+            continue
+        ident = SAMPLED_PREFIX + row["id"]
+        hit = list(row["zones"]) == [0]
+        RECORDINGS[ident] = Recording(row["id"], tuple(row["zones"]), row["sus"], row["hold"],
+                                      row["kind"])
+        what = "colpo registrato" if hit else "strumento registrato"
+        out.append(Instrument(
+            ident, row["name"], f"{row['name']}: {what} (VSCO 2 CE / VCSL, CC0)",
+            tuple(row["color"]), -1 if hit else int(row["gm"]),
+            0.0 if hit else float(row["rel"]), SAMPLED_DRUM_GAIN if hit else SAMPLED_GAIN,
+            hit, float(row["length"]) if hit else 0.0, int(row["drum"]) if hit else 0))
+    return tuple(out)
+
+
+SAMPLED_INSTRUMENTS = _recorded_instruments()
+INSTRUMENTS = INSTRUMENTS + SAMPLED_INSTRUMENTS
 INSTRUMENT_BY_ID = {inst.ident: inst for inst in INSTRUMENTS}
+SYNTH_INSTRUMENTS = tuple(i for i in INSTRUMENTS if not i.ident.startswith(SAMPLED_PREFIX)
+                          and i.ident not in ("SAMPLE", "LIBRARY"))
+
+
+def is_sampled(ident):
+    return ident in RECORDINGS
 DEFAULT_INSTRUMENT = "SINE"
 NOISE_INSTRUMENT = Instrument(NOISE_BAND, "Banda di rumore", "Cluster di rumore",
                               (0.8, 0.8, 0.8, 1.0), -1, 0.06, 0.5)
@@ -104,6 +158,7 @@ class Zone:
     loop_start: int = 0  # samples, inside data
     loop_end: int = 0
     gain: float = 1.0
+    offset: int = 0  # where the sound starts (MP3 decoders add a little silence)
 
 
 def register_sample(key, data, rate, root, loop):
@@ -115,6 +170,22 @@ def register_sample(key, data, rate, root, loop):
 def register_zones(key, zones):
     """A multisampled instrument (the "Libreria" instrument: SF2 / SFZ)."""
     SAMPLES[key] = list(zones)
+
+
+SAMPLE_LOADER = None  # ident -> list of Zone, for the recorded instruments (samples.py)
+
+
+def recorded_zones(ident):
+    """Zones of a recorded instrument, read the first time they are asked for."""
+    zones = SAMPLES.get(ident)
+    if zones is None and SAMPLE_LOADER is not None and ident in RECORDINGS:
+        try:
+            zones = SAMPLE_LOADER(ident)
+        except Exception as error:  # noqa: BLE001 - a missing file plays silence
+            print(f"[Doodle Music] {ident} non letto: {error!r}")
+            zones = None
+        SAMPLES[ident] = zones = list(zones or [])
+    return zones or []
 
 
 def pick_zone(zones, pitch):
@@ -330,16 +401,152 @@ def _sample(ident, freq, sample_rate):
     return np.interp(position, np.arange(len(data)), data) * inside * zone.gain
 
 
+HOLD_MIN = 0.15  # seconds: shortest scrape / roll
+HOLD_FADE = 0.12  # seconds of fade when a held hit is cut at the end of the line
+SUSTAIN_FADE = 0.25  # seconds of crossfade between two passes of a sustained loop
+
+
+def _sustain(data, position, rate, offset):
+    """Read ``data`` at ``position`` (samples); past the end the middle of the recording
+    repeats with crossfades, as in the web app (a sustained note outlasts the recording)."""
+    count = len(data)
+    if position[-1] <= count - 1 - 0.3 * rate:
+        return np.interp(position, np.arange(count), data) * (position < count - 1)
+    fade = SUSTAIN_FADE * rate
+    end = count - 1 - 0.45 * rate  # the loop leaves out the release of the recording
+    begin = offset + (count - offset) * 0.35
+    if end - begin < max(0.6 * rate, 2.5 * fade):
+        begin = max(float(offset), end - max(0.6 * rate, 2.5 * fade))
+    period = (end - begin) - fade
+    if period <= fade or begin < 0:  # too short to loop: play it once
+        return np.interp(position, np.arange(count), data) * (position < count - 1)
+    grid = np.arange(count)
+    out = np.interp(position, grid, data)
+    looped = position >= end - fade
+    local = np.mod(position[looped] - (end - fade), period)
+    fade_in = np.clip(local / fade, 0.0, 1.0)
+    current = np.interp(begin + local, grid, data) * fade_in
+    previous = np.interp(end - fade + local, grid, data) * (1.0 - fade_in) * (local < fade)
+    out[looped] = current + previous
+    return out
+
+
+def _recorded(voice, inst, freq, ts, sample_rate, brightness):
+    """A recorded instrument: the nearest recorded note retuned to follow the line, or one
+    recorded hit (as long as the line for scrapes and rolls)."""
+    rec = RECORDINGS[inst.ident]
+    zones = recorded_zones(inst.ident)
+    if not zones:
+        return np.zeros(len(ts))
+    if inst.percussive:
+        zone = zones[0]
+        position = zone.offset + np.arange(len(ts)) * (zone.rate / sample_rate)
+        hit = np.interp(position, np.arange(len(zone.data)), zone.data)
+        hit *= position < len(zone.data) - 1
+        if rec.hold:
+            cut = max(voice.duration, HOLD_MIN)
+            hit *= np.clip(1.0 - (ts - cut) / HOLD_FADE, 0.0, 1.0)
+        return hit * (0.6 + 0.4 * float(np.mean(brightness))) * zone.gain
+    zone = pick_zone(zones, float(voice.pitch[0]))
+    if len(zone.data) < 2:
+        return np.zeros(len(ts))
+    ratio = freq / float(music.midi_to_freq(zone.root)) * (zone.rate / sample_rate)
+    position = zone.offset + np.concatenate(([0.0], np.cumsum(ratio[:-1])))
+    if rec.sustained:
+        signal = _sustain(zone.data, position, zone.rate, zone.offset)
+    else:
+        signal = np.interp(position, np.arange(len(zone.data)), zone.data)
+        signal *= position < len(zone.data) - 1
+    signal = _lowpass(signal, sample_rate, 1500.0 + float(np.mean(brightness)) * 16000.0)
+    return signal * zone.gain
+
+
+def _vibrato_cents(ts, depth, delay, rate=5.2):
+    """The web app's delayed vibrato, in cents."""
+    return depth * np.clip(ts / max(delay, 1e-3), 0.0, 1.0) * np.sin(2 * np.pi * rate * ts)
+
+
+def _detuned_phase(freq, cents, sample_rate):
+    return 2 * np.pi * np.cumsum(freq * 2.0 ** (cents / 1200.0)) / sample_rate
+
+
+def _biquad_gain(f, center, q, kind):
+    """Magnitude of a biquad (bandpass with 0 dB peak, or lowpass) at ``f``."""
+    x = f / center
+    if kind == "band":
+        return (x / q) / np.sqrt((1.0 - x * x) ** 2 + (x / q) ** 2)
+    return 1.0 / np.sqrt((1.0 - x * x) ** 2 + (x / q) ** 2)
+
+
+def _organ(freq, ts, sample_rate, brightness, rng):
+    """Drawbar organ: sine partials, a key click and a slow rotary wobble."""
+    b = float(np.mean(brightness))
+    vib = 4.0 * np.sin(2 * np.pi * 6.4 * ts)
+    phase = _detuned_phase(freq, vib, sample_rate)
+    signal = np.zeros(len(ts))
+    for mul, level in ((0.5, 0.5), (1, 0.75), (2, 0.45), (3, 0.2 + 0.25 * b),
+                       (4, 0.12 + 0.3 * b), (6, 0.18 * b)):
+        if level > 0 and float(np.median(freq)) * mul < sample_rate * 0.45:
+            signal += 0.5 * level * np.sin(mul * phase)
+    signal *= 0.88 + 0.12 * np.sin(2 * np.pi * 6.4 * ts)
+    click = _normalize(_highpass(rng.uniform(-1.0, 1.0, len(ts)), sample_rate, 2500.0))
+    return signal + (0.3 + 0.5 * b) * click * np.exp(-ts / 0.004)
+
+
+def _brass(freq, ts, sample_rate, brightness, attack=0.04, low=700.0, top=4200.0, scoop=35.0,
+           det=6.0):
+    """Saws through a filter that opens with the breath; the pitch scoops in."""
+    b = float(np.mean(brightness))
+    vib = _vibrato_cents(ts, 10.0, 0.45)
+    bend = -scoop * np.clip(1.0 - ts / 0.06, 0.0, 1.0)
+    raw = np.zeros(len(ts))
+    for d in (-det, det):
+        cents = d + bend + vib
+        raw += 0.5 * _saw(_detuned_phase(freq, cents, sample_rate),
+                          freq * 2.0 ** (cents / 1200.0), sample_rate)
+    peak = low + b * top
+    open_ = _lowpass(raw, sample_rate, peak)
+    closed = _lowpass(raw, sample_rate, 250.0)
+    rise = attack + 0.03
+    weight = np.clip(ts / rise, 0.0, 1.0) * (0.6 + 0.4 * np.exp(-np.maximum(ts - rise, 0.0) / 0.25))
+    return closed + weight * (open_ - closed)
+
+
+CHOIR_FORMANTS = ((730.0, 7.0, 1.0), (1090.0, 8.0, 0.6), (2440.0, 10.0, 0.25), (3400.0, 12.0, 0.0))
+
+
+def _choir(freq, ts, sample_rate, brightness):
+    """Detuned saws through the formants of an open "a", with a little chest under it."""
+    b = float(np.mean(brightness))
+    vib = _vibrato_cents(ts, 14.0, 0.3)
+    mix = np.zeros(len(ts))
+    for d in (-11.0, 0.0, 11.0):
+        cents = d + vib
+        mix += 0.4 * _saw(_detuned_phase(freq, cents, sample_rate),
+                          freq * 2.0 ** (cents / 1200.0), sample_rate)
+    levels = (1.0, 0.6, 0.25 + 0.3 * b, 0.1 * b)
+
+    def vowel(f):
+        gain = 0.35 * _biquad_gain(f, 400.0, 0.7, "low")
+        for (center, q, _), level in zip(CHOIR_FORMANTS, levels):
+            gain = gain + 2.4 * level * _biquad_gain(f, center, q, "band")
+        return gain
+
+    return _shape(mix, sample_rate, vowel)
+
+
 # Instruments that use the brightness themselves (no extra dulling lowpass).
 SELF_BRIGHT = ("BELL", "SINE", "SAMPLE", "LIBRARY", NOISE_BAND, "EPIANO", "MARIMBA", "PAD",
-               "BASS")
-SLOW_ATTACK = {"STRINGS": 0.12, "PAD": 0.4}
+               "BASS", "ORGAN", "CHOIR", "BRASS")
+SLOW_ATTACK = {"STRINGS": 0.12, "PAD": 0.4, "CHOIR": 0.22}
 
 
 # --- Voice rendering ---------------------------------------------------------
 
 # Struck / plucked: the sound dies before the line ends.
-GLIDE_HOLD = ("PLUCK", "BELL", "EPIANO", "MARIMBA")
+GLIDE_HOLD = ("PLUCK", "BELL", "EPIANO", "MARIMBA") + tuple(
+    ident for ident, rec in RECORDINGS.items()
+    if rec.kind in ("piano", "pluck", "marimba", "vibes", "bell"))
 GLIDE_HOLD_MIN = 0.2  # seconds: shorter voices are just notes
 
 
@@ -354,6 +561,9 @@ def _glide_hold(phase, ts, sample_rate, brightness):
 
 def voice_length(voice, sample_rate):
     inst = get_instrument(voice.instrument)
+    rec = RECORDINGS.get(inst.ident)
+    if rec is not None and inst.percussive and rec.hold:
+        return int(min(inst.length, max(voice.duration, HOLD_MIN) + HOLD_FADE) * sample_rate)
     if inst.percussive:
         return int(inst.length * sample_rate)
     return max(1, int(round(voice.duration * sample_rate))) + int(inst.release * sample_rate)
@@ -425,6 +635,14 @@ def render_voice(voice, sample_rate=44100, vibrato_rate=5.5):
         signal = np.tanh(1.6 * (0.55 * np.sin(phase) + 0.3 * growl)) / np.tanh(1.6)
     elif inst.ident in ("SAMPLE", "LIBRARY"):
         signal = _sample(voice.instrument, freq, sample_rate)
+    elif inst.ident in RECORDINGS:
+        signal = _recorded(voice, inst, freq, ts, sample_rate, brightness)
+    elif inst.ident == "ORGAN":
+        signal = _organ(freq, ts, sample_rate, brightness, rng)
+    elif inst.ident == "CHOIR":
+        signal = _choir(freq, ts, sample_rate, brightness)
+    elif inst.ident == "BRASS":
+        signal = _brass(freq, ts, sample_rate, brightness)
     elif inst.ident == NOISE_BAND:
         low = music.midi_to_freq(ctrl(voice.band_low))
         high = music.midi_to_freq(ctrl(voice.band_high))
@@ -432,7 +650,7 @@ def render_voice(voice, sample_rate=44100, vibrato_rate=5.5):
     else:  # percussion
         signal = _percussion(inst.ident, n, sample_rate, float(voice.pitch[0]), rng)
 
-    if not inst.percussive and inst.ident not in SELF_BRIGHT:
+    if not inst.percussive and inst.ident not in SELF_BRIGHT and inst.ident not in RECORDINGS:
         dull = _lowpass(signal, sample_rate, 2.5 * f0)
         signal = brightness * signal + (1.0 - brightness) * dull
 
@@ -463,10 +681,31 @@ _GM_DRUMS = {35: "KICK", 36: "KICK", 37: "RIM", 38: "SNARE", 40: "SNARE", 39: "C
              47: "TOM", 48: "TOM", 50: "TOM", 56: "COWBELL"}
 
 
-def instrument_for_program(program, pitch=60):
-    """Closest synthesized instrument for a General MIDI program (-1 = drums)."""
+def _recorded_by_program():
+    melodic, drums = {}, {}
+    for ident, rec in RECORDINGS.items():
+        inst = INSTRUMENT_BY_ID[ident]
+        if inst.percussive:
+            drums.setdefault(inst.drum_note, ident)
+        else:
+            melodic.setdefault(inst.gm_program, ident)
+    return melodic, drums
+
+
+_RECORDED_PROGRAMS, _RECORDED_DRUMS = _recorded_by_program()
+
+
+def instrument_for_program(program, pitch=60, recorded=True):
+    """Closest instrument for a General MIDI program (-1 = drums): the recorded one with the
+    same program (or drum note) when there is one, else the closest synth."""
     if program < 0:
-        return _GM_DRUMS.get(int(pitch), "DRUM")
+        if int(pitch) in _GM_DRUMS:
+            return _GM_DRUMS[int(pitch)]
+        if recorded and int(pitch) in _RECORDED_DRUMS:
+            return _RECORDED_DRUMS[int(pitch)]
+        return "DRUM"
+    if recorded and program in _RECORDED_PROGRAMS:
+        return _RECORDED_PROGRAMS[program]
     family = program // 8
     return {
         0: "EPIANO",     # pianos

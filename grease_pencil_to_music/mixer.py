@@ -29,12 +29,13 @@ class MasterFx:
 
     enabled: bool = True  # room, glue compressor, saturation and limiter
     ambience: float = 0.25  # how much of the shared hall is heard
+    room: str = "HALL"  # effects.ROOMS: the response of every reverb of the composition
 
 
 def _finish(master, sample_rate, settings, loop):
     """Master bus, or (without it) just a peak guard."""
     if settings is not None and settings.enabled:
-        return effects.master(master, sample_rate, settings.ambience, loop)
+        return effects.master(master, sample_rate, settings.ambience, loop, room=settings.room)
     peak = float(np.max(np.abs(master))) if len(master) else 0.0
     if peak > 0.98:
         master = master * (0.98 / peak)
@@ -324,6 +325,7 @@ def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.
     radius_ref = max((float(np.max(s.radius)) for s in all_strokes if len(s.radius)),
                      default=0.0)
     context_key = (astuple(spec), astuple(mapping), round(radius_ref, 6), sample_rate)
+    room = master_fx.room if master_fx is not None else "HALL"
 
     master = np.zeros((loop_n, 2), dtype=np.float32)
     notes = []
@@ -371,7 +373,7 @@ def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.
                 add(stroke.fx, rendered, stroke_notes, stroke_curves, shift)
 
         layer_key = hashlib.blake2b(
-            repr((stroke_keys, astuple(layer.fx), spec.bpm, sample_rate,
+            repr((stroke_keys, astuple(layer.fx), spec.bpm, sample_rate, room,
                   round(layer.legato_gap, 4) if legato else None, layer.harmony)).encode(),
             digest_size=16).hexdigest()
         buffer = _layer_cache.get(layer_key)
@@ -384,10 +386,10 @@ def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.
             for fx, rendered in groups.items():
                 part = _sum(rendered, loop_n)
                 if fx is not None:
-                    part = effects.apply_chain(part, sample_rate, LayerFx(*fx), spec.bpm)
+                    part = effects.apply_chain(part, sample_rate, LayerFx(*fx), spec.bpm, room)
                 buffer = _add(buffer, part)
             # ...then the layer effects.
-            buffer = effects.apply_chain(buffer, sample_rate, layer.fx, spec.bpm)
+            buffer = effects.apply_chain(buffer, sample_rate, layer.fx, spec.bpm, room)
             if errors.count == errors_before:  # incomplete layers are rendered again
                 _layer_cache.put(layer_key, buffer)
         layer_keys.append((layer_key, round(layer.gain, 4)))

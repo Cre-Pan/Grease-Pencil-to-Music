@@ -8,6 +8,9 @@ Install in Blender: Edit > Preferences > Get Extensions > ▾ > Install from Dis
 
 Python wheels for the target platform (``wheels/<platform>/*.whl``, e.g. rtmidi2 for
 MIDI keyboards) are bundled and listed in the manifest's ``wheels`` field.
+
+The web app's recordings go in ``sounds/``: the recorded instruments (docs/app/samples,
+CC0) and the reverb rooms (docs/app/rooms, CC BY-SA 4.0), with their licences.
 """
 
 import argparse
@@ -20,6 +23,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 PACKAGE = ROOT / "grease_pencil_to_music"
 MANIFEST = "blender_manifest.toml"
 WHEELS = ROOT / "wheels"
+SOUNDS = {"samples": ROOT / "docs" / "app" / "samples", "rooms": ROOT / "docs" / "app" / "rooms"}
 
 
 def read_manifest():
@@ -53,6 +57,12 @@ def build(out_dir, platform=None):
                 archive.writestr(name, text)
             else:
                 archive.write(path, name)
+        for folder, source in SOUNDS.items():
+            for path in sorted(source.rglob("*")):
+                if path.is_file() and path.suffix in (".mp3", ".txt"):
+                    # MP3s are already compressed: stored, not deflated again.
+                    archive.write(path, f"sounds/{folder}/{path.relative_to(source).as_posix()}",
+                                  zipfile.ZIP_STORED if path.suffix == ".mp3" else None)
         for wheel in wheels:
             archive.write(wheel, f"wheels/{wheel.name}")
         archive.write(ROOT / "LICENSE", "LICENSE")

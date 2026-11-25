@@ -355,6 +355,90 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.12
+
+Livelli, Solo e Preview Range
+
+- **Lista dei livelli** come quella dei livelli Grease Pencil di Blender (il livello in alto è
+  il primo, + / −, ↑ / ↓, doppio clic per rinominare). A destra di ogni livello:
+  - **♪** apre gli strumenti e **cambia quello del livello** (lo strumento attivo, se è del
+    livello, altrimenti il primo); un livello senza strumenti ne riceve uno;
+  - **muto**: il livello resta visibile ma non suona (neanche negli export);
+  - **cuffie (Solo)**: suonano solo i livelli in Solo; gli altri tacciono e scendono al 10% di
+    opacità, che torna quella di prima togliendo il Solo (se nel frattempo l'hai cambiata a
+    mano, resta la tua);
+  - onion skin, occhio e lucchetto, come nella lista di Blender.
+- Sotto la lista: lettura, volume e strumenti del **livello attivo**; anche accanto a ogni
+  strumento c'è **♪** per cambiarlo. I tratti restano dove sono e suonano con il nuovo
+  strumento; colore e nome seguono il nuovo strumento, a meno che non li avessi cambiati tu.
+- **Preview Range** nella tavola: con l'intervallo di anteprima della scena attivo, la griglia
+  prima dell'In e dopo l'Out è oscurata (solo la tavola: tratti e musica non cambiano). Segue
+  la testina, anche in "una dopo l'altra" e con le sezioni da keyframe.
+- Web app: un livello silenziato nella web app diventa un livello **muto** (visibile) invece
+  che nascosto, e viceversa all'export.
+- Corretto un crash: con Auto attivo, la rigenerazione aspetta la fine di G/R/S/Alt+S in Edit
+  Mode.
+- Il menu **♪ Cambia strumento** ha anche i 69 strumenti registrati della 0.0.11, per famiglia
+  in *Registrati (web app)* (la famiglia dello strumento attuale ha la spunta).
+
+## 0.0.11
+
+Tutti gli strumenti della web app
+- **69 strumenti registrati**, con i loro suoni dentro l'add-on (gli stessi file MP3 della web
+  app, VSCO 2 CE e VCSL, CC0): pianoforti, clavicembalo, organo a canne, percussioni intonate,
+  archi (anche tremolo, staccato e pizzicato), arpa, legni, ottoni e 37 percussioni registrate.
+  Si scelgono per famiglia in *+ Strumento → Registrati (web app)* e nel menu *Strumento* del
+  materiale. Suonano come nella web app: la nota registrata più vicina riaccordata sulla linea,
+  le note tenute in loop con dissolvenze oltre la fine della registrazione, i colpi interi, gli
+  sfregamenti e i rullati lunghi quanto il tratto.
+- **Organo, Coro e Ottoni**: i tre synth della web app che mancavano.
+- **Ambiente del riverbero** (scheda Composizione, sotto *Ambiente*): Sala (sintetica, come
+  prima), Stanza, Auditorium o Chiesa, dalle stesse risposte all'impulso della web app
+  (HybridReverb2, CC BY-SA 4.0). Vale per tutti i riverberi della composizione.
+- **Progetti della web app**: ogni strumento della web app si apre col suo strumento
+  dell'add-on (prima i registrati diventavano il synth più vicino) e torna uguale salvando;
+  anche l'ambiente del riverbero va e viene.
+- **Importa MIDI**: un programma General MIDI che ha uno strumento registrato (violoncello,
+  pianoforte, tromba…) usa quello; le note di batteria senza synth (conga, bongo, triangolo…)
+  usano il colpo registrato.
+- I synth con lo stesso nome di un registrato si chiamano ora *Flauto (synth)*, *Ocarina
+  (synth)*, *Archi (synth)* e *Marimba (synth)*. I file .blend salvati prima tengono i loro
+  strumenti.
+- Lo zip passa da ~0,4 a ~16 MB per i suoni. `tools/build_addon_instruments.py` rigenera la
+  lista degli strumenti dalla web app.
+
+## 0.0.10
+
+Timeline e finestre
+- **Senza Timeline** (nessun Dope Sheet, Sequencer o 3D Viewport aperto, ad esempio solo
+  Proprietà): la riproduzione fermata da Ctrl+Z riparte lo stesso (prima non ripartiva) e
+  l'avviso dei modificatori sceglie una finestra con uno schermo valido. Tutti i giri sulle
+  finestre saltano quelle senza schermo.
+- **Timeline ridotta a barra** (solo l'intestazione): il suono nella Timeline non viene più
+  calcolato né disegnato in una regione alta pochi pixel; in una Timeline bassa la forma d'onda
+  resta dentro la regione invece di uscire sopra i numeri dei fotogrammi.
+- *Suona con la tastiera*: il testo di aiuto va nell'intestazione dell'editor da cui è partito e
+  viene tolto da lì all'uscita, anche se nel frattempo il mouse è su un altro editor; se l'editor
+  non c'è (o è stato chiuso) va nella barra di stato.
+- Creando una composizione, la vista frontale salta gli editor 3D senza vista; la composizione
+  si crea anche quando il contesto non ha una collezione attiva (nella collezione della scena).
+- Una composizione non collegata a nessuna scena non fa più fallire la rigenerazione chiamata da
+  un timer senza finestra.
+
+Prestazioni
+- Il suono nella Timeline non rilegge più tutte le strip e i file audio (un `os.stat` per strip)
+  e non ricrea la geometria a ogni ridisegno: durante la riproduzione disegna ciò che ha già
+  pronto e ricalcola solo quando cambia qualcosa (suono rigenerato, strip spostate, impostazioni,
+  zoom o scorrimento della vista).
+- Linee della Timeline (curve del flusso ottico, contorni) con lo shader `POLYLINE_UNIFORM_COLOR`:
+  restano spesse 2 px anche con Vulkan e Metal, dove `line_width_set` non ha effetto.
+- **Suono finito più veloce**: il taglio dei bassi del master usava una sola FFT lunga quanto il
+  loop, lentissima quando la lunghezza in campioni ha fattori primi grandi (quasi sempre, con
+  durate libere): ora è una convoluzione circolare equivalente (differenza < 1e-9). Il master di
+  un loop di 30 s passa da 1,7 s a 0,4 s, uno di 16 s da 0,6 a 0,2 s.
+- La risposta all'impulso del riverbero e il suo spettro si calcolano una volta sola e i due
+  canali si convolvono insieme.
+
 ## 0.0.9
 
 - **Progetti della web app (.json)**: importando una composizione della web app, i nuovi strumenti

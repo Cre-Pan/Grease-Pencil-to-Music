@@ -30,10 +30,14 @@ disegna su una tavola, e la tavola suona.
    La composizione parte **vuota**: un livello con un solo strumento (Flauto). La vista
    passa a frontale, *Solid → Texture*; si resta in Object Mode (passa a **Draw Mode** per
    disegnare).
-2. In *Proprietà → Dati oggetto → Livelli e strumenti*: **Nuovo livello** aggiunge un
-   livello; dentro ogni livello ci sono i suoi strumenti e **+ Strumento** ne aggiunge
-   altri (sintetizzati, percussioni, Campione, Libreria). Il pulsante accanto a uno
-   strumento lo rende quello con cui disegni.
+2. In *Proprietà → Dati oggetto → Livelli e strumenti* c'è la lista dei livelli, come quella
+   dei livelli Grease Pencil (**+** / **−**, ↑ / ↓, doppio clic per rinominare). A destra di
+   ogni livello: **♪** per cambiare lo strumento, **muto** (si vede ma non suona),
+   **cuffie** per il *Solo* (gli altri livelli tacciono e scendono al 10% di opacità),
+   onion skin, occhio e lucchetto. Sotto la lista ci sono lettura, volume e gli strumenti del
+   livello attivo: **+ Strumento** ne aggiunge altri (sintetizzati, percussioni, Campione,
+   Libreria), **♪** accanto a uno strumento lo cambia (i tratti restano), il pulsante col nome
+   lo rende quello con cui disegni.
 3. Disegna. Appena stacchi la penna il suono viene rigenerato.
 4. Premi **Spazio**: la testina rossa scorre e senti il disegno, in loop.
    Nella **Timeline** vedi la forma d'onda e i blocchetti delle note (vedi sotto).
@@ -80,7 +84,7 @@ Lo stesso disegno passa dall'iPad a Blender e viceversa con il progetto `.json` 
   morbidezza (attacco lento), *Matita* → opacità più bassa (suono più scuro). I **suoni
   registrati** nella web app diventano strumenti *Campione* (impacchettati nel .blend), il
   **Beat** diventa un livello *Beat* con un colpo per ogni passo (swing e pattern A/B
-  compresi). Un livello silenziato nella web app è nascosto in Blender.
+  compresi). Un livello silenziato nella web app è muto in Blender (visibile, non suona).
 - **Tornare sull'iPad**: *File → Export → Progetto Doodle Music web (.json)* o il pulsante
   *Web app (.json)* in *Proprietà → Output*, poi nella web app *File → Apri*. Viene salvato il
   keyframe all'inizio della scena; gli strumenti Campione entrano nel file come suoni.
@@ -121,7 +125,7 @@ Tutto si controlla dalla barra laterale **N → Musica**:
 | Doodle Music | stato, muto, avvisi, *Auto* (aggiornamento automatico), *Genera suono*, **Ascolto** (insieme / solo l'attiva / una dopo l'altra) |
 | Tavola e tempo | BPM, durata del loop, nota più bassa, ottave, **etichette dei tasti** (solo Do, tasti bianchi, tutte, nessuna), griglia |
 | Lettura | scala e tonica, quantizzazione ritmica, **swing**, nota minima, volume, **Suono finito** con *Ambiente*, **Usa modificatori** |
-| Livelli e strumenti | **Nuovo livello**, ↑ / ↓; ogni livello è un riquadro con lettura, occhio (nascosto e muto), cestino e i suoi **strumenti** (colore, nome, **volume**, occhio); **+ Strumento**; volume, forme piene, canone ed effetti del livello |
+| Livelli e strumenti | lista dei livelli come in Grease Pencil (+ / −, ↑ / ↓) con **♪ cambia strumento**, **muto**, **Solo** (cuffie: gli altri al 10%), onion skin, occhio, lucchetto; sotto, lettura, volume e **strumenti** del livello attivo (colore, nome, ♪, **volume**, occhio); **+ Strumento**; forme piene, canone ed effetti del livello |
 | Esporta | **WAV**, **MP3**, **MIDI** |
 
 ### Come viene letto un tratto
@@ -169,10 +173,34 @@ disegno suona pieno e rotondo e non distorce mai, anche con tanti tratti spessi 
 code e il compressore rientrano dall'inizio del loop, senza giunture. Spento, resta solo il
 controllo dei picchi di prima.
 
-### Strumenti (sintetizzati)
+*Ambiente del riverbero* (sotto *Ambiente*) sceglie, come nella web app, la sala di tutti i
+riverberi della composizione: **Sala** (il riverbero sintetico, con *Ampiezza stanza*),
+Stanza, Auditorium o Chiesa, risposte all'impulso registrate del database di HybridReverb2
+(Ruhr-Universität Bochum, CC BY-SA 4.0). Vale per il riverbero dei livelli, degli strumenti e
+per l'ambiente comune, e si salva nei progetti della web app.
 
-Melodici: Piano elettrico (FM), Flauto, Marimba, Campana (FM), Chitarra (Karplus-Strong),
-Archi, Pad, Synth, 8-bit, Ocarina, Basso.
+### Strumenti
+
+L'add-on ha tutti gli 89 strumenti della web app. *+ Strumento* li mostra per famiglia: i synth
+in colonna, i registrati nei sottomenu *Registrati (web app)*; nella scheda Materiale il menu
+*Strumento* ha le stesse famiglie.
+
+**Registrati** (69, gli stessi file della web app, dentro lo zip dell'add-on): dal VS Chamber
+Orchestra Community Edition e dalla Versilian Community Sample Library (CC0). Tastiere
+(Pianoforte, Pianoforte a coda, Clavicembalo, Organo a canne), percussioni intonate (Marimba,
+Vibrafono, Xilofono, Glockenspiel, Campane tubolari, Kalimba), archi (Archi, tremolo,
+pizzicato; Violino e Violoncello, anche staccato e pizzicato), Arpa, legni (Flauto, Flauto
+dolce, Ocarina, Clarinetto, Oboe, Fagotto, Sassofono, Armonica), ottoni (Tromba, Trombone,
+Corno, Tuba) e 37 percussioni registrate (membrane, metalli, legni e blocchi, fruscii e
+sfregamenti, oggetti). Suonano la nota registrata più vicina, riaccordata sulla linea; quelli
+tenuti (archi, fiati, organo a canne) ripetono la parte centrale con dissolvenze quando la
+nota dura più della registrazione. Le percussioni registrate sono un colpo intero; quelle
+sfregate o rullate (Güiro, Raganella, Tamburello rullato…) durano quanto il tratto. I file si
+leggono la prima volta che lo strumento suona.
+
+**Sintetizzati** — Melodici: Piano elettrico (FM), Organo, Flauto (synth), Marimba (synth),
+Campana (FM), Chitarra (Karplus-Strong), Archi (synth), Coro, Pad, Ottoni, Synth, 8-bit,
+Ocarina (synth), Basso.
 Percussioni: Percussioni (generiche, dipendono dalla riga), Cassa, Rullante, Battimani,
 Charleston, Charleston aperto, Tom (intonato sulla riga), Rimshot, Shaker, Piatto, Campanaccio.
 **Campione**: qualsiasi suono di Blender (*Carica suono…* o un suono del Sequencer),

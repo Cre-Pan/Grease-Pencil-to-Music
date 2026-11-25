@@ -2,6 +2,7 @@
 """Unit tests of the bpy-independent modules (music, interpret, synth,
 effects, mixer, midi)."""
 
+import json
 import struct
 from dataclasses import replace
 
@@ -9,6 +10,13 @@ import numpy as np
 import pytest
 
 from grease_pencil_to_music import effects, interpret, midi, mixer, music, synth, web_project
+
+# The recorded instruments and rooms are read with Blender's audio module (aud), as in the
+# add-on (samples.register does this when the add-on is enabled).
+from grease_pencil_to_music import samples  # noqa: E402
+
+synth.SAMPLE_LOADER = samples.load_recorded
+effects.ROOM_LOADER = samples.load_room
 
 SR = 44100
 H = 0.12  # row height of the default board
@@ -425,11 +433,11 @@ def test_midi_parser_rejects_garbage():
 
 
 def test_general_midi_mapping():
-    assert synth.instrument_for_program(40) == "STRINGS"
-    assert synth.instrument_for_program(80) == "SQUARE"
+    assert synth.instrument_for_program(40, recorded=False) == "STRINGS"
+    assert synth.instrument_for_program(80, recorded=False) == "SQUARE"
     assert synth.instrument_for_program(-1, 36) == "KICK"
     assert synth.instrument_for_program(-1, 42) == "HIHAT"
-    assert synth.instrument_for_program(-1, 81) == "DRUM"
+    assert synth.instrument_for_program(-1, 81, recorded=False) == "DRUM"
 
 
 def test_sample_instrument_follows_the_pitch():
@@ -758,10 +766,10 @@ def test_new_instruments_render(ident):
 
 
 def test_new_instruments_in_midi_import():
-    assert synth.instrument_for_program(0) == "EPIANO"
-    assert synth.instrument_for_program(12) == "MARIMBA"
-    assert synth.instrument_for_program(33) == "BASS"
-    assert synth.instrument_for_program(89) == "PAD"
+    assert synth.instrument_for_program(0, recorded=False) == "EPIANO"
+    assert synth.instrument_for_program(12, recorded=False) == "MARIMBA"
+    assert synth.instrument_for_program(33, recorded=False) == "BASS"
+    assert synth.instrument_for_program(89, recorded=False) == "PAD"
     assert synth.instrument_for_program(-1, 46) == "OPENHAT"
     assert synth.midi_drum_note("SHAKER", 60) == 70
 
@@ -893,7 +901,7 @@ def test_web_project_round_trip_keeps_the_drawing():
     assert st2.x.tolist() == pytest.approx(st.x.tolist(), abs=1e-3)
     assert st2.z.tolist() == pytest.approx(st.z.tolist(), abs=1e-3)
     assert st2.radius.tolist() == pytest.approx(st.radius.tolist(), abs=1e-3)
-    assert st2.instrument == "STRINGS" and st2.softness == 0.8 and st2.opacity == 0.8
+    assert st2.instrument == "S_STRINGS" and st2.softness == 0.8 and st2.opacity == 0.8
     layer = again.layers[0]
     assert (layer.mode, layer.volume, layer.reverb) == ("OPTICAL", 0.5, 0.3)
     assert again.board.bpm == 90 and again.board.length == pytest.approx(2 * 4 * 60 / 90)
@@ -904,3 +912,131 @@ def test_web_project_rejects_other_json():
         web_project.parse('{"layers": []}', set())
     with pytest.raises(web_project.ProjectError):
         web_project.parse("not json", set())
+
+
+# --- 0.0.10: robustness and speed --------------------------------------------------
+
+@pytest.mark.parametrize("height", [0, 1, 5, 11])
+def test_timeline_collapsed_to_a_bar_draws_nothing(height):
+    assert timeline.wave_band(height, 0.6) is None
+
+
+@pytest.mark.parametrize("height", [12, 20, 40, 79, 80, 300, 1200])
+@pytest.mark.parametrize("fraction", [0.05, 0.6, 1.0])
+def test_timeline_wave_stays_inside_the_region(height, fraction):
+    y0, y1 = timeline.wave_band(height, fraction)
+    assert 0.0 <= y0 < y1 <= height
+
+
+def _exact_low_cut(buffer, rate, cutoff=30.0):
+    spectrum = np.fft.rfft(buffer, axis=0)
+    f = np.maximum(np.fft.rfftfreq(len(buffer), 1.0 / rate), 1e-3)
+    spectrum *= ((f / cutoff) ** 4 / (1.0 + (f / cutoff) ** 4))[:, None]
+    return np.fft.irfft(spectrum, n=len(buffer), axis=0)
+
+
+@pytest.mark.parametrize("n", [3000, 44100 * 3 + 1, 48000 * 4 + 3, 44100 * 8])
+def test_low_cut_matches_the_exact_circular_filter(n):
+    """Long loops use the short-kernel convolution: same result as one FFT as
+    long as the loop (any length, prime factors included), DC removed."""
+    rng = np.random.default_rng(3)
+    buffer = rng.standard_normal((n, 2)) * 0.3 + 0.2
+    out = effects.low_cut(buffer, 48000)
+    assert out.shape == buffer.shape
+    assert np.max(np.abs(out - _exact_low_cut(buffer, 48000))) < 1e-9
+    assert np.max(np.abs(out.mean(axis=0))) < 1e-9
+
+
+def test_reverb_impulse_is_computed_once():
+    ir, key = effects.reverb_ir(SR, 0.55)
+    again, key_again = effects.reverb_ir(SR, 0.55)
+    assert again is ir and key == key_again and not ir.flags.writeable
+    assert ir.shape == (int((0.3 + 0.55 * 2.7) * SR), 2)
+    assert np.sum(ir[:, 0] ** 2) == pytest.approx(1.0)
+
+
+# --- the web app's instruments (0.0.11) -------------------------------------------------
+
+def test_every_web_instrument_has_its_own_addon_instrument():
+    from grease_pencil_to_music import web_instruments
+    available = set(synth.INSTRUMENT_BY_ID)
+    assert len(web_instruments.INSTRUMENTS) == 89
+    for row in web_instruments.INSTRUMENTS:
+        ident = web_project.addon_instrument(row["id"], available)
+        if row["zones"]:  # recorded: the same recordings, not a synth stand-in
+            assert ident == "S_" + row["id"]
+            assert synth.INSTRUMENT_BY_ID[ident].label == row["name"]
+        assert web_project.ADDON_TO_WEB[ident] == row["id"]  # and back to the same one
+    assert {"ORGAN", "CHOIR", "BRASS"} <= available
+    # Without the recordings (an older add-on) the synth stand-ins are still there.
+    assert web_project.addon_instrument("CELLO", available - {"S_CELLO"}) == "STRINGS"
+
+
+def test_recorded_zones_are_the_bundled_files():
+    zones = synth.recorded_zones("S_CELLO")
+    assert [z.root for z in zones] == list(synth.RECORDINGS["S_CELLO"].zones)
+    assert all(z.rate == 44100 and len(z.data) > z.offset for z in zones)
+    assert len(synth.recorded_zones("S_GONG")) == 1
+
+
+@pytest.mark.parametrize("ident,note", [("S_FLUTE", 69), ("S_PIANO", 69), ("S_CELLO", 57),
+                                        ("S_TRUMPET", 70)])
+def test_recorded_instruments_play_the_right_pitch(ident, note):
+    _offset, buf = synth.render_voice(voice(ident, note, 1.5), SR)
+    f0 = float(music.midi_to_freq(note))
+    found = dominant_frequency(buf[SR // 10: SR, 0])
+    # The strongest partial: the fundamental or one of the first harmonics.
+    assert min(abs(found / (k * f0) - 1) for k in (1, 2, 3)) < 0.03
+
+
+def test_sustained_recordings_loop_past_their_end():
+    _offset, buf = synth.render_voice(voice("S_CELLO", 48, 12.0), SR)
+    rms = [float(np.sqrt(np.mean(buf[k * SR:(k + 1) * SR, 0] ** 2))) for k in range(12)]
+    assert min(rms[1:]) > 0.4 * rms[0]  # still playing after the recording (about 4 s)
+    _offset, short = synth.render_voice(voice("S_VIOLIN_PIZZ", 60, 12.0), SR)
+    assert float(np.max(np.abs(short[8 * SR:]))) < 0.01  # a pizzicato dies away
+
+
+def test_recorded_hits_and_held_scrapes():
+    gong = synth.INSTRUMENT_BY_ID["S_GONG"]
+    assert gong.percussive and gong.drum_note == 52 and gong.length > 3
+    _offset, buf = synth.render_voice(voice("S_TAIKO", 60, 0.2), SR)
+    assert len(buf) == int(synth.INSTRUMENT_BY_ID["S_TAIKO"].length * SR)
+    assert np.max(np.abs(buf)) > 0.2
+    short = synth.render_voice(voice("S_GUIRO", 60, 0.3), SR)[1]
+    long_ = synth.render_voice(voice("S_GUIRO", 60, 1.2), SR)[1]
+    assert len(short) == int((0.3 + synth.HOLD_FADE) * SR) and len(long_) > len(short)
+    assert synth.midi_drum_note("S_CONGA", 60) == 63
+
+
+def test_new_synths_sound_and_hold_their_pitch():
+    for ident in ("ORGAN", "CHOIR", "BRASS"):
+        _offset, buf = synth.render_voice(voice(ident, 57, 1.0), SR)
+        assert np.all(np.isfinite(buf)) and np.max(np.abs(buf)) > 0.1
+        found = dominant_frequency(buf[SR // 4: SR, 0])
+        f0 = float(music.midi_to_freq(57))
+        assert min(abs(found / (k * f0) - 1) for k in (0.5, 1, 2, 3, 4)) < 0.03, ident
+
+
+def test_midi_programs_pick_the_recorded_instrument():
+    assert synth.instrument_for_program(42) == "S_CELLO"
+    assert synth.instrument_for_program(0) == "S_PIANO"
+    assert synth.instrument_for_program(38) == "BASS"  # nothing recorded: the synth
+    assert synth.instrument_for_program(-1, 36) == "KICK"
+    assert synth.instrument_for_program(-1, 63) == "S_CONGA"
+
+
+def test_recorded_rooms():
+    impulse = np.zeros((SR // 2, 2), dtype=np.float32)
+    impulse[0] = 1.0
+    tails = {room: effects.reverb(impulse, SR, 1.0, 0.5, room=room) for room in effects.ROOMS}
+    assert len(tails["CHURCH"]) > len(tails["CONCERT"]) > len(tails["ROOM"])
+    ir, _key = effects.room_ir("CHURCH", SR)
+    assert np.sum(ir ** 2, axis=0) == pytest.approx([1.0, 1.0])
+    assert effects.room_ir("HALL", SR) is None
+    assert effects.room_ir("CONCERT", 48000)[0].shape[1] == 2
+    project = web_project.parse(_web(room="church"), set())
+    assert project.room == "CHURCH"
+    assert json.loads(web_project.dump(project))["state"]["room"] == "church"
+    project.room = "HALL"
+    assert "room" not in json.loads(web_project.dump(project))["state"]

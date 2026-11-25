@@ -16,14 +16,37 @@ from .operators import active_composition
 
 # --- Layers with their instruments ---------------------------------------------------
 
-INSTRUMENT_GROUPS = (
-    ("Melodici", ("EPIANO", "SINE", "MARIMBA", "BELL", "PLUCK", "STRINGS", "PAD", "SAW",
-                  "SQUARE", "TRIANGLE", "BASS")),
-    ("Percussioni", ("DRUM", "KICK", "SNARE", "CLAP", "HIHAT", "OPENHAT", "TOM", "RIM",
-                     "SHAKER", "CRASH", "COWBELL")),
-    ("Suoni", ("SAMPLE", "LIBRARY")),
-)
 INSTRUMENT_ICONS = {"SAMPLE": "FILE_SOUND", "LIBRARY": "ASSET_MANAGER"}
+
+
+def _add_instrument_buttons(layout, context, idents):
+    from . import synth
+    layer = getattr(context, "gp2m_layer", None)
+    for ident in idents:
+        inst = synth.INSTRUMENT_BY_ID.get(ident)
+        if inst is None:
+            continue
+        op = layout.operator("gp2m.add_instrument", text=inst.label,
+                             icon=INSTRUMENT_ICONS.get(ident, "DOT"))
+        op.instrument = ident
+        op.layer = layer.name if layer is not None else ""
+
+
+def _recorded_families():
+    """(menu id, title, idents) of the web app's recorded families."""
+    return [(f"GP2M_MT_add_recorded_{index}", title, idents)
+            for index, (title, idents) in enumerate(props.INSTRUMENT_FAMILIES)
+            if idents and idents[0].startswith("S_")]
+
+
+def _recorded_menu(menu_id, title, idents):
+    def draw(self, context):
+        _add_instrument_buttons(self.layout.column(), context, idents)
+    return type(menu_id, (bpy.types.Menu,), {"bl_idname": menu_id, "bl_label": title,
+                                             "draw": draw})
+
+
+RECORDED_MENUS = tuple(_recorded_menu(*family) for family in _recorded_families())
 
 
 class GP2M_MT_add_instrument(bpy.types.Menu):
@@ -33,20 +56,203 @@ class GP2M_MT_add_instrument(bpy.types.Menu):
     bl_label = "Aggiungi strumento"
 
     def draw(self, context):
-        from . import synth
-        layer = getattr(context, "gp2m_layer", None)
         row = self.layout.row()
-        for title, idents in INSTRUMENT_GROUPS:
+        recorded = _recorded_families()
+        for title, idents in props.INSTRUMENT_FAMILIES:
+            if idents and idents[0].startswith("S_"):
+                continue
             col = row.column()
             col.label(text=title)
-            for ident in idents:
-                if ident not in synth.INSTRUMENT_BY_ID:
-                    continue
-                inst = synth.INSTRUMENT_BY_ID[ident]
-                op = col.operator("gp2m.add_instrument", text=inst.label,
-                                  icon=INSTRUMENT_ICONS.get(ident, "DOT"))
-                op.instrument = ident
-                op.layer = layer.name if layer is not None else ""
+            _add_instrument_buttons(col, context, idents)
+        col = row.column()
+        col.label(text="Registrati (web app)")
+        for menu_id, title, _idents in recorded:
+            col.menu(menu_id, text=title, icon="SOUND")
+
+
+# --- Custom icons (Blender has no headphones icon) ---------------------------------------
+
+_icons = None
+
+
+def icon(name):
+    """``icon_value`` of an add-on icon (``icons/<name>.png``), 0 if missing."""
+    if _icons is None or name not in _icons:
+        return 0
+    return _icons[name].icon_id
+
+
+def _load_icons():
+    global _icons
+    import os
+    import bpy.utils.previews
+    _icons = bpy.utils.previews.new()
+    folder = os.path.join(os.path.dirname(__file__), "icons")
+    for name in ("solo_on", "solo_off"):
+        path = os.path.join(folder, f"{name}.png")
+        if os.path.isfile(path):
+            _icons.load(name, path, "IMAGE")
+
+
+def _free_icons():
+    global _icons
+    if _icons is not None:
+        import bpy.utils.previews
+        bpy.utils.previews.remove(_icons)
+        _icons = None
+
+
+# --- Layer list, like Blender's Grease Pencil layers ---------------------------------------
+
+def layer_instrument_slot(comp, layer_name):
+    """Slot of the instrument the note icon changes: the active one if it belongs to
+    the layer, otherwise the first instrument of the layer (None if it has none)."""
+    own = board.layer_instruments(comp, layer_name)
+    if not own:
+        return None
+    for index, _material in own:
+        if index == comp.active_material_index:
+            return index
+    return own[0][0]
+
+
+def _change_target(context):
+    """(composition, slot index, material, layer) the change-instrument menus act on."""
+    comp = active_composition(context)
+    if comp is None:
+        return None, None, None, None
+    chosen = getattr(context, "gp2m_material", None)
+    layer = getattr(context, "gp2m_layer", None)
+    if chosen is not None:
+        index = next((i for i, slot in enumerate(comp.material_slots)
+                      if slot.material == chosen), None)
+    elif layer is not None:
+        index = layer_instrument_slot(comp, layer.name)
+    else:
+        index = comp.active_material_index
+    material = (comp.material_slots[index].material
+                if index is not None and 0 <= index < len(comp.material_slots) else None)
+    return comp, index, material, layer
+
+
+def _change_instrument_buttons(layout, context, idents):
+    from . import synth
+    comp, index, material, layer = _change_target(context)
+    if comp is None:
+        return
+    current = material.gp2m_instrument if material is not None else None
+    for ident in idents:
+        inst = synth.INSTRUMENT_BY_ID.get(ident)
+        if inst is None:
+            continue
+        icon_name = "CHECKMARK" if ident == current else INSTRUMENT_ICONS.get(ident, "DOT")
+        if material is None:  # a layer without instruments: add one
+            op = layout.operator("gp2m.add_instrument", text=inst.label, icon=icon_name)
+            op.instrument = ident
+            op.layer = layer.name if layer is not None else ""
+        else:
+            op = layout.operator("gp2m.set_instrument", text=inst.label, icon=icon_name)
+            op.instrument = ident
+            op.index = index
+
+
+def _change_recorded_menu(menu_id, title, idents):
+    def draw(self, context):
+        _change_instrument_buttons(self.layout.column(), context, idents)
+    return type(menu_id, (bpy.types.Menu,), {"bl_idname": menu_id, "bl_label": title,
+                                             "draw": draw})
+
+
+CHANGE_RECORDED_MENUS = tuple(
+    _change_recorded_menu(menu_id.replace("_add_recorded_", "_change_recorded_"), title, idents)
+    for menu_id, title, idents in _recorded_families())
+
+
+class GP2M_MT_change_instrument(bpy.types.Menu):
+    """Instruments for the layer (or the instrument slot) taken from the context."""
+
+    bl_idname = "GP2M_MT_change_instrument"
+    bl_label = "Cambia strumento"
+
+    def draw(self, context):
+        comp, _index, material, _layer = _change_target(context)
+        if comp is None:
+            return
+        current = material.gp2m_instrument if material is not None else None
+        row = self.layout.row()
+        for title, idents in props.INSTRUMENT_FAMILIES:
+            if idents and idents[0].startswith("S_"):
+                continue
+            col = row.column()
+            col.label(text=title)
+            _change_instrument_buttons(col, context, idents)
+        col = row.column()
+        col.label(text="Registrati (web app)")
+        for menu, (_menu_id, title, idents) in zip(CHANGE_RECORDED_MENUS, _recorded_families()):
+            col.menu(menu.bl_idname, text=title,
+                     icon="CHECKMARK" if current in idents else "SOUND")
+
+
+class GP2M_UL_layers(bpy.types.UIList):
+    """The layers of the composition, top first, like Blender's own layer list,
+    with instrument, mute and solo on the right."""
+
+    bl_idname = "GP2M_UL_layers"
+
+    def draw_item(self, context, layout, data, item, _icon, _active_data, _active_prop,
+                  _index=0, _flt_flag=0):
+        gp = data
+        layer = gp.layers.get(item.name)
+        if layer is None:
+            layout.label(text=item.name, icon="ERROR")
+            return
+        comp = active_composition(context)
+        silent = props.layer_silent(gp, item.name)
+        row = layout.row(align=True)
+        name = row.row(align=True)
+        name.active = not layer.hide and not silent
+        name.prop(layer, "name", text="", emboss=False, icon="OUTLINER_DATA_GP_LAYER")
+
+        icons = row.row(align=True)
+        icons.emboss = "NONE"
+        note = icons.row(align=True)
+        note.context_pointer_set("gp2m_layer", item)
+        slot = layer_instrument_slot(comp, item.name) if comp is not None else None
+        note.menu("GP2M_MT_change_instrument", text="", icon="FILE_SOUND")
+        note.active = slot is not None
+        icons.prop(item, "mute", text="", emboss=False,
+                   icon="MUTE_IPO_ON" if item.mute else "MUTE_IPO_OFF")
+        solo_icon = icon("solo_on" if item.solo else "solo_off")
+        if solo_icon:
+            icons.prop(item, "solo", text="", emboss=False, icon_value=solo_icon)
+        else:
+            icons.prop(item, "solo", text="", emboss=False,
+                       icon="SOLO_ON" if item.solo else "SOLO_OFF")
+        icons.prop(layer, "use_onion_skinning", text="", emboss=False,
+                   icon="ONIONSKIN_ON" if layer.use_onion_skinning else "ONIONSKIN_OFF")
+        icons.prop(layer, "hide", text="", emboss=False)
+        icons.prop(layer, "lock", text="", emboss=False)
+
+    def filter_items(self, _context, data, propname):
+        items = getattr(data, propname)
+        stack = [layer.name for layer in reversed(board.user_layers(data))]  # top first
+        position = {name: i for i, name in enumerate(stack)}
+        flags = []
+        order = []
+        tail = len(stack)
+        needle = getattr(self, "filter_name", "").lower()
+        invert = getattr(self, "use_filter_invert", False)
+        for item in items:
+            visible = item.name in position and (not needle or needle in item.name.lower())
+            if invert and needle:
+                visible = item.name in position and needle not in item.name.lower()
+            flags.append(self.bitflag_filter_item if visible else 0)
+            if item.name in position:
+                order.append(position[item.name])
+            else:
+                order.append(tail)
+                tail += 1
+        return flags, order
 
 
 def _instrument_row(layout, comp, layer_name, index, material, active):
@@ -58,6 +264,9 @@ def _instrument_row(layout, comp, layer_name, index, material, active):
                       depress=active, emboss=active)
     op.layer = layer_name
     op.index = index
+    change = row.row()
+    change.context_pointer_set("gp2m_material", material)
+    change.menu("GP2M_MT_change_instrument", text="", icon="FILE_SOUND")
     volume = row.row(align=True)
     volume.ui_units_x = 4
     volume.prop(material, "gp2m_volume", text="", slider=True)
@@ -66,45 +275,46 @@ def _instrument_row(layout, comp, layer_name, index, material, active):
 
 
 def draw_layers_and_instruments(layout, comp, details=True):
-    """One box per layer (top first) with its instruments inside."""
+    """Layer list like Blender's (top first), then the active layer's instruments."""
     gp = comp.data
-    row = layout.row(align=True)
-    row.operator("gp2m.add_layer", text="Nuovo livello", icon="ADD")
-    row.operator("gp2m.move_layer", text="", icon="TRIA_UP").direction = "UP"
-    row.operator("gp2m.move_layer", text="", icon="TRIA_DOWN").direction = "DOWN"
-    active_layer = gp.layers.active
-    active_slot = comp.active_material_index
-    for layer in reversed(board.user_layers(gp)):
+    rows = max(3, min(8, len(gp.gp2m_layers)))
+    row = layout.row()
+    row.template_list("GP2M_UL_layers", "", gp, "gp2m_layers", gp, "gp2m_layer_index",
+                      rows=rows, sort_lock=True)
+    col = row.column(align=True)
+    col.operator("gp2m.add_layer", text="", icon="ADD")
+    col.operator("gp2m.remove_layer", text="", icon="REMOVE")
+    col.separator()
+    col.operator("gp2m.move_layer", text="", icon="TRIA_UP").direction = "UP"
+    col.operator("gp2m.move_layer", text="", icon="TRIA_DOWN").direction = "DOWN"
+
+    layer = gp.layers.active
+    if layer is not None and not board.is_board_layer(layer):
         settings = props.find_layer_settings(gp, layer.name)
-        is_active = active_layer is not None and active_layer.name == layer.name
+        col = layout.column()
+        col.use_property_split = True
+        col.use_property_decorate = False
+        if settings is not None:
+            col.prop(settings, "mode")
+        col.prop(layer, "opacity", text="Volume (opacità)", slider=True)
+        if settings is not None and settings.solo_saved_opacity >= 0.0:
+            col.label(text="Attenuato dal Solo di un altro livello", icon="INFO")
+
         box = layout.box()
-        header = box.row(align=True)
-        if settings is not None:
-            header.prop(settings, "expanded", text="", emboss=False,
-                        icon="TRIA_DOWN" if settings.expanded else "TRIA_RIGHT")
-        op = header.operator("gp2m.use_instrument", text=layer.name, depress=is_active,
-                             icon="OUTLINER_DATA_GP_LAYER")
-        op.layer = layer.name
-        op.index = -1
-        if settings is not None:
-            sub = header.row(align=True)
-            sub.ui_units_x = 5
-            sub.prop(settings, "mode", text="")
-        header.prop(layer, "hide", text="", emboss=False)
-        header.operator("gp2m.remove_layer", text="", icon="TRASH", emboss=False).name = layer.name
-        if settings is None or not settings.expanded:
-            continue
-        col = box.column(align=True)
+        header = box.row()
+        header.label(text=f"Strumenti di {layer.name}", icon="FILE_SOUND")
+        inner = box.column(align=True)
         own = board.layer_instruments(comp, layer.name)
+        active_slot = comp.active_material_index
         for index, material in own:
-            _instrument_row(col, comp, layer.name, index, material,
-                            is_active and index == active_slot)
+            _instrument_row(inner, comp, layer.name, index, material, index == active_slot)
         if not own:
-            col.label(text="Nessuno strumento: aggiungine uno", icon="INFO")
+            inner.label(text="Nessuno strumento: aggiungine uno", icon="INFO")
         add = box.row()
-        add.context_pointer_set("gp2m_layer", settings)
+        if settings is not None:
+            add.context_pointer_set("gp2m_layer", settings)
         add.menu("GP2M_MT_add_instrument", text="Strumento", icon="ADD")
-        if details:
+        if details and settings is not None:
             add.prop(settings, "show_fx", text="", icon="MODIFIER", toggle=True)
             if settings.show_fx:
                 draw_layer_details(box, gp, layer)
@@ -114,7 +324,8 @@ def draw_layers_and_instruments(layout, comp, details=True):
         box.label(text="Strumenti senza livello", icon="MATERIAL")
         col = box.column(align=True)
         for index, material in loose:
-            _instrument_row(col, comp, "", index, material, index == active_slot)
+            _instrument_row(col, comp, "", index, material,
+                            index == comp.active_material_index)
 
 
 # --- Shared drawing ------------------------------------------------------------------------
@@ -202,6 +413,7 @@ def draw_reading(layout, s):
     sub = col.column(align=True)
     sub.active = s.use_master
     sub.prop(s, "ambience")
+    col.prop(s, "room")
     col.prop(s, "sample_rate")
     layout.prop(s, "use_modifiers")
 
@@ -497,8 +709,10 @@ def draw_export_menu(self, _context):
         self.layout.operator("gp2m.export", text=label, icon="FILE_SOUND").format = fmt
 
 
-classes = (
+classes = RECORDED_MENUS + CHANGE_RECORDED_MENUS + (
     GP2M_MT_add_instrument,
+    GP2M_MT_change_instrument,
+    GP2M_UL_layers,
     GP2M_PT_data,
     GP2M_PT_data_board,
     GP2M_PT_data_reading,
@@ -514,6 +728,7 @@ classes = (
 
 
 def register():
+    _load_icons()
     bpy.types.VIEW3D_MT_add.append(draw_add_menu)
     bpy.types.TOPBAR_MT_file_export.append(draw_export_menu)
 
@@ -521,3 +736,4 @@ def register():
 def unregister():
     bpy.types.TOPBAR_MT_file_export.remove(draw_export_menu)
     bpy.types.VIEW3D_MT_add.remove(draw_add_menu)
+    _free_icons()

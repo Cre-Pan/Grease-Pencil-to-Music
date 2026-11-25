@@ -103,6 +103,7 @@ def transform_running():
 _scale_base = {}  # composition -> (length, octaves) when its scale left 1
 _scale_seen = {}  # composition -> (scale tuple, time) to know when it stops moving
 SCALE_SETTLE = 0.5  # seconds the scale must stay still before it is applied
+TRANSFORM_POLL = 0.1  # seconds between checks while a transform is running
 
 
 def _scale_of(obj):
@@ -162,6 +163,12 @@ def _tick():
     wait = prefs.get_prefs().debounce - (time.monotonic() - _last_change[0])
     if wait > 0.0:
         return wait
+    if transform_running():
+        # Never rebuild while G/R/S, Alt+S... is still dragging: the transform
+        # holds pointers into the Grease Pencil drawings, and regenerating
+        # (board, layers, modifiers, strips) under it crashes Blender.
+        # The edits stay pending and run as soon as the transform ends.
+        return TRANSFORM_POLL
     if _scaled:
         wait = _scale_pending()
         if wait is not None:
@@ -215,11 +222,12 @@ def _show_popups():
     _popup_queue.clear()
     if bpy.app.background:  # no UI: a popup would crash Blender
         return
-    wm = bpy.context.window_manager
-    if wm is None or not wm.windows:
+    wm = getattr(bpy.context, "window_manager", None)
+    window = next((w for w in wm.windows if w.screen is not None), None) if wm else None
+    if window is None:
         return
     try:
-        with bpy.context.temp_override(window=wm.windows[0]):
+        with bpy.context.temp_override(window=window):
             wm.popup_menu(_draw_stack_popup, title="Doodle Music", icon="INFO")
     except Exception:
         pass  # the warning is also shown in the N panel
@@ -251,6 +259,7 @@ def on_depsgraph_update(_scene, depsgraph):
         elif isinstance(original, (bpy.types.Scene, bpy.types.Collection)):
             if isinstance(original, bpy.types.Scene):
                 _check_scene_timing(original)
+                _check_preview(original)
             # Cheap check first: only look for leftovers when objects changed.
             signature = _signature()
             if signature != _object_signature[0]:
@@ -261,6 +270,44 @@ def on_depsgraph_update(_scene, depsgraph):
 
 def _timing(scene):
     return (scene.frame_start, scene.render.fps, round(scene.render.fps_base, 6))
+
+
+def _preview(scene):
+    return (scene.use_preview_range, scene.frame_preview_start, scene.frame_preview_end)
+
+
+_scene_preview = {}  # scene name -> Preview Range last seen
+_shade_scenes = set()
+
+
+def _shade_tick():
+    """Darken the board outside the Preview Range (grid only: the sound is unchanged)."""
+    names = list(_shade_scenes)
+    _shade_scenes.clear()
+    for name in names:
+        scene = bpy.data.scenes.get(name)
+        if scene is None:
+            continue
+        for obj in compositions():
+            if engine.scene_of(obj) == scene and board.has_board(obj):
+                try:
+                    board.update_preview_shade(obj, scene)
+                except Exception as error:
+                    print(f"[Doodle Music] preview range shading failed: {error!r}")
+    return None
+
+
+def request_shade(scene):
+    _shade_scenes.add(scene.name)
+    if not bpy.app.timers.is_registered(_shade_tick):
+        bpy.app.timers.register(_shade_tick, first_interval=0.01)
+
+
+def _check_preview(scene):
+    preview = _preview(scene)
+    if _scene_preview.get(scene.name) != preview:
+        _scene_preview[scene.name] = preview
+        request_shade(scene)
 
 
 def _check_scene_timing(scene):
@@ -286,8 +333,10 @@ def on_load_post(*_args):
     _scale_seen.clear()
     engine._state.clear()  # runtime state of the previous file (keyed by object name)
     _scene_timing.clear()
+    _scene_preview.clear()
     for scene in bpy.data.scenes:
         _scene_timing[scene.name] = _timing(scene)
+        _scene_preview[scene.name] = _preview(scene)
     _object_signature[0] = _signature()
     for obj in compositions():
         _stack_counts[obj.name] = _stack_count(obj)
@@ -318,18 +367,30 @@ def on_undo_pre(*_args):
 
 
 def _resume_playback():
+    """Restart the playback stopped by Ctrl+Z.
+
+    ``screen.animation_play`` only needs a window with a screen: it works
+    without a Timeline, with a Timeline collapsed to its header, or with only
+    a Properties editor open. An editor of the screen is preferred when there
+    is one, as Blender itself would do."""
     if is_playing():
         return None
-    wm = bpy.context.window_manager
+    wm = getattr(bpy.context, "window_manager", None)
+    if wm is None:
+        return None
     for window in wm.windows:
-        for area in window.screen.areas:
-            if area.type in ("VIEW_3D", "DOPESHEET_EDITOR", "SEQUENCE_EDITOR"):
-                try:
-                    with bpy.context.temp_override(window=window, area=area):
-                        bpy.ops.screen.animation_play()
-                except Exception:
-                    continue
-                return None
+        screen = window.screen
+        if screen is None:
+            continue
+        areas = [area for area in screen.areas
+                 if area.type in ("VIEW_3D", "DOPESHEET_EDITOR", "SEQUENCE_EDITOR")]
+        for override in [{"area": area} for area in areas] + [{}]:
+            try:
+                with bpy.context.temp_override(window=window, **override):
+                    if bpy.ops.screen.animation_play() == {"FINISHED"}:
+                        return None
+            except Exception:
+                continue
     return None
 
 
@@ -368,6 +429,6 @@ def unregister():
         if func in handler_list:
             handler_list.remove(func)
     bpy.msgbus.clear_by_owner(_msgbus_owner)
-    for timer in (_tick, _resume_playback):
+    for timer in (_tick, _resume_playback, _shade_tick):
         if bpy.app.timers.is_registered(timer):
             bpy.app.timers.unregister(timer)

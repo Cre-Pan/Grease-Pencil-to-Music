@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "grease_pencil_to_music"
-version = "0.0.9"
+version = "0.0.12"
 name = "Doodle Music"
 tagline = "Draw music with Grease Pencil, like McLaren's drawn sound"
 maintainer = "Alessandro Pannoli"
@@ -13,10 +13,11 @@ tags = ["Grease Pencil", "Sequencer"]
 
 blender_version_min = "5.3.0"
 
-license = ["SPDX:GPL-3.0-or-later"]
+license = ["SPDX:GPL-3.0-or-later", "SPDX:CC0-1.0", "SPDX:CC-BY-SA-4.0"]
+# CC0: the recorded instruments; CC BY-SA 4.0: the reverb rooms (sounds/*/LICENSE.txt).
 
 # 0.0.x builds are tested on Windows only; other platforms will follow.
 platforms = ["windows-x64"]
 
 [permissions]
-files = "Write generated sound (WAV, MP3), MIDI and web app project (.json) files"
+files = "Write generated sound (WAV, MP3), MIDI and web app project (.json) files; read the bundled recorded instruments"

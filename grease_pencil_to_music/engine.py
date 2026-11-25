@@ -58,7 +58,8 @@ def _layer_fx(settings):
 
 
 def master_fx(settings):
-    return mixer.MasterFx(enabled=settings.use_master, ambience=settings.ambience)
+    return mixer.MasterFx(enabled=settings.use_master, ambience=settings.ambience,
+                          room=getattr(settings, "room", "HALL"))
 
 
 MAX_SECTIONS = 24
@@ -222,11 +223,13 @@ def export(obj, scene, path, fmt):
 
 def scene_of(obj):
     """The scene that shows the composition (the active one if it is there)."""
-    current = bpy.context.scene
+    current = getattr(bpy.context, "scene", None)
     users = obj.users_scene
     if current is not None and (not users or current in users):
         return current
-    return users[0]
+    if users:
+        return users[0]
+    return bpy.data.scenes[0] if bpy.data.scenes else None  # timers with no window
 
 
 def cleanup_orphans():
@@ -382,6 +385,7 @@ def _arrange(scene):
             offset += lengths[obj.name]
         st["offset_frames"] = start_offset
         board.set_playhead_offset(obj, start_offset, st.get("sections"))
+        board.update_preview_shade(obj, scene)
         strip = find_strip(scene, obj)
         if strip is None:
             continue

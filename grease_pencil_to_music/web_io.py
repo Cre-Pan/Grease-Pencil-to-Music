@@ -128,6 +128,7 @@ def import_project(context, path):
     s.scale = project.scale
     s.root = music.NOTE_NAMES[project.root]
     s.time_grid = project.grid
+    s.room = project.room
     # Place the strokes on the board of this composition (its row height and width).
     project = web_project.parse(text, available, s.row_height, s.seconds_width)
 
@@ -167,8 +168,10 @@ def import_project(context, path):
                     settings.harmony = layer.harmony
                 except TypeError:
                     pass
-        # Hidden in Blender = not seen and not heard.
-        gp_layer.hide = not layer.visible or layer.muted
+        # Hidden in Blender = not seen and not heard; muted = seen but not heard.
+        gp_layer.hide = not layer.visible
+        if settings is not None:
+            settings.mute = layer.muted
     layers = board.user_layers(gp)
     if layers:
         gp.layers.active = layers[-1]
@@ -203,7 +206,8 @@ def collect_project(comp, scene):
     b = web_project.Board(bpm=s.bpm, length=s.length, low_note=s.low_note, octaves=s.octaves,
                           row_height=s.row_height, seconds_width=s.seconds_width)
     project = web_project.Project(name=comp.name, board=b, scale=s.scale,
-                                  root=music.NOTE_NAMES.index(s.root), grid=s.time_grid)
+                                  root=music.NOTE_NAMES.index(s.root), grid=s.time_grid,
+                                  room=s.room)
     gp = comp.data
     materials = list(gp.materials)
     sound_keys = {}
@@ -211,7 +215,9 @@ def collect_project(comp, scene):
         settings = props.find_layer_settings(gp, layer.name)
         out = web_project.Layer(
             name=layer.name, mode=settings.mode if settings else "QUANTIZED",
-            visible=not layer.hide, muted=layer.hide, volume=float(layer.opacity),
+            visible=not layer.hide,
+            muted=layer.hide or bool(settings is not None and settings.mute),
+            volume=props.layer_volume(gp, layer),
             reverb=float(settings.reverb_mix) if settings else 0.0,
             harmony=getattr(settings, "harmony", "OFF") if settings else "OFF")
         project.layers.append(out)
