@@ -6,7 +6,7 @@ composition is one single object (no parent lines, Shift+D duplicates a whole
 work plane):
 
 * layer group "GP2M Tavola" (bottom, locked): background, grid, note rows,
-  piano keys and labels;
+  piano keys, labels and the dark boxes outside the scene Preview Range;
 * layer group "GP2M Testina" (top, locked): the playhead, moved by a driver
   on the layer translation;
 * the user's layers in between.
@@ -44,7 +44,10 @@ BOARD_MATERIALS = {
     "GP2M Etichetta tasti": ((0.42, 0.42, 0.45, 1.0), None),
     "GP2M Etichetta tempo": ((0.45, 0.62, 0.95, 1.0), None),
     "GP2M Testina": ((1.0, 0.18, 0.15, 1.0), None),
+    "GP2M Fuori anteprima": (None, (0.0, 0.0, 0.0, 0.62)),
 }
+SHADE_LAYER = "GP2M Fuori anteprima"
+SHADE_KEY = "gp2m_shade"  # ID property on the GP data: spans last drawn
 
 KEY_LABEL_ITEMS = (
     ("C", "Solo Do", "Etichetta solo sui Do (C)"),
@@ -97,6 +100,27 @@ def instrument_material(inst):
     material.diffuse_color = inst.color
     material[LABEL_KEY] = inst.label
     return material
+
+
+def change_instrument(material, inst):
+    """Give an instrument material another instrument, keeping its strokes.
+
+    Color and name follow the new instrument unless they were changed by hand.
+    """
+    old = synth.INSTRUMENT_BY_ID.get(material.gp2m_instrument)
+    style = material.grease_pencil
+    if old is None or all(abs(a - b) < 2e-3 for a, b in zip(style.color[:3], old.color[:3])):
+        style.color = (*inst.color[:3], style.color[3])
+        fill = _fill_color(inst.color)
+        style.fill_color = (*fill[:3], style.fill_color[3])
+        material.diffuse_color = inst.color
+    label = material.get(LABEL_KEY)
+    if old is None or label is None or label == old.label:
+        material[LABEL_KEY] = inst.label
+        if old is None or material.name.split(".")[0] == old.label:
+            material.name = inst.label
+    if material.gp2m_instrument != inst.ident:
+        material.gp2m_instrument = inst.ident
 
 
 def instrument_materials(idents=None):
@@ -371,6 +395,107 @@ def _labels(s, index, rows, top):
     return specs
 
 
+def _span_union(spans):
+    merged = []
+    for a, b in sorted(spans):
+        if merged and a <= merged[-1][1] + 1e-9:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], b))
+        else:
+            merged.append((a, b))
+    return merged
+
+
+def preview_lit(comp, scene):
+    """Seconds of the board inside the scene Preview Range, as ``[(start, end)]``.
+
+    ``None`` when there is nothing to darken (no Preview Range, or the range covers
+    the whole loop). Times follow the playhead: the composition starts at the scene
+    start (plus its offset in "one after another"), a time past the loop lands on
+    the loop like the notes of the Timeline.
+    """
+    if scene is None or not scene.use_preview_range:
+        return None
+    from . import engine
+    s = comp.gp2m
+    length = s.length
+    if length <= 0:
+        return None
+    fps = scene.render.fps / scene.render.fps_base
+    offset = engine.state(comp).get("offset_frames", 0)
+    t_in = (scene.frame_preview_start - scene.frame_start - offset) / fps
+    t_out = (scene.frame_preview_end + 1 - scene.frame_start - offset) / fps
+    t_out = min(t_out, engine.duration(comp))
+    if t_out <= max(t_in, 0.0):
+        return []  # the range is outside the composition: all dark
+    t_in = max(t_in, 0.0)
+    if t_out - t_in >= length - 1e-6:
+        return None
+    sections = engine.state(comp).get("sections") or (0.0,)
+    if any(t_in < b < t_out for b in sections):
+        return None  # two keyframe sections on the same board
+    _start, a = engine.locate(comp, t_in)
+    b = a + (t_out - t_in)
+    if b <= length + 1e-9:
+        return [(a, min(b, length))]
+    return [(0.0, b - length), (a, length)]
+
+
+def _shade(s, index, lit, top):
+    """Dark boxes over the parts of the board outside the Preview Range."""
+    if lit is None:
+        return []
+    dark, cursor = [], 0.0
+    for a, b in _span_union(lit):
+        if a > cursor + 1e-6:
+            dark.append((cursor, a))
+        cursor = max(cursor, b)
+    if cursor < s.length - 1e-6:
+        dark.append((cursor, s.length))
+    sw = s.seconds_width
+    # Up to the time labels, not over the keyboard.
+    return [(_rect(a * sw, 0.0, b * sw, top + 0.2), 0.001, index["GP2M Fuori anteprima"],
+             "fill") for a, b in dark]
+
+
+def _shade_signature(s, lit):
+    if lit is None:
+        return "none"
+    return ";".join(f"{a:.4f}-{b:.4f}" for a, b in _span_union(lit)) + \
+        f"|{s.length:.4f}|{s.seconds_width:.4f}|{dimensions(s)[2]:.4f}"
+
+
+def update_preview_shade(comp, scene=None):
+    """Redraw the Preview Range shading (only the shade layer, only when it changed).
+
+    Returns True if the board was touched.
+    """
+    gp = comp.data
+    layer = gp.layers.get(SHADE_LAYER)
+    if layer is None or not is_board_layer(layer):
+        if has_board(comp):
+            request_rebuild(comp)  # board of an older version: add the layer
+        return False
+    scene = scene or bpy.context.scene
+    s = comp.gp2m
+    lit = preview_lit(comp, scene)
+    signature = _shade_signature(s, lit)
+    if gp.get(SHADE_KEY) == signature:
+        return False
+    index = {m.name: i for i, m in enumerate(gp.materials) if m is not None}
+    if "GP2M Fuori anteprima" not in index:
+        request_rebuild(comp)
+        return False
+    frame = layer.frames[0] if len(layer.frames) else layer.frames.new(_first_frame(scene))
+    drawing = frame.drawing
+    layer.lock = False
+    if len(drawing.strokes):
+        drawing.remove_strokes()
+    _add_strokes(drawing, _shade(s, index, lit, dimensions(s)[2]))
+    layer.lock = True
+    gp[SHADE_KEY] = signature
+    return True
+
+
 # --- Assembly ------------------------------------------------------------------
 
 def _ensure_materials(gp):
@@ -504,6 +629,7 @@ _LAYER_MATERIALS = {
     "GP2M Righe": {"GP2M Linea Do", "GP2M Linea nota"},
     "GP2M Tasti": {"GP2M Tasto bianco", "GP2M Tasto nero"},
     "GP2M Etichette": {"GP2M Etichetta tasti", "GP2M Etichetta tempo"},
+    SHADE_LAYER: {"GP2M Fuori anteprima"},
     HEAD_LAYER: {"GP2M Testina"},
 }
 
@@ -548,6 +674,8 @@ def rebuild(comp, scene=None):
     index = _ensure_materials(gp)
     rows, width, top = dimensions(s)
     frame = _first_frame(scene)
+    lit = preview_lit(comp, scene)
+    gp[SHADE_KEY] = _shade_signature(s, lit)
 
     for layer in [layer for layer in gp.layers if is_board_layer(layer)]:
         gp.layers.remove(layer)
@@ -559,7 +687,8 @@ def rebuild(comp, scene=None):
             ("GP2M Griglia", _grid(s, index, width, top)),
             ("GP2M Righe", _rows(s, index, rows, width)),
             ("GP2M Tasti", _keys(s, index, rows)),
-            ("GP2M Etichette", _labels(s, index, rows, top))):
+            ("GP2M Etichette", _labels(s, index, rows, top)),
+            (SHADE_LAYER, _shade(s, index, lit, top))):
         layer = gp.layers.new(name, set_active=False, layer_group=board_group)
         layer.use_lights = False
         layer.pass_index = BOARD_PASS

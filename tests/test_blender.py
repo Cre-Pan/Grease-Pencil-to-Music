@@ -397,6 +397,7 @@ def test_panels_menus_and_preferences_draw(comp):
     settings.show_fx = False
     menu = _Drawer(log)
     ui.GP2M_MT_add_instrument.draw(menu, bpy.context)
+    ui.GP2M_MT_change_instrument.draw(_Drawer(log), bpy.context)
     ui.VIEW3D_MT_gp2m_add.draw(_Drawer(log), bpy.context)
     ui.draw_export_menu(_Drawer(log), bpy.context)
     ui.draw_add_menu(_Drawer(log), bpy.context)
@@ -410,7 +411,8 @@ def test_panels_menus_and_preferences_draw(comp):
             "gp2m_sample", "gp2m_sample_root", "gp2m.load_sample", "gp2m.play_keyboard",
             "channel", "new_bpm", "volume_feedback", "gp2m.import_midi", "gp2m.export_web",
             "GP2M_PT_help_main", "GP2M_PT_help_reading", "GP2M_PT_help_instrument",
-            "GP2M_PT_help_export"} <= drawn
+            "GP2M_PT_help_export", "GP2M_UL_layers", "GP2M_MT_change_instrument",
+            "solo", "mute", "use_onion_skinning", "lock"} <= drawn
     assert sum(1 for entry in log if entry[0] == "markdown") == len(sub("help").classes)
 
 
@@ -531,6 +533,99 @@ def test_instrument_and_layer_list_operators(comp):
     assert bpy.ops.gp2m.remove_layer() == {"FINISHED"}
     assert [l.name for l in board.user_layers(comp.data)] == ["Livello 1", "Livello 2",
                                                               "Livello 3"]
+
+
+def test_change_instrument_keeps_strokes(comp):
+    engine, board = sub("engine"), sub("board")
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60), material_index=0)
+    material = comp.material_slots[0].material
+    before = material.gp2m_instrument
+    target = "BELL" if before != "BELL" else "PLUCK"
+    first = engine.regenerate(comp)
+    assert bpy.ops.gp2m.set_instrument(instrument=target, index=0) == {"FINISHED"}
+    assert material.gp2m_instrument == target
+    inst = sub("synth").INSTRUMENT_BY_ID[target]
+    assert board.material_label(material) == inst.label
+    assert tuple(round(c, 3) for c in material.grease_pencil.color[:3]) == \
+        tuple(round(c, 3) for c in inst.color[:3])
+    second = engine.regenerate(comp)
+    assert [n.pitch for n in second.notes] == [n.pitch for n in first.notes] == [60]
+    assert second.key != first.key
+    # A colour chosen by hand stays.
+    material.grease_pencil.color = (0.1, 0.9, 0.1, 1.0)
+    bpy.ops.gp2m.set_instrument(instrument="SINE", index=0)
+    assert material.gp2m_instrument == "SINE"
+    assert round(material.grease_pencil.color[1], 3) == 0.9
+    assert sub("ui").layer_instrument_slot(comp, "Livello 1") == 0
+
+
+def test_layer_list_mute_and_solo(comp):
+    engine, props, board = sub("engine"), sub("props"), sub("board")
+    gp = comp.data
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60), material_index=0)
+    add_stroke(comp, 1, line(comp, 3.0, 4.0, 64), material_index=3)
+    assert len(engine.regenerate(comp).notes) == 2
+    one, two = (props.find_layer_settings(gp, n) for n in ("Livello 1", "Livello 2"))
+    layers = {l.name: l for l in board.user_layers(gp)}
+    # Mute: visible, silent.
+    one.mute = True
+    assert [n.pitch for n in engine.regenerate(comp).notes] == [64]
+    assert not layers["Livello 1"].hide
+    one.mute = False
+    # Solo: the others are silent and dimmed to 10%, then restored.
+    layers["Livello 1"].opacity = 0.8
+    two.solo = True
+    assert [n.pitch for n in engine.regenerate(comp).notes] == [64]
+    assert abs(layers["Livello 1"].opacity - props.SOLO_OPACITY) < 1e-6
+    assert abs(layers["Livello 2"].opacity - 1.0) < 1e-6
+    assert abs(props.layer_volume(gp, layers["Livello 1"]) - 0.8) < 1e-6
+    two.solo = False
+    assert abs(layers["Livello 1"].opacity - 0.8) < 1e-6
+    assert len(engine.regenerate(comp).notes) == 2
+    # The list's active index follows the active layer, both ways.
+    index = [item.name for item in gp.gp2m_layers].index("Livello 2")
+    gp.gp2m_layer_index = index
+    assert gp.layers.active.name == "Livello 2"
+    assert gp.gp2m_layer_index == index
+    # Top layer first, like Blender's list.
+    flags, order = sub("ui").GP2M_UL_layers.filter_items(
+        type("L", (), {"bitflag_filter_item": 1})(), bpy.context, gp, "gp2m_layers")
+    shown = sorted((o, item.name) for o, item, f in zip(order, gp.gp2m_layers, flags) if f)
+    assert [name for _o, name in shown] == [l.name for l in reversed(board.user_layers(gp))]
+
+
+def test_preview_range_darkens_the_grid_only(comp):
+    engine, board = sub("engine"), sub("board")
+    scene = bpy.context.scene
+    add_stroke(comp, 0, line(comp, 0.5, 3.5, 60))
+    sound = engine.regenerate(comp).key
+    shade = comp.data.layers.get(board.SHADE_LAYER)
+    assert shade is not None and board.is_board_layer(shade)
+    assert len(shade.frames[0].drawing.strokes) == 0
+    fps = scene.render.fps / scene.render.fps_base
+    s = comp.gp2m
+    scene.use_preview_range = True
+    scene.frame_preview_start = scene.frame_start + int(round(1.0 * fps))
+    scene.frame_preview_end = scene.frame_start + int(round(2.0 * fps)) - 1
+    try:
+        assert board.update_preview_shade(comp, scene)
+        drawing = shade.frames[0].drawing
+        assert len(drawing.strokes) == 2
+        xs = sorted(round(p.position.x / s.seconds_width, 2)
+                    for stroke in drawing.strokes for p in stroke.points)
+        assert xs[0] == 0.0 and xs[-1] == round(s.length, 2)
+        assert 1.0 in xs and 2.0 in xs
+        assert not board.update_preview_shade(comp, scene)  # nothing changed
+        assert engine.regenerate(comp).key == sound  # the music is the same
+        # A rebuilt board keeps the shading.
+        board.rebuild(comp, scene)
+        shade = comp.data.layers.get(board.SHADE_LAYER)
+        assert len(shade.frames[0].drawing.strokes) == 2
+        assert board.board_materials_ok(comp)
+    finally:
+        scene.use_preview_range = False
+    assert board.update_preview_shade(comp, scene)
+    assert len(comp.data.layers.get(board.SHADE_LAYER).frames[0].drawing.strokes) == 0
 
 
 def _fresh(addon):

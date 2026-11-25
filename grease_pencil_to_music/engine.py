@@ -382,6 +382,7 @@ def _arrange(scene):
             offset += lengths[obj.name]
         st["offset_frames"] = start_offset
         board.set_playhead_offset(obj, start_offset, st.get("sections"))
+        board.update_preview_shade(obj, scene)
         strip = find_strip(scene, obj)
         if strip is None:
             continue

@@ -355,6 +355,26 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.10
+
+- **Lista dei livelli** come quella dei livelli Grease Pencil di Blender (il livello in alto è
+  il primo, + / −, ↑ / ↓, doppio clic per rinominare). A destra di ogni livello:
+  - **♪** apre gli strumenti e **cambia quello del livello** (lo strumento attivo, se è del
+    livello, altrimenti il primo); un livello senza strumenti ne riceve uno;
+  - **muto**: il livello resta visibile ma non suona (neanche negli export);
+  - **cuffie (Solo)**: suonano solo i livelli in Solo; gli altri tacciono e scendono al 10% di
+    opacità, che torna quella di prima togliendo il Solo (se nel frattempo l'hai cambiata a
+    mano, resta la tua);
+  - onion skin, occhio e lucchetto, come nella lista di Blender.
+- Sotto la lista: lettura, volume e strumenti del **livello attivo**; anche accanto a ogni
+  strumento c'è **♪** per cambiarlo. I tratti restano dove sono e suonano con il nuovo
+  strumento; colore e nome seguono il nuovo strumento, a meno che non li avessi cambiati tu.
+- **Preview Range** nella tavola: con l'intervallo di anteprima della scena attivo, la griglia
+  prima dell'In e dopo l'Out è oscurata (solo la tavola: tratti e musica non cambiano). Segue
+  la testina, anche in "una dopo l'altra" e con le sezioni da keyframe.
+- Web app: un livello silenziato nella web app diventa un livello **muto** (visibile) invece
+  che nascosto, e viceversa all'export.
+
 ## 0.0.9
 
 - **Progetti della web app (.json)**: importando una composizione della web app, i nuovi strumenti

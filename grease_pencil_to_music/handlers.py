@@ -251,6 +251,7 @@ def on_depsgraph_update(_scene, depsgraph):
         elif isinstance(original, (bpy.types.Scene, bpy.types.Collection)):
             if isinstance(original, bpy.types.Scene):
                 _check_scene_timing(original)
+                _check_preview(original)
             # Cheap check first: only look for leftovers when objects changed.
             signature = _signature()
             if signature != _object_signature[0]:
@@ -261,6 +262,44 @@ def on_depsgraph_update(_scene, depsgraph):
 
 def _timing(scene):
     return (scene.frame_start, scene.render.fps, round(scene.render.fps_base, 6))
+
+
+def _preview(scene):
+    return (scene.use_preview_range, scene.frame_preview_start, scene.frame_preview_end)
+
+
+_scene_preview = {}  # scene name -> Preview Range last seen
+_shade_scenes = set()
+
+
+def _shade_tick():
+    """Darken the board outside the Preview Range (grid only: the sound is unchanged)."""
+    names = list(_shade_scenes)
+    _shade_scenes.clear()
+    for name in names:
+        scene = bpy.data.scenes.get(name)
+        if scene is None:
+            continue
+        for obj in compositions():
+            if engine.scene_of(obj) == scene and board.has_board(obj):
+                try:
+                    board.update_preview_shade(obj, scene)
+                except Exception as error:
+                    print(f"[Doodle Music] preview range shading failed: {error!r}")
+    return None
+
+
+def request_shade(scene):
+    _shade_scenes.add(scene.name)
+    if not bpy.app.timers.is_registered(_shade_tick):
+        bpy.app.timers.register(_shade_tick, first_interval=0.01)
+
+
+def _check_preview(scene):
+    preview = _preview(scene)
+    if _scene_preview.get(scene.name) != preview:
+        _scene_preview[scene.name] = preview
+        request_shade(scene)
 
 
 def _check_scene_timing(scene):
@@ -286,8 +325,10 @@ def on_load_post(*_args):
     _scale_seen.clear()
     engine._state.clear()  # runtime state of the previous file (keyed by object name)
     _scene_timing.clear()
+    _scene_preview.clear()
     for scene in bpy.data.scenes:
         _scene_timing[scene.name] = _timing(scene)
+        _scene_preview[scene.name] = _preview(scene)
     _object_signature[0] = _signature()
     for obj in compositions():
         _stack_counts[obj.name] = _stack_count(obj)
@@ -368,6 +409,6 @@ def unregister():
         if func in handler_list:
             handler_list.remove(func)
     bpy.msgbus.clear_by_owner(_msgbus_owner)
-    for timer in (_tick, _resume_playback):
+    for timer in (_tick, _resume_playback, _shade_tick):
         if bpy.app.timers.is_registered(timer):
             bpy.app.timers.unregister(timer)

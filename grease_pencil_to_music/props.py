@@ -79,10 +79,66 @@ FILL_MODES = (
 )
 
 
+SOLO_OPACITY = 0.1  # opacity of the other layers while a layer is in Solo
+
+
+def _solo_changed(self, _context):
+    apply_solo(self.id_data)
+    _sound_changed(self, _context)
+
+
+def apply_solo(gp_data):
+    """Dim the layers that are not in Solo to 10% opacity, restore them after.
+
+    The opacity a layer had is kept in its settings: the volume of the layer is
+    still that one (a dimmed layer is silent anyway, and exports read the saved
+    value). If the opacity was changed by hand while dimmed, that value wins.
+    """
+    settings = list(gp_data.gp2m_layers)
+    any_solo = any(item.solo for item in settings)
+    for item in settings:
+        layer = gp_data.layers.get(item.name)
+        if layer is None:
+            continue
+        dim = any_solo and not item.solo
+        if dim and item.solo_saved_opacity < 0.0:
+            item.solo_saved_opacity = layer.opacity
+            layer.opacity = SOLO_OPACITY
+        elif not dim and item.solo_saved_opacity >= 0.0:
+            if abs(layer.opacity - SOLO_OPACITY) < 1e-4:
+                layer.opacity = item.solo_saved_opacity
+            item.solo_saved_opacity = -1.0
+
+
+def layer_volume(gp_data, layer):
+    """The volume of a layer: its opacity, or the one it had before a Solo dimmed it."""
+    item = find_layer_settings(gp_data, layer.name)
+    if item is not None and item.solo_saved_opacity >= 0.0:
+        return float(item.solo_saved_opacity)
+    return float(layer.opacity)
+
+
+def layer_silent(gp_data, layer_name):
+    """Muted, or another layer is in Solo."""
+    settings = gp_data.gp2m_layers
+    item = find_layer_settings(gp_data, layer_name)
+    if item is not None and item.mute:
+        return True
+    return any(other.solo for other in settings) and (item is None or not item.solo)
+
+
 class GP2M_LayerSettings(bpy.types.PropertyGroup):
     """Settings of one Grease Pencil layer, matched by layer name."""
 
     name: StringProperty()
+    mute: BoolProperty(name="Muto", default=False, update=_sound_changed,
+                       description="Il livello resta visibile ma non suona (anche negli export)")
+    solo: BoolProperty(name="Solo", default=False, update=_solo_changed,
+                       description="Ascolta solo questo livello: gli altri tacciono e scendono "
+                       "al 10% di opacità (anche negli export)")
+    solo_saved_opacity: FloatProperty(default=-1.0, options={"HIDDEN"},
+                                      description="Opacità del livello prima del Solo "
+                                      "(-1 = non attenuato)")
     expanded: BoolProperty(name="Mostra strumenti", default=True)
     show_fx: BoolProperty(name="Mostra volume ed effetti", default=False)
     mode: EnumProperty(name="Lettura", items=LAYER_MODES, default="QUANTIZED",
@@ -319,6 +375,9 @@ def register_properties():
     bpy.types.Scene.gp2m_play = PointerProperty(type=GP2M_PlaySettings)
     bpy.types.Scene.gp2m_timeline = PointerProperty(type=GP2M_TimelineSettings)
     bpy.types.GreasePencil.gp2m_layers = CollectionProperty(type=GP2M_LayerSettings)
+    bpy.types.GreasePencil.gp2m_layer_index = IntProperty(
+        name="Livello attivo", get=_get_layer_index, set=_set_layer_index,
+        options={"SKIP_SAVE"})
     bpy.types.Material.gp2m_instrument = EnumProperty(
         name="Strumento", items=INSTRUMENT_ITEMS, default=synth.DEFAULT_INSTRUMENT,
         update=_instrument_changed)
@@ -359,10 +418,36 @@ def unregister_properties():
     del bpy.types.Material.gp2m_fx
     del bpy.types.Material.gp2m_layer
     del bpy.types.Material.gp2m_instrument
+    del bpy.types.GreasePencil.gp2m_layer_index
     del bpy.types.GreasePencil.gp2m_layers
     del bpy.types.Scene.gp2m_timeline
     del bpy.types.Scene.gp2m_play
     del bpy.types.Object.gp2m
+
+
+def _get_layer_index(self):
+    """Index in ``gp2m_layers`` of the active layer (for the UI list)."""
+    active = self.layers.active
+    if active is None:
+        return -1
+    for index, item in enumerate(self.gp2m_layers):
+        if item.name == active.name:
+            return index
+    return -1
+
+
+def _set_layer_index(self, value):
+    if not 0 <= value < len(self.gp2m_layers):
+        return
+    from . import board, operators
+    layer = self.layers.get(self.gp2m_layers[value].name)
+    if layer is None or board.is_board_layer(layer):
+        return
+    for obj in bpy.data.objects:
+        if obj.data == self and obj.gp2m.is_composition:
+            operators.use_instrument(obj, layer.name)
+            return
+    self.layers.active = layer
 
 
 def find_layer_settings(gp_data, layer_name):
@@ -391,3 +476,5 @@ def ensure_layer_settings(gp_data):
         return
     for name in missing:
         gp_data.gp2m_layers.add().name = name
+    if any(item.solo for item in gp_data.gp2m_layers):
+        apply_solo(gp_data)  # a new layer joins the dimmed ones
