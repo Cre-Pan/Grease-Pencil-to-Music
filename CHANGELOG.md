@@ -355,6 +355,12 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.25
+
+Tutto insieme: rig e colori del tema (0.0.23, 0.0.24) con la meta-clip per composizione e la
+sincronizzazione tra Sequencer e livelli (vedi 0.0.22: muto, ordine, ritardo d'inizio, volume,
+pan e colore tra livelli e clip). Provato insieme in Blender 5.3.
+
 ## 0.0.24
 
 Ritocchi al rig
@@ -410,6 +416,17 @@ Il viewport come un tavolo: composizioni come livelli e maniglie disegnate
   entrarci e regolare volume, pan e muto di ogni livello; il muto e il volume della
   meta valgono per tutta la composizione. Le strip dei livelli dei file salvati prima
   entrano nella meta da sole, tenendo volume e pan.
+- **Il Sequencer comanda come la lista dei livelli** (nei due sensi):
+  - *muto*: mutare un livello muta subito la sua clip (resta nella meta, muta, senza
+    rifare il suono), e mutare la clip nel Sequencer muta il livello;
+  - *ordine*: spostando la clip di un livello su un altro canale dentro la meta il livello
+    sale o scende anche in Grease Pencil (dentro un gruppo, solo tra i livelli del gruppo);
+    spostando la meta su un altro canale cambia l'ordine nella lista Composizioni;
+  - *tempo*: spostando la meta più avanti la composizione parte dopo (*Parte dopo*, in
+    *Sequencer e ascolto*), con testina e suono;
+  - *volume, pan e colore* della clip sono quelli del livello (*Volume clip* e *Pan* sotto
+    il volume del livello); valgono anche negli export. I valori animati con keyframe
+    restano dei keyframe.
 - **Una nuova composizione è un nuovo livello**: nel Sequencer va sopra tutte le altre e
   salta i canali che hanno già una clip; sul tavolo nasce sopra la più alta, allineata,
   invece che sul 3D cursor sopra le altre. Se dopo si aggiunge una clip (un video) su un

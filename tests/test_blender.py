@@ -1896,6 +1896,9 @@ def test_sequencer_volume_of_a_layer_strip_is_kept(comp):
     names = _two_layers(comp)
     engine.regenerate(comp)
     engine.layer_strips(scene, comp)[names[0]].volume = 0.3
+    sub("seqsync").sync_scene(scene)  # what the depsgraph handler does after the change
+    assert sub("props").find_layer_settings(comp.data, names[0]).clip_volume == \
+        pytest.approx(0.3)
     add_stroke(comp, 0, line(comp, 6.0, 7.5, 64))  # longer sound: strips may be recreated
     engine.regenerate(comp)
     assert engine.layer_strips(scene, comp)[names[0]].volume == pytest.approx(0.3)
@@ -1931,7 +1934,9 @@ def test_auto_on_the_active_layer_only(comp):
     sub("props").find_layer_settings(comp.data, names[0]).mute = True
     result = engine.regenerate(comp, only_active=True)
     assert not engine.state(comp)["stats"]["only_active"]
-    assert set(engine.layer_strips(scene, comp)) == set(names[1:])
+    strips = engine.layer_strips(scene, comp)  # the muted layer keeps its clip, muted
+    assert {name for name, strip in strips.items() if not strip.mute} == set(names[1:])
+    assert strips[names[0]].mute
 
 
 def test_layer_modifiers_effects_and_copy_paste(comp):
@@ -2400,3 +2405,98 @@ def test_rig_handle_selection_and_g(comp):
     assert sum(colors["idle"]) < sum(colors["hover"]) and colors["rim_idle"][3] < colors["rim"][3]
     rig.select(None, None)
     assert rig.selected() is None
+
+
+# --- The Sequencer as a view of the layers ------------------------------------------------
+
+def test_layer_mute_and_clip_mute_follow_each_other(comp):
+    engine, seqsync, props = sub("engine"), sub("seqsync"), sub("props")
+    scene = bpy.context.scene
+    names = _two_layers(comp)
+    engine.regenerate(comp)
+    first = props.find_layer_settings(comp.data, names[0])
+    # Muting the layer mutes its clip at once, and the clip stays after the new sound.
+    first.mute = True
+    assert engine.layer_strips(scene, comp)[names[0]].mute
+    engine.regenerate(comp)
+    strips = engine.layer_strips(scene, comp)
+    assert names[0] in strips and strips[names[0]].mute and not strips[names[1]].mute
+    assert not engine.regenerate(comp) is None
+    # Unmuting the clip in the Sequencer unmutes the layer.
+    strips[names[0]].mute = False
+    assert seqsync.sync_scene(scene)
+    assert not first.mute
+    engine.regenerate(comp)
+    assert not engine.layer_strips(scene, comp)[names[0]].mute
+    # Muting the clip in the Sequencer mutes the layer.
+    engine.layer_strips(scene, comp)[names[1]].mute = True
+    seqsync.sync_scene(scene)
+    assert props.find_layer_settings(comp.data, names[1]).mute
+    props.find_layer_settings(comp.data, names[1]).mute = False
+
+
+def test_moving_clips_reorders_layers_and_compositions(comp):
+    engine, seqsync, board = sub("engine"), sub("seqsync"), sub("board")
+    scene = bpy.context.scene
+    names = _two_layers(comp)
+    engine.regenerate(comp)
+    strips = engine.layer_strips(scene, comp)
+    low, high = strips[names[0]], strips[names[1]]
+    assert low.channel < high.channel
+    # Swap the two clips inside the meta-clip (park one on a free channel first).
+    a, b = low.channel, high.channel
+    low.channel = 20
+    high.channel = a
+    low.channel = b
+    assert seqsync.sync_scene(scene)
+    order = [layer.name for layer in board.user_layers(comp.data)]
+    assert order.index(names[1]) < order.index(names[0])
+    assert comp.data.layers[-1].name == board.HEAD_LAYER  # the playhead stays on top
+    strips = engine.layer_strips(scene, comp)
+    assert strips[names[1]].channel < strips[names[0]].channel
+    assert not seqsync.sync_scene(scene)  # nothing more to do
+    # The meta-clip moved to another channel: the composition takes it.
+    meta = engine.meta_strip(scene, comp)
+    used = {s.channel for s in scene.sequence_editor.strips}
+    free = engine._block_from(1, 1, used)
+    meta.channel = free
+    seqsync.sync_scene(scene)
+    assert comp.gp2m.channel == free and meta.channel == free
+
+
+def test_clip_volume_pan_color_and_time_follow_the_sequencer(comp, tmp_path):
+    engine, seqsync, props = sub("engine"), sub("seqsync"), sub("props")
+    scene = bpy.context.scene
+    names = _two_layers(comp)
+    engine.regenerate(comp)
+    item = props.find_layer_settings(comp.data, names[0])
+    strip = engine.layer_strips(scene, comp)[names[0]]
+    # From the layer to the clip, at once.
+    item.clip_volume, item.clip_pan = 0.5, -0.4
+    assert abs(strip.volume - 0.5) < 1e-5 and abs(strip.pan + 0.4) < 1e-5
+    # From the clip (changed in the Sequencer) to the layer.
+    strip.volume, strip.pan, strip.color_tag = 0.8, 0.3, "COLOR_07"
+    assert seqsync.sync_scene(scene)
+    assert abs(item.clip_volume - 0.8) < 1e-5 and abs(item.clip_pan - 0.3) < 1e-5
+    assert item.color == "COLOR_07"
+    # The export plays the layers as the Sequencer does.
+    path = str(tmp_path / "mix.wav")
+    item.clip_volume, item.clip_pan = 0.0, 0.0
+    engine.export(comp, scene, path, "WAV")
+    _rate, quiet = read_wav(path)
+    item.clip_volume = 1.0
+    engine.export(comp, scene, path, "WAV")
+    _rate, loud = read_wav(path)
+    assert np.abs(loud.astype(np.int64)).sum() > np.abs(quiet.astype(np.int64)).sum() > 0
+    # Moving the meta-clip later: the composition starts later.
+    engine.arrange(scene)
+    meta = engine.meta_strip(scene, comp)
+    fps = scene.render.fps / scene.render.fps_base
+    meta.content_start = meta.content_start + round(2 * fps)
+    assert seqsync.sync_scene(scene)
+    assert abs(comp.gp2m.start_delay - 2.0) < 0.05
+    inner = engine.layer_strips(scene, comp)[names[0]]
+    assert inner.content_start == scene.frame_start + engine.state(comp)["offset_frames"]
+    comp.gp2m.start_delay = 0.0
+    assert min(s.content_start for s in engine.layer_strips(scene, comp).values()) \
+        == scene.frame_start + engine.state(comp)["offset_frames"]

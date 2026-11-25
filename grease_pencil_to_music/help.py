@@ -34,8 +34,9 @@ porta lo stesso disegno tra l'iPad e Blender.
 
 Le composizioni stanno nella lista come i livelli: **in alto la più alta nel
 Video Sequencer**. Nel Sequencer ogni composizione è **una meta-clip** su un solo
-canale, con dentro una clip per livello: *Tab* per entrarci e regolare volume, pan
-e muto di un livello. Una nuova composizione è un nuovo livello: va sopra le altre,
+canale, con dentro una clip per livello: *Tab* per entrarci. Quello che cambi
+sulle clip torna sui livelli: muto, volume, pan, colore e ordine (spostando una clip
+su un altro canale). Spostando la meta più avanti la composizione parte dopo. Una nuova composizione è un nuovo livello: va sopra le altre,
 sul tavolo e nella timeline, e salta i canali dove c'è già una clip (anche un
 video aggiunto dopo la fa salire).
 

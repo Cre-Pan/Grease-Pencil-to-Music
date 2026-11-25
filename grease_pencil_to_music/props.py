@@ -92,6 +92,20 @@ def apply_layer_color(gp_data, item):
                 strip.color_tag = item.color
 
 
+def apply_layer_mix(gp_data, item):
+    """The Sequencer clip of the layer takes its volume and pan right away."""
+    if item.is_group:
+        return
+    from . import engine
+    for obj in bpy.data.objects:
+        if obj.type != "GREASEPENCIL" or obj.data != gp_data or not obj.gp2m.is_composition:
+            continue
+        for scene in obj.users_scene:
+            strip = engine.layer_strips(scene, obj).get(item.name)
+            if strip is not None:
+                engine.dress_strip(obj, strip, item.name)
+
+
 def _color_changed(self, _context):
     self.color_assigned = True
     apply_layer_color(self.id_data, self)
@@ -152,8 +166,28 @@ FILL_MODES = (
 SOLO_OPACITY = 0.1  # opacity of the other layers while a layer is in Solo
 
 
+def _sync_clip_mutes(gp_data):
+    """Mute or unmute the layers' clips in the Sequencer right away."""
+    from . import engine
+    for obj in bpy.data.objects:
+        if obj.type == "GREASEPENCIL" and obj.data == gp_data and obj.gp2m.is_composition:
+            scene = engine.scene_of(obj)
+            if scene is None:
+                continue
+            try:
+                engine.sync_layer_mutes(scene, obj)
+            except Exception as error:  # the new sound fixes it anyway
+                print(f"[Doodle Music] clip mute failed: {error!r}")
+
+
+def _mute_changed(self, _context):
+    _sync_clip_mutes(self.id_data)
+    _sound_changed(self, _context)
+
+
 def _solo_changed(self, _context):
     apply_solo(self.id_data)
+    _sync_clip_mutes(self.id_data)
     _sound_changed(self, _context)
 
 
@@ -278,8 +312,10 @@ class GP2M_LayerSettings(bpy.types.PropertyGroup):
     name: StringProperty()
     is_group: BoolProperty(default=False, options={"HIDDEN"},
                            description="Impostazioni di un gruppo di livelli")
-    mute: BoolProperty(name="Muto", default=False, update=_sound_changed,
-                       description="Il livello resta visibile ma non suona (anche negli export)")
+    mute: BoolProperty(name="Muto", default=False, update=_mute_changed,
+                       description="Il livello resta visibile ma non suona (anche negli "
+                       "export); anche la sua clip nel Sequencer è muta, e mutando la clip "
+                       "si muta il livello")
     solo: BoolProperty(name="Solo", default=False, update=_solo_changed,
                        description="Ascolta solo questo livello: gli altri tacciono e scendono "
                        "al 10% di opacità (anche negli export)")
@@ -329,6 +365,16 @@ class GP2M_LayerSettings(bpy.types.PropertyGroup):
                                  "(12 = un'ottava sopra, -5 = una quarta sotto…)",
                                  update=_sound_changed)
     settings_version: IntProperty(default=0, options={"HIDDEN"})
+    clip_volume: FloatProperty(
+        name="Volume clip", default=1.0, min=0.0, max=10.0, soft_max=2.0,
+        update=lambda self, context: apply_layer_mix(self.id_data, self),
+        description="Volume della clip del livello nel Video Sequencer (lo stesso valore: "
+        "cambiandolo nel Sequencer cambia qui). Vale anche negli export")
+    clip_pan: FloatProperty(
+        name="Pan", default=0.0, min=-1.0, max=1.0,
+        update=lambda self, context: apply_layer_mix(self.id_data, self),
+        description="Bilanciamento sinistra/destra della clip del livello nel Video "
+        "Sequencer (lo stesso valore). Vale anche negli export")
     color: EnumProperty(name="Colore", items=LAYER_COLOR_ITEMS, default="NONE",
                         update=_color_changed,
                         description="Colore del livello: la sua strip nel Video Sequencer "
@@ -469,6 +515,11 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
                          "strip audio, o la meta-clip con dentro i livelli "
                          "(0 = scegli automaticamente il primo libero)",
                          update=_arrangement_changed)
+    start_delay: FloatProperty(
+        name="Parte dopo (s)", default=0.0, min=0.0, max=3600.0, subtype="TIME_ABSOLUTE",
+        unit="TIME_ABSOLUTE", update=_arrangement_changed,
+        description="La composizione parte dopo questi secondi (anche spostando la sua "
+        "clip nel Video Sequencer): testina e suono la seguono")
     order: IntProperty(name="Ordine", default=0, min=0, max=999,
                        description="Posizione nella riproduzione 'Una dopo l'altra'",
                        update=_arrangement_changed)

@@ -399,12 +399,35 @@ def midi_tracks(notes):
     return tracks
 
 
+def _clip_mix(obj, result):
+    """The mix as the Sequencer plays it: every layer with its clip volume and pan."""
+    gains = {}
+    for name, _audio in result.stems:
+        item = props.find_layer_settings(obj.data, name)
+        if item is not None:
+            gains[name] = (item.clip_volume, item.clip_pan)
+    if all(abs(v - 1.0) < 1e-6 and abs(p) < 1e-6 for v, p in gains.values()):
+        return result.audio
+    total = np.zeros_like(result.audio, dtype=np.float32)
+    for name, audio in result.stems:
+        volume, pan = gains.get(name, (1.0, 0.0))
+        audio = np.asarray(audio, dtype=np.float32) * volume
+        if audio.ndim == 2 and audio.shape[1] == 2 and abs(pan) > 1e-6:
+            audio = audio * np.array([min(1.0, 1.0 - pan), min(1.0, 1.0 + pan)],
+                                     dtype=np.float32)
+        count = min(len(total), len(audio))
+        total[:count] += audio[:count]
+    return np.clip(total, -1.0, 1.0)
+
+
 def export(obj, scene, path, fmt):
-    result, _reads = render_composition(obj, scene)
+    per_layer = obj.gp2m.layer_channels
+    result, _reads = render_composition(obj, scene, stems=per_layer)
     if fmt == "MIDI":
         midi.write_midi(path, midi_tracks(result.notes), obj.gp2m.bpm)
     else:
-        write_audio(path, result.audio, result.sample_rate, fmt, prefs.get_prefs().mp3_bitrate)
+        audio = _clip_mix(obj, result) if per_layer and result.stems else result.audio
+        write_audio(path, audio, result.sample_rate, fmt, prefs.get_prefs().mp3_bitrate)
     return result
 
 
@@ -716,6 +739,45 @@ def fit_meta(meta):
             meta.right_handle = end
 
 
+def silent_layers(obj):
+    """User layers that are not heard (muted, hidden or silenced by a Solo): their
+    strip stays in the meta-clip, muted, so the Sequencer shows every layer."""
+    from .reader import audible_layers
+    audible = {layer.name for layer in audible_layers(obj.data)}
+    return {layer.name for layer in board.user_layers(obj.data) if layer.name not in audible}
+
+
+def layer_channel_order(obj, names):
+    """``names`` in the order of the layers (bottom first): channel 1, 2, ... inside
+    the meta-clip."""
+    order = [layer.name for layer in board.user_layers(obj.data)]
+    return sorted(names, key=lambda name: order.index(name) if name in order else len(order))
+
+
+MUTE_KEY = "gp2m_mute"  # the mute the add-on last gave a layer strip
+
+
+def set_clip_mute(strip, mute):
+    """Mute a layer strip, remembering it was the add-on (a different value later
+    means it was changed in the Sequencer)."""
+    if strip.mute != mute:
+        strip.mute = mute
+    if strip.get(MUTE_KEY) != mute:
+        strip[MUTE_KEY] = mute
+
+
+def clip_mute_changed_by_hand(strip):
+    return strip.get(MUTE_KEY) is not None and bool(strip[MUTE_KEY]) != strip.mute
+
+
+def sync_layer_mutes(scene, obj):
+    """Every layer strip muted exactly when its layer is not heard (instant: no new
+    sound is needed to mute or unmute a layer)."""
+    silent = silent_layers(obj)
+    for name, strip in layer_strips(scene, obj).items():
+        set_clip_mute(strip, name in silent)
+
+
 def _place_layer_strips(scene, obj, result):
     """One strip per layer inside the composition's meta-clip (channel 1 = first
     layer): a file is written only for the layers whose sound changed, a strip is
@@ -728,15 +790,36 @@ def _place_layer_strips(scene, obj, result):
     start = min((strip.content_start for strip in strips.values()),
                 default=scene.frame_start + st.get("offset_frames", 0))
     meta = _ensure_meta(scene, obj, start)
-    for strip in composition_strips(scene, obj):  # layers gone
-        if strip.get(LAYER_KEY) is not None and strip[LAYER_KEY] not in names:
+    silent = silent_layers(obj)
+    for strip in composition_strips(scene, obj):  # layers gone (silent ones stay, muted)
+        layer = strip.get(LAYER_KEY)
+        if layer is not None and layer not in names and layer not in silent:
             _remove_strip(editor, strip)
     strips = layer_strips(scene, obj)
+    for name, strip in strips.items():  # 0.0.21: the volume and pan set on the strip
+        item = props.find_layer_settings(obj.data, name)
+        if item is not None and strip.parent_meta() is None:
+            item["clip_volume"] = min(max(strip.volume, 0.0), 10.0)
+            item["clip_pan"] = min(max(strip.pan, -1.0), 1.0)
+    kept = [name for name in strips if name not in names]
+    channels = {name: index + 1 for index, name in
+                enumerate(layer_channel_order(obj, names + kept))}
+    for name in kept:
+        strip = strips[name]
+        if strip.channel != channels[name] or strip.parent_meta() is None \
+                or strip.parent_meta().name != meta.name:
+            if strip.sound is None:
+                _remove_strip(editor, strip)
+                continue
+            strip = _new_strip(scene, strip.name, strip.sound.filepath, channels[name],
+                               old=strip, tags={OWNER_KEY: obj.name, LAYER_KEY: name},
+                               meta=meta, frame=strip.content_start)
+        set_clip_mute(strip, True)
     # The audio of each layer file (read-only arrays, shared with the mixer's cache).
     paths, sounds = st.setdefault("layer_paths", {}), st.setdefault("layer_audio", {})
     fps = scene.render.fps / scene.render.fps_base
     for index, (name, audio) in enumerate(result.stems):
-        strip, channel = strips.get(name), index + 1
+        strip, channel = strips.get(name), channels[name]
         inside = strip is not None and strip.parent_meta() is not None \
             and strip.parent_meta().name == meta.name
         frames = max(1, int(round(len(audio) / result.sample_rate * fps)))
@@ -747,6 +830,7 @@ def _place_layer_strips(scene, obj, result):
         placed = inside and strip.channel == channel and strip.duration == frames
         if same_sound and placed:
             _color_strip(obj, strip, name)
+            set_clip_mute(strip, False)
             continue
         path = paths.get(name)
         if not same_sound:
@@ -760,21 +844,52 @@ def _place_layer_strips(scene, obj, result):
                                tags={OWNER_KEY: obj.name, LAYER_KEY: name}, meta=meta,
                                frame=start)
         _color_strip(obj, strip, name)
+        set_clip_mute(strip, False)  # heard (a mute set in the Sequencer is the layer's)
         if paths.get(name) != path:
             _forget_file(paths.get(name))
         paths[name], sounds[name] = path, audio
-    for name in [name for name in paths if name not in names]:
+    for name in [name for name in paths if name not in names and name not in kept]:
         _forget_file(paths.pop(name))
         sounds.pop(name, None)
     fit_meta(meta)
 
 
 def _color_strip(obj, strip, layer_name):
-    """The strip of a layer has the layer's color."""
+    dress_strip(obj, strip, layer_name)
+
+
+def dress_strip(obj, strip, layer_name):
+    """The strip of a layer has the layer's color, clip volume and pan (animated
+    values are left to their keyframes)."""
     item = props.find_layer_settings(obj.data, layer_name)
     color = item.color if item is not None else "NONE"
     if strip.color_tag != color:
         strip.color_tag = color
+    if item is None:
+        return
+    scene = strip.id_data
+    for attr, value in (("volume", item.clip_volume), ("pan", item.clip_pan)):
+        if not is_animated(scene, strip, attr) and abs(getattr(strip, attr) - value) > 1e-5:
+            setattr(strip, attr, value)
+
+
+def is_animated(scene, strip, attr):
+    """True when the strip's ``attr`` has keyframes or a driver."""
+    path = f'["{strip.name}"].{attr}'
+    data = scene.animation_data
+    if data is None:
+        return False
+    curves = list(data.drivers)
+    action = data.action
+    if action is not None:
+        try:
+            curves += list(action.fcurves)
+        except AttributeError:  # slotted actions (Blender 5)
+            for layer in getattr(action, "layers", ()):
+                for strip_ in layer.strips:
+                    for bag in strip_.channelbags:
+                        curves += list(bag.fcurves)
+    return any(curve.data_path.endswith(path) for curve in curves)
 
 
 def _same_file(strip, path):
@@ -861,6 +976,10 @@ def arrange(scene):
         _arranging[0] = False
 
 
+def delay_frames(obj, scene):
+    return max(0, int(round(obj.gp2m.start_delay * _fps(scene))))
+
+
 def _arrange(scene):
     """Place, mute and time every composition of the scene for the play mode.
 
@@ -887,12 +1006,16 @@ def _arrange(scene):
         _last_solo[scene.name] = solo.name
 
     offset = 0
+    ends = []
     for obj in comps:
         st = state(obj)
-        start_offset = offset if play.mode == "SEQUENCE" else 0
+        delay = delay_frames(obj, scene)
+        start_offset = (offset if play.mode == "SEQUENCE" else 0) + delay
         if play.mode == "SEQUENCE":
-            offset += lengths[obj.name]
+            offset = start_offset + lengths[obj.name]
+        ends.append((obj, start_offset + lengths[obj.name]))
         st["offset_frames"] = start_offset
+        st["delay_frames"] = delay
         board.set_playhead_offset(obj, start_offset, st.get("sections"))
         board.update_preview_shade(obj, scene)
         strips = composition_strips(scene, obj)
@@ -918,9 +1041,9 @@ def _arrange(scene):
         if play.mode == "SEQUENCE":
             total = offset
         elif solo is not None:
-            total = lengths[solo.name]
+            total = next(end for obj, end in ends if obj == solo)
         else:
-            total = max(lengths.values())
+            total = max(end for _obj, end in ends)
         end = scene.frame_start + total - 1
         if scene.frame_end != end:
             scene.frame_end = end
@@ -949,6 +1072,7 @@ def _arrange_layers(scene, obj, strips, target, mute):
             _new_strip(scene, strip.name, strip.sound.filepath, channel, old=strip,
                        tags={OWNER_KEY: obj.name, LAYER_KEY: strip[LAYER_KEY]}, meta=meta,
                        frame=strip.content_start)
+    sync_layer_mutes(scene, obj)
     inner = [strip for strip in meta.strips if strip.type == "SOUND"]
     if inner:
         shift = target - min(strip.content_start for strip in inner)
@@ -1024,7 +1148,9 @@ def regenerate(obj, scene=None, force=False, only_active=False):
     if per_layer:
         strips = layer_strips(scene, obj)
         paths = st.get("layer_paths") or {}
-        files_ok = (set(strips) == {name for name, _audio in result.stems}
+        silent = silent_layers(obj)
+        files_ok = ({name for name in strips if name not in silent}
+                    == {name for name, _audio in result.stems}
                     and all(_strip_file_ok(strip) and _same_file(strip, paths.get(name))
                             for name, strip in strips.items())
                     and len(composition_strips(scene, obj)) == len(strips))
