@@ -58,7 +58,7 @@ disegna su una tavola, e la tavola suona.
 
 | Dove | Cosa |
 |---|---|
-| Proprietà → **Dati oggetto** → Musica | stato, tavola e tempo, lettura, **livelli con i loro strumenti**, canone, canale del Sequencer |
+| Proprietà → **Dati oggetto** → Musica | stato, tavola e tempo, lettura, **livelli con i loro strumenti**, canone, canale del Sequencer, **un canale per livello** |
 | Proprietà → **Materiale** → Strumento musicale | tipo di strumento, volume, campione, effetti dello strumento |
 | Proprietà → **Output** | export WAV / MP3 / MIDI, mix di tutta la scena |
 | Proprietà → **Scena** | ascolto delle composizioni (canali, ordine, muto) |
@@ -127,7 +127,7 @@ Tutto si controlla dalla barra laterale **N → Musica**:
 
 | Pannello | Cosa contiene |
 |---|---|
-| Doodle Music | stato, muto, avvisi, *Auto* (aggiornamento automatico), *Genera suono*, **Ascolto** (insieme / solo l'attiva / una dopo l'altra) |
+| Doodle Music | stato, muto, avvisi, *Auto* (aggiornamento automatico) con **solo livello attivo**, *Genera suono*, **Ascolto** (insieme / solo l'attiva / una dopo l'altra), **un canale per livello** nel Sequencer |
 | Tavola e tempo | BPM, durata del loop, nota più bassa, ottave, **etichette dei tasti** (solo Do, tasti bianchi, tutte, nessuna), griglia |
 | Lettura | scala e tonica, quantizzazione ritmica, **swing**, nota minima, volume, **Suono finito** con *Ambiente*, **Usa modificatori** |
 | Livelli e strumenti | lista dei livelli e dei **gruppi** come in Grease Pencil (+, nuovo gruppo, −, ▾, ↑ / ↓): lucchetto, occhio, nome, **audio** on/off, **Solo** (cuffie: gli altri al 10%); sotto, lettura, volume e **strumenti** del livello attivo (colore, nome, ♪, **volume**, occhio); **+ Strumento**; forme piene, canone ed effetti del livello |
@@ -232,6 +232,10 @@ suona uguale).
 
 *Volume + Vibrato* separa lo spessore in due: l'andamento lento è il volume,
 l'irregolarità veloce (per esempio il jitter del pennello Ink) diventa vibrato.
+
+Lo spessore è un volume **assoluto**, uguale alla web app: un tratto largo 0,8 righe suona al
+massimo, uno più sottile più piano. Non dipende dagli altri tratti: un tratto spesso in un
+livello non abbassa gli altri strumenti.
 
 ## Web app per iPad (senza App Store)
 

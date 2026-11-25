@@ -457,6 +457,8 @@ def draw_status(layout, comp):
     if stats:
         layout.label(text=f"{stats['notes']} note · {stats['seconds'] * 1000:.0f} ms",
                      icon="SOUND")
+        if stats.get("only_active"):
+            layout.label(text="Rigenerato solo il livello attivo", icon="OUTLINER_DATA_GP_LAYER")
         if stats.get("sections", 0) > 1:
             layout.label(text=f"{stats['sections']} sezioni · "
                          f"{engine.duration(comp):.1f} s", icon="KEYFRAME")
@@ -480,6 +482,10 @@ def draw_status(layout, comp):
 def draw_actions(layout, comp):
     row = layout.row(align=True)
     row.prop(comp.gp2m, "auto_update", text="Auto", toggle=True, icon="FILE_REFRESH")
+    sub = row.row(align=True)
+    sub.active = comp.gp2m.auto_update and comp.gp2m.layer_channels
+    sub.prop(comp.gp2m, "auto_active_layer", text="", toggle=True,
+             icon="OUTLINER_DATA_GP_LAYER")
     row.operator("gp2m.regenerate", icon="PLAY_SOUND")
     row.prop(comp.gp2m, "mute", text="", icon="MUTE_IPO_ON" if comp.gp2m.mute else "MUTE_IPO_OFF")
     row = layout.row(align=True)
@@ -604,6 +610,7 @@ def draw_play(layout, scene, comp=None):
         col = layout.column(align=True)
         col.use_property_split = True
         col.use_property_decorate = False
+        col.prop(comp.gp2m, "layer_channels")
         col.prop(comp.gp2m, "channel", text="Canale (0 = auto)")
         sub = col.column(align=True)
         sub.active = play.mode == "SEQUENCE"

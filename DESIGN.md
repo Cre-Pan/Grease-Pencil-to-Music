@@ -24,7 +24,9 @@ colore = voce).
 | Spessore / opacità / vertex color / morbidezza | mappatura scelta nelle Preferences, da menu con opzioni limitate |
 | Strumenti | sintetizzati, più "Campione" (un suono) e "Libreria" (SoundFont .sf2 / .sfz, non incluse) |
 | Effetti | per livello e per strumento: eco (ping-pong), riverbero (convoluzione), lo-fi; canone per livello |
-| Uscite | strip nel Video Sequencer (Play in Blender), export WAV, MP3, MIDI, overlay nella Timeline |
+| Uscite | una strip per livello nel Video Sequencer (o una col mix), export WAV, MP3, MIDI, overlay nella Timeline |
+| Volume dello spessore | assoluto (0,8 righe = pieno, come la web app), mai relativo agli altri tratti |
+| Suono finito per livello | parte lineare (ambiente, low cut) per livello; dinamica calcolata sul mix e applicata uguale a ogni livello: le strip sommate sono il mix |
 | Oggetto | un solo oggetto per composizione: la tavola è fatta di livelli bloccati dentro di esso |
 | Indipendenza | ogni composizione ha dati e materiali-strumento propri (anche dopo Shift+D / Alt+D) |
 | Ascolto | per scena: tutte insieme, solo l'attiva, una dopo l'altra (strip spostate, testina con offset) |
@@ -100,6 +102,10 @@ Note tecniche su Blender 5.2 / 5.3 emerse durante lo sviluppo:
   l'esecuzione automatica di Python disattivata;
 - il tempo di disegno di ogni punto è l'attributo `delta_time` (secondi dall'inizio del
   tratto); i tratti creati da script non lo hanno;
+- `strips.new_sound` accetta un canale già occupato, ma assegnare `strip.channel` su un canale
+  occupato sposta la strip più su: le strip dei livelli si ricreano sul canale giusto;
+  i nomi delle strip si tagliano a 63 byte, per cui composizione e livello stanno anche in
+  proprietà personalizzate della strip (`gp2m_composition`, `gp2m_layer`);
 - `SoundStrip.content_start` sposta una strip senza tagliarla (`frame_start` è deprecato);
 - cambiare `Sound.filepath` ricarica l'audio senza ricreare la strip (ma la durata
   della strip non si aggiorna: se cambia la lunghezza del loop la strip viene ricreata).

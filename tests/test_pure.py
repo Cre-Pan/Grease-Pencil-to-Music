@@ -1040,3 +1040,63 @@ def test_recorded_rooms():
     assert json.loads(web_project.dump(project))["state"]["room"] == "church"
     project.room = "HALL"
     assert "room" not in json.loads(web_project.dump(project))["state"]
+
+
+# --- Absolute thickness, stems --------------------------------------------------------
+
+def test_thickness_is_an_absolute_volume():
+    ref = interpret.full_radius(0.12)
+    assert interpret.thickness_level(ref, ref) == pytest.approx(1.0)
+    assert interpret.thickness_level(ref * 3, ref) == pytest.approx(1.0)
+    assert 0.06 <= interpret.thickness_level(ref / 100, ref) < 0.1
+    spec = interpret.BoardSpec(length=4.0)
+    thin = mixer.LayerInput("A", [stroke((0.2, 1.5), (5, 5), radius=0.01)])
+    thick = mixer.LayerInput("B", [stroke((2.0, 3.5), (9, 9), radius=0.3)])
+    alone = mixer.render([thin], spec, interpret.Mapping(), SR)
+    both = mixer.render([thin, thick], spec, interpret.Mapping(), SR, stems=True)
+    window = slice(int(0.5 * SR), int(1.2 * SR))
+    assert np.abs(both.stems[0][1][window]).max() == pytest.approx(
+        np.abs(alone.audio[window]).max(), rel=1e-4)
+
+
+def test_stems_add_up_to_the_mix_through_the_master_bus():
+    spec = interpret.BoardSpec(length=2.0)
+    layers = [mixer.LayerInput("A", [stroke((0.1, 1.0), (5, 5), radius=0.05)]),
+              mixer.LayerInput("B", [stroke((0.5, 1.8), (9, 9), radius=0.3)],
+                               fx=mixer.LayerFx(reverb_mix=0.4))]
+    for fx in (None, mixer.MasterFx()):
+        result = mixer.render(layers, spec, interpret.Mapping(), SR, master_fx=fx, stems=True)
+        assert [name for name, _a in result.stems] == ["A", "B"]
+        total = sum(audio for _name, audio in result.stems)
+        assert np.abs(total - result.audio).max() < 1e-4
+        plain = mixer.render(layers, spec, interpret.Mapping(), SR, master_fx=fx)
+        assert np.abs(plain.audio - result.audio).max() < 1e-5
+        assert plain.key == result.key
+
+
+def test_one_layer_mixed_again_with_the_others_sound():
+    spec, mapping = interpret.BoardSpec(length=2.0), interpret.Mapping()
+    a = mixer.LayerInput("A", [stroke((0.1, 1.0), (5, 5))])
+    b = mixer.LayerInput("B", [stroke((0.5, 1.8), (9, 9))])
+    b2 = mixer.LayerInput("B", [stroke((0.5, 1.8), (12, 12))])
+    first = mixer.render_layers([a, b], spec, mapping, SR)
+    fresh = mixer.render_layers([b2], spec, mapping, SR)
+    partial = mixer.mix_layers([first[0], fresh[0]], spec, mapping, SR,
+                               master_fx=mixer.MasterFx(), stems=True)
+    full = mixer.render([a, b2], spec, mapping, SR, master_fx=mixer.MasterFx(), stems=True)
+    assert partial.key == full.key
+    assert np.abs(partial.audio - full.audio).max() < 1e-6
+
+
+def test_sections_keep_one_stem_per_layer():
+    spec = interpret.BoardSpec(length=2.0)
+    a = mixer.LayerInput("A", [stroke((0.1, 1.0), (5, 5))])
+    b = mixer.LayerInput("B", [stroke((0.5, 1.8), (9, 9))])
+    parts = [(0.0, 4.0, mixer.render([a, b], spec, interpret.Mapping(), SR, loop=False,
+                                     stems=True)),
+             (4.0, 6.0, mixer.render([a], spec, interpret.Mapping(), SR, loop=False,
+                                     stems=True))]
+    joined = mixer.sequence(parts, 2.0, SR, master_fx=mixer.MasterFx(), stems=True)
+    assert sorted(name for name, _a in joined.stems) == ["A", "B"]
+    total = sum(audio for _name, audio in joined.stems)
+    assert np.abs(total - joined.audio).max() < 1e-4

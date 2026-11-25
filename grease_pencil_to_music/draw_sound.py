@@ -22,7 +22,7 @@ import time
 
 import numpy as np
 
-from . import music
+from . import interpret, music
 
 IDLE_INTERVAL = 0.25  # seconds between checks outside Draw Mode
 DRAW_INTERVAL = 0.02  # seconds between checks in Draw Mode
@@ -94,11 +94,12 @@ def tip_pitch(z, spec, mode, rows=None):
     return int(lookup[index])
 
 
-def tip_volume(radius, max_radius, mapping):
-    """Playback volume from the thickness at the tip (thickness = volume)."""
-    if mapping.thickness not in ("VOLUME", "VOLUME_VIBRATO") or max_radius <= 0:
+def tip_volume(radius, full_radius, mapping):
+    """Playback volume from the thickness at the tip (thickness = volume), on the
+    same absolute scale as the rendered sound (``interpret.thickness_level``)."""
+    if mapping.thickness not in ("VOLUME", "VOLUME_VIBRATO") or full_radius <= 0:
         return 0.8
-    return float(np.clip(radius / max_radius, 0.15, 1.0)) * 0.8
+    return float(interpret.thickness_level(radius, full_radius)) * 0.8
 
 
 # --- Blender side ----------------------------------------------------------------
@@ -109,7 +110,6 @@ class _Live:
     pitch = None  # pitch being heard (quantized) or base pitch of the handle (optical)
     optical = False
     instrument = None
-    max_radius = 0.0
     started = 0.0
 
 
@@ -174,11 +174,9 @@ def _play(obj, tip, event):
     if event == "start":
         _silence()
         _Live.instrument = reader.material_instrument(material)
-        _Live.max_radius = 0.0
         _Live.optical = mode in OPTICAL_MODES
         _Live.started = time.monotonic()
-    _Live.max_radius = max(_Live.max_radius, radius)
-    volume = (tip_volume(radius, _Live.max_radius, prefs.get_mapping())
+    volume = (tip_volume(radius, interpret.full_radius(s.row_height), prefs.get_mapping())
               * reader.material_gain(material) * max(layer.opacity, 0.0))
     rate = int(s.sample_rate)
     if synth.get_instrument(_Live.instrument).percussive:

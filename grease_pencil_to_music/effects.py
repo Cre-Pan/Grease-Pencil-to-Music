@@ -205,11 +205,18 @@ def _blocks(buffer, stat):
     return stat(frames)
 
 
-def compress(buffer, rate, threshold_db=-16.0, ratio=2.5, knee_db=8.0, attack=0.012,
-             release=0.25):
+def compress(buffer, rate, **settings):
     """Soft-knee RMS compressor, both channels linked."""
     if len(buffer) == 0:
         return buffer
+    return buffer * compress_gain(buffer, rate, **settings)[:, None]
+
+
+def compress_gain(buffer, rate, threshold_db=-16.0, ratio=2.5, knee_db=8.0, attack=0.012,
+                  release=0.25):
+    """Per-sample gain of :func:`compress` (both channels linked)."""
+    if len(buffer) == 0:
+        return np.ones(0)
     level = _db(_blocks(buffer, lambda f: np.sqrt(np.mean(f ** 2, axis=(1, 2)) * 2.0)))
     over = level - threshold_db
     slope = 1.0 - 1.0 / ratio
@@ -217,7 +224,7 @@ def compress(buffer, rate, threshold_db=-16.0, ratio=2.5, knee_db=8.0, attack=0.
                          np.where(over >= knee_db / 2, slope * over,
                                   slope * (over + knee_db / 2) ** 2 / (2 * knee_db)))
     gain = _smooth(10.0 ** (-reduction / 20.0), rate, attack, release)
-    return buffer * _block_gain_to_samples(gain, len(buffer))[:, None]
+    return _block_gain_to_samples(gain, len(buffer))
 
 
 SOFT_CLIP_KNEE = 0.6
@@ -230,11 +237,23 @@ def soft_clip(buffer, knee=SOFT_CLIP_KNEE):
     return np.sign(buffer) * np.where(a < knee, a, shoulder)
 
 
-def limit(buffer, rate, ceiling_db=-1.0, lookahead=0.004, release=0.08):
+LIMIT_CEILING_DB = -1.0
+
+
+def limit(buffer, rate, ceiling_db=LIMIT_CEILING_DB, lookahead=0.004, release=0.08):
     """Brickwall limiter with lookahead: peaks above the ceiling are turned down
     smoothly before they arrive."""
     if len(buffer) == 0:
         return buffer
+    ceiling = 10.0 ** (ceiling_db / 20.0)
+    out = buffer * limit_gain(buffer, rate, ceiling_db, lookahead, release)[:, None]
+    return np.clip(out, -ceiling, ceiling)
+
+
+def limit_gain(buffer, rate, ceiling_db=LIMIT_CEILING_DB, lookahead=0.004, release=0.08):
+    """Per-sample gain of :func:`limit` (before its final clip)."""
+    if len(buffer) == 0:
+        return np.ones(0)
     ceiling = 10.0 ** (ceiling_db / 20.0)
     peak = _blocks(buffer, lambda f: np.max(np.abs(f), axis=(1, 2)))
     need = np.minimum(1.0, ceiling / np.maximum(peak, 1e-9))
@@ -244,8 +263,7 @@ def limit(buffer, rate, ceiling_db=-1.0, lookahead=0.004, release=0.08):
     need = np.minimum(need, np.concatenate((need[1:], need[-1:])))
     gain = _smooth(need, rate, 1e-5, release)
     gain = np.minimum(gain, np.concatenate((gain[1:], gain[-1:])))  # interpolation safety
-    out = buffer * _block_gain_to_samples(gain, len(buffer))[:, None]
-    return np.clip(out, -ceiling, ceiling)
+    return _block_gain_to_samples(gain, len(buffer))
 
 
 def _lowpass_kernel(rate, cutoff):
@@ -307,10 +325,21 @@ def master(buffer, rate, ambience=0.25, loop=True, wrap=2.0, room="HALL"):
     and the dynamics see the end of the loop before its start, so the joint
     stays seamless.
     """
-    n = len(buffer)
-    if n == 0:
+    if len(buffer) == 0:
         return buffer
+    linear = master_linear(buffer, rate, ambience, loop, room)
+    return master_dynamics([linear], rate, loop, wrap)[0]
+
+
+def master_linear(buffer, rate, ambience=0.25, loop=True, room="HALL"):
+    """The linear part of the master bus: the shared room and the low cut.
+
+    Being linear, it can be applied to each layer on its own: the layers then
+    add up to the same mix. Without ``loop`` the result is longer (room tail)."""
     out = np.asarray(buffer, dtype=np.float64)
+    n = len(out)
+    if n == 0:
+        return out
     if ambience > 0:
         dry = out
         wet = reverb(out.astype(np.float32), rate, 1.0, 0.55, room=room).astype(np.float64)
@@ -320,14 +349,41 @@ def master(buffer, rate, ambience=0.25, loop=True, wrap=2.0, room="HALL"):
             out = dry + _fold(wet, n)
         else:
             out = np.concatenate((dry, np.zeros((len(wet) - n, 2)))) + wet
-            n = len(out)
-    out = low_cut(out, rate)
+    return low_cut(out, rate)
+
+
+def master_dynamics(stems, rate, loop=True, wrap=2.0, want_stems=False):
+    """Glue compressor, soft saturation and limiter of the sum of ``stems``
+    (arrays of the same length, after :func:`master_linear`).
+
+    Returns ``(mix, stems)``. The dynamics are computed once on the sum, then
+    the same gain is applied to every stem, like a master bus: the processed
+    stems still add up to the mix (they are None unless ``want_stems``)."""
+    total = np.zeros((max((len(s) for s in stems), default=0), 2), dtype=np.float64)
+    for stem in stems:
+        total[:len(stem)] += stem
+    n = len(total)
+    if n == 0:
+        return total.astype(np.float32), ([] if want_stems else None)
     pre = min(int(wrap * rate), n) if loop else 0
+    x = np.concatenate((total[-pre:], total)) if pre else total
+    glue = compress_gain(x, rate)[:, None] * MASTER_MAKEUP
+    driven = x * glue
+    saturated = soft_clip(driven)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        shape = np.where(np.abs(driven) > 1e-12, saturated / driven, 1.0)
+    final = limit_gain(saturated, rate)[:, None]
+    ceiling = 10.0 ** (LIMIT_CEILING_DB / 20.0)
+    mix = np.clip(saturated * final, -ceiling, ceiling)
+    gain = glue * shape * final
     if pre:
-        out = np.concatenate((out[-pre:], out))
-    out = compress(out, rate)
-    out = soft_clip(out * MASTER_MAKEUP)
-    out = limit(out, rate)
-    if pre:
-        out = out[pre:]
-    return out.astype(np.float32)
+        mix, gain = mix[pre:], gain[pre:]
+    outs = None
+    if want_stems:
+        outs = []
+        for stem in stems:
+            stem = np.asarray(stem, dtype=np.float64)
+            if len(stem) < n:
+                stem = np.concatenate((stem, np.zeros((n - len(stem), 2))))
+            outs.append((stem * gain).astype(np.float32))
+    return mix.astype(np.float32), outs
