@@ -1494,6 +1494,14 @@ def test_installed_addon_plays_the_web_app_recordings(comp):
     assert sounds.endswith("sounds") and os.path.isfile(os.path.join(sounds, "rooms", "church.mp3"))
     assert len([d for d in os.listdir(os.path.join(sounds, "samples"))
                 if os.path.isdir(os.path.join(sounds, "samples", d))]) == 69
+    # Recordings shared by two instruments are in the zip once (sounds/samples/aliases.txt),
+    # and every note is decoded only when it first plays.
+    assert not os.path.exists(os.path.join(sounds, "samples", "STRINGS", "53.mp3"))
+    synth.SAMPLES.pop("S_STRINGS", None)
+    zones = synth.recorded_zones("S_STRINGS")
+    assert len(zones) == len(synth.RECORDINGS["S_STRINGS"].zones)
+    assert all(zone.data is None for zone in zones)
+    assert all(len(synth.zone_ready(zone).data) > 1000 for zone in zones)
     items = bpy.types.Material.bl_rna.properties["gp2m_instrument"].enum_items
     values = {item.identifier: item.value for item in items}
     old = ("SINE", "TRIANGLE", "SQUARE", "SAW", "STRINGS", "PLUCK", "BELL", "EPIANO", "MARIMBA",

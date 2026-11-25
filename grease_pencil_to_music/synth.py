@@ -159,6 +159,21 @@ class Zone:
     loop_end: int = 0
     gain: float = 1.0
     offset: int = 0  # where the sound starts (MP3 decoders add a little silence)
+    source: object = None  # () -> (data, rate, offset): the recording, read when first played
+
+
+def zone_ready(zone):
+    """The zone with its audio: a recorded note is decoded the first time it plays, so an
+    instrument costs only the notes that are drawn (time and memory)."""
+    if zone.source is not None:
+        try:
+            zone.data, zone.rate, zone.offset = zone.source()
+        except Exception as error:  # noqa: BLE001 - a missing file plays silence
+            print(f"[Doodle Music] nota registrata non letta: {error!r}")
+            zone.data, zone.offset = np.zeros(0, np.float32), 0
+        zone.loop_end = len(zone.data)
+        zone.source = None
+    return zone
 
 
 def register_sample(key, data, rate, root, loop):
@@ -439,7 +454,9 @@ def _recorded(voice, inst, freq, ts, sample_rate, brightness):
     if not zones:
         return np.zeros(len(ts))
     if inst.percussive:
-        zone = zones[0]
+        zone = zone_ready(zones[0])
+        if len(zone.data) < 2:
+            return np.zeros(len(ts))
         position = zone.offset + np.arange(len(ts)) * (zone.rate / sample_rate)
         hit = np.interp(position, np.arange(len(zone.data)), zone.data)
         hit *= position < len(zone.data) - 1
@@ -447,7 +464,7 @@ def _recorded(voice, inst, freq, ts, sample_rate, brightness):
             cut = max(voice.duration, HOLD_MIN)
             hit *= np.clip(1.0 - (ts - cut) / HOLD_FADE, 0.0, 1.0)
         return hit * (0.6 + 0.4 * float(np.mean(brightness))) * zone.gain
-    zone = pick_zone(zones, float(voice.pitch[0]))
+    zone = zone_ready(pick_zone(zones, float(voice.pitch[0])))
     if len(zone.data) < 2:
         return np.zeros(len(ts))
     ratio = freq / float(music.midi_to_freq(zone.root)) * (zone.rate / sample_rate)

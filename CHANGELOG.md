@@ -355,6 +355,38 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.16
+
+Più veloce e più leggero, con lo stesso suono
+
+Misurato con `tests/bench_perf.py` (3 livelli, 45 tratti, strumenti sintetici e registrati,
+eco e riverbero su un livello, *Suono finito* acceso). L'audio calcolato è lo stesso di prima
+(differenza massima sotto 1e-5 su mix e strip, verificata dal benchmark).
+
+| | 0.0.15 | 0.0.16 |
+|---|---|---|
+| Primo calcolo della composizione | 1,0 s | 0,7 s |
+| *Auto* dopo un tratto | 0,24 s | 0,19 s |
+| *Auto* quando non cambia niente (selezione, undo, cambio modo) | 70 ms | 7 ms |
+| *Rigenera* senza cambiamenti | 90 ms | 7 ms |
+| Prima nota di tutti gli strumenti registrati | 1,8 s | 0,2 s |
+| Memoria dei campioni dopo una nota di ogni strumento | 294 MB | 33 MB |
+| Zip | 15,9 MB | 14,9 MB |
+
+- **Strumenti registrati letti nota per nota**: scegliendo il pianoforte non vengono più
+  decodificate tutte le sue 23 registrazioni, ma solo quelle delle note che suonano, la prima
+  volta che servono. Il primo suono (anche disegnando dal vivo e con la tastiera) arriva prima e
+  la memoria resta piccola.
+- **Il mix finito resta in memoria**: quando una rigenerazione trova gli stessi livelli di prima
+  (un aggiornamento senza modifiche, un undo, *Rigenera*) il *Suono finito* non viene ricalcolato.
+- **Riverberi e low cut più rapidi**: una sola FFT di lunghezza veloce invece di blocchi, sui
+  canali contigui; la saturazione calcola la curva solo dove il suono la raggiunge.
+- **Meno lavoro per le strip**: per capire se il suono di un livello è cambiato i campioni
+  vengono confrontati direttamente invece di calcolarne l'hash.
+- **Zip più piccolo senza toccare la qualità**: le registrazioni identiche (6 note di
+  *Archi* e *Archi pizzicato*, uguali a quelle del violoncello) sono nello zip una volta sola e
+  gli MP3 sono compressi anche dallo zip.
+
 ## 0.0.15
 
 Pannelli più compatti, modificatori ed effetti per livello

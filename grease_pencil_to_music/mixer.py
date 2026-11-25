@@ -192,6 +192,7 @@ _interp_cache = _LRU(4096)
 _stroke_cache = _LRU(2048, 512 * MB)
 _layer_cache = _LRU(64, 256 * MB)
 _linear_cache = _LRU(64, 256 * MB)  # layers through the room of the master bus
+_mix_cache = _LRU(4, 128 * MB)  # finished mixes (and stems) of the last renders
 
 
 def clear_cache():
@@ -199,6 +200,7 @@ def clear_cache():
     _stroke_cache.clear()
     _layer_cache.clear()
     _linear_cache.clear()
+    _mix_cache.clear()
 
 
 class _Errors:
@@ -492,18 +494,27 @@ def mix_layers(sounds, spec, mapping, sample_rate=44100, loop=True, master_fx=No
     With ``stems`` the result also has every layer after the master bus
     (``result.stems``): played together they are the mix."""
     loop_n = max(1, int(round(spec.length * sample_rate)))
-    buffers = [sound.audio for sound in sounds] or [np.zeros((loop_n, 2), np.float32)]
-    buffers = [_pad(buffer, loop_n) for buffer in buffers]
-    keys = [sound.key for sound in sounds] if sounds else None
-    mix, outs = finish_stems(buffers, sample_rate, master_fx, loop, stems, keys)
     key = hashlib.blake2b(
         repr(([sound.key for sound in sounds], loop, context_key(spec, mapping, sample_rate),
               _master_key(master_fx))).encode(),
         digest_size=16).hexdigest()
+    cached = _mix_cache.get((key, bool(stems)))
+    if cached is not None:  # nothing changed (or undo): no master bus again
+        mix, outs = cached
+    else:
+        buffers = [sound.audio for sound in sounds] or [np.zeros((loop_n, 2), np.float32)]
+        buffers = [_pad(buffer, loop_n) for buffer in buffers]
+        keys = [sound.key for sound in sounds] if sounds else None
+        mix, outs = finish_stems(buffers, sample_rate, master_fx, loop, stems, keys)
+        mix = mix.astype(np.float32, copy=False)
+        if not any(sound.errors for sound in sounds):  # incomplete mixes are rendered again
+            for array in [mix] + list(outs or []):
+                array.flags.writeable = False  # shared with the next renders
+            _mix_cache.put((key, bool(stems)), (mix, outs))
     notes = [note for sound in sounds for note in sound.notes]
     curves = [curve for sound in sounds for curve in sound.curves]
     return RenderResult(
-        mix.astype(np.float32), sample_rate, notes, key,
+        mix, sample_rate, notes, key,
         sum(sound.voices for sound in sounds), curves,
         errors=sum(sound.errors for sound in sounds),
         stems=[(sound.name, out) for sound, out in zip(sounds, outs)] if stems else [],

@@ -14,6 +14,7 @@ CC0) and the reverb rooms (docs/app/rooms, CC BY-SA 4.0), with their licences.
 """
 
 import argparse
+import hashlib
 import pathlib
 import re
 import sys
@@ -56,13 +57,24 @@ def build(out_dir, platform=None):
             if name == MANIFEST:
                 archive.writestr(name, text)
             else:
-                archive.write(path, name)
+                archive.write(path, name, compresslevel=9)
         for folder, source in SOUNDS.items():
+            seen, aliases = {}, []
             for path in sorted(source.rglob("*")):
                 if path.is_file() and path.suffix in (".mp3", ".txt"):
-                    # MP3s are already compressed: stored, not deflated again.
-                    archive.write(path, f"sounds/{folder}/{path.relative_to(source).as_posix()}",
-                                  zipfile.ZIP_STORED if path.suffix == ".mp3" else None)
+                    name = path.relative_to(source).as_posix()
+                    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                    if path.suffix == ".mp3" and digest in seen:
+                        # The same recording under two instruments (cello and strings):
+                        # stored once, samples.py reads the copy from its twin.
+                        aliases.append(f"{name} {seen[digest]}")
+                        continue
+                    seen.setdefault(digest, name)
+                    # Deflated too: the MP3 frames still shrink by about 5%.
+                    archive.write(path, f"sounds/{folder}/{name}", zipfile.ZIP_DEFLATED, 9)
+            if aliases:
+                archive.writestr(f"sounds/{folder}/aliases.txt", "\n".join(aliases) + "\n",
+                                 zipfile.ZIP_DEFLATED, 9)
         for wheel in wheels:
             archive.write(wheel, f"wheels/{wheel.name}")
         archive.write(ROOT / "LICENSE", "LICENSE")
