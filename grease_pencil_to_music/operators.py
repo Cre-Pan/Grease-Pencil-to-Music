@@ -123,6 +123,33 @@ class GP2M_OT_add_composition(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class GP2M_OT_board_octaves(bpy.types.Operator):
+    """Mostra o nascondi un'ottava in cima o in fondo alla tavola, senza spostare il
+    disegno: i tratti restano dove sono e suonano le stesse note"""
+
+    bl_idname = "gp2m.board_octaves"
+    bl_label = "Ottave della tavola"
+    bl_options = {"REGISTER", "UNDO"}
+
+    edge: EnumProperty(items=(("TOP", "In cima", ""), ("BOTTOM", "In fondo", "")))
+    delta: IntProperty(default=1, min=-6, max=6)
+    name: StringProperty(options={"SKIP_SAVE"})
+
+    @classmethod
+    def description(cls, _context, properties):
+        where = "in cima" if properties.edge == "TOP" else "in fondo"
+        verb = "Mostra" if properties.delta > 0 else "Nascondi"
+        return f"{verb} un'ottava {where} alla tavola (il disegno non si sposta)"
+
+    def execute(self, context):
+        obj = bpy.data.objects.get(self.name) if self.name else context.active_object
+        if obj is None or not obj.gp2m.is_composition:
+            return {"CANCELLED"}
+        if not board.shift_octaves(obj, self.edge, self.delta):
+            return {"CANCELLED"}
+        return {"FINISHED"}
+
+
 class GP2M_OT_regenerate(bpy.types.Operator):
     """Rigenera subito il suono della composizione"""
 
@@ -908,6 +935,7 @@ def _target_group(gp):
 
 classes = (
     GP2M_OT_add_composition,
+    GP2M_OT_board_octaves,
     GP2M_OT_regenerate,
     GP2M_OT_rebuild_board,
     GP2M_OT_export,

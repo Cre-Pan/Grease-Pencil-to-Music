@@ -335,6 +335,56 @@ def vertical_extent(settings):
     return -0.15, top + 0.25
 
 
+MIN_LOW_NOTE, MAX_LOW_NOTE, MAX_OCTAVES = 12, 96, 7
+
+
+def octave_steps(settings, edge, delta):
+    """How many octaves (signed) can really be added (+) or hidden (-) at ``edge``."""
+    if edge == "TOP":
+        return max(1, min(MAX_OCTAVES, settings.octaves + delta)) - settings.octaves
+    if delta > 0:  # show more below: the lowest note goes down, the board grows
+        room = min((settings.low_note - MIN_LOW_NOTE) // 12, MAX_OCTAVES - settings.octaves)
+        return max(0, min(delta, room))
+    room = min((MAX_LOW_NOTE - settings.low_note) // 12, settings.octaves - 1)
+    return -max(0, min(-delta, room))
+
+
+def shift_octaves(comp, edge, delta):
+    """Show (delta > 0) or hide (delta < 0) octaves at the top or bottom of the board
+    without moving the drawing: every stroke stays where it is in the world and
+    plays the same notes.
+
+    The top only changes "Ottave". At the bottom the lowest note changes, so the
+    board origin (z = 0, the lowest row) moves down or up by whole octaves and the
+    strokes move the opposite way inside the object. Returns the octaves changed."""
+    import numpy as np
+    s = comp.gp2m
+    steps = octave_steps(s, edge, delta)
+    if not steps:
+        return 0
+    if edge == "TOP":
+        s.octaves += steps
+        return steps
+    dz = 12 * steps * s.row_height  # local z the strokes move up (down if negative)
+    for layer in user_layers(comp.data):
+        for frame in layer.frames:
+            attr = frame.drawing.attributes.get("position")
+            if attr is None or not len(attr.data):
+                continue
+            positions = np.empty(len(attr.data) * 3, dtype=np.float32)
+            attr.data.foreach_get("vector", positions)
+            positions[2::3] += dz
+            attr.data.foreach_set("vector", positions)
+            frame.drawing.tag_positions_changed()
+    from mathutils import Vector
+    world = comp.matrix_world.copy()
+    world.translation = world @ Vector((0.0, 0.0, -dz))
+    comp.matrix_world = world
+    s.octaves += steps  # rebuild and sound are deferred: one for both changes
+    s.low_note -= 12 * steps
+    return steps
+
+
 def key_width(settings):
     return max(0.6, 6.0 * settings.row_height)
 

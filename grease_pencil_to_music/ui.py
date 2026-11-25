@@ -672,12 +672,24 @@ def draw_board(layout, s):
     low = s.low_note
     col.prop(s, "low_note", text=f"Nota più bassa ({music.note_name(low, style)})")
     col.prop(s, "octaves", text=f"Ottave (fino a {music.note_name(low + s.octaves * 12, style)})")
+    _octave_buttons(col)
     col.prop(s, "key_labels")
     col = layout.column(align=True)
     col.prop(s, "row_height")
     col.prop(s, "seconds_width")
     layout.prop(s, "show_beats")
     layout.operator("gp2m.rebuild_board", icon="GRID")
+
+
+def _octave_buttons(layout):
+    """Octaves on top / at the bottom: the drawing stays where it is."""
+    row = layout.row(align=True)
+    for edge, label in (("TOP", "Sopra"), ("BOTTOM", "Sotto")):
+        sub = row.row(align=True)
+        sub.label(text=label)
+        for delta, icon in ((1, "ADD"), (-1, "REMOVE")):
+            op = sub.operator("gp2m.board_octaves", text="", icon=icon)
+            op.edge, op.delta = edge, delta
 
 
 def draw_reading(layout, s):

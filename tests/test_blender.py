@@ -2207,3 +2207,30 @@ def test_hide_lock_duplicate_remove_and_stack(comp):
     assert bpy.ops.gp2m.composition_remove() == {"FINISHED"}
     assert bpy.data.objects.get(name) is None and bpy.data.objects.get(grid_name) is None
     assert not [s for s in scene.sequence_editor.strips_all if s.get(engine.OWNER_KEY) == name]
+
+
+def test_octaves_below_and_above_keep_the_drawing(comp):
+    board = sub("board")
+    engine = sub("engine")
+    from mathutils import Vector
+    s = comp.gp2m
+    s.low_note, s.octaves = 48, 2
+    board.rebuild(comp)
+    add_stroke(comp, 0, line(comp, 0.5, 2.0, 60))
+    layer = board.user_layers(comp.data)[0]
+    world = lambda: [tuple(comp.matrix_world @ Vector(p.position))
+                     for p in layer.frames[0].drawing.strokes[-1].points]
+    before = world()
+    notes = sorted({round(n.pitch) for n in engine.regenerate(comp).notes})
+    assert bpy.ops.gp2m.board_octaves(edge="BOTTOM", delta=1, name=comp.name) == {"FINISHED"}
+    assert (s.low_note, s.octaves) == (36, 3)
+    assert np.allclose(world(), before, atol=1e-4)  # the drawing has not moved
+    board.rebuild(comp)
+    assert sorted({round(n.pitch) for n in engine.regenerate(comp).notes}) == notes
+    assert bpy.ops.gp2m.board_octaves(edge="TOP", delta=1, name=comp.name) == {"FINISHED"}
+    assert (s.low_note, s.octaves) == (36, 4)
+    assert bpy.ops.gp2m.board_octaves(edge="BOTTOM", delta=-1, name=comp.name) == {"FINISHED"}
+    assert (s.low_note, s.octaves) == (48, 3)
+    assert np.allclose(world(), before, atol=1e-4)
+    s.low_note = 12
+    assert board.octave_steps(s, "BOTTOM", 1) == 0  # no room below C0
