@@ -412,6 +412,9 @@ def test_panels_menus_and_preferences_draw(comp):
         "material": comp.material_slots[0].material})())
     ui.GP2M_PT_material.draw_header_preset(_Drawer(log), bpy.context)
     ui.GP2M_MT_layer_specials.draw(_Drawer(log), bpy.context)
+    table = sub("table").GP2M_PT_compositions
+    table.draw(_Drawer(log), bpy.context)
+    table.draw_header_preset(_Drawer(log), bpy.context)
     for panel in sub("help").classes:
         panel.draw(_Drawer(log), bpy.context)
     # The Material panel needs context.material (Properties editor only).
@@ -448,7 +451,9 @@ def test_panels_menus_and_preferences_draw(comp):
             "transpose_steps", "fade_direction", "noise_pitch", "use_echo", "delay_mix",
             "use_reverb", "use_lofi", "canon_voices", "use_master", "ambience",
             "gp2m.copy_layer_settings", "gp2m.paste_layer_settings",
-            "GP2M_PT_help_modifiers"} <= drawn
+            "GP2M_PT_help_modifiers", "GP2M_PT_help_table", "GP2M_UL_compositions",
+            "gp2m.composition_move", "gp2m.composition_toggle", "gp2m.table_stack",
+            "gp2m.board_octaves"} <= drawn
     assert sum(1 for entry in log if entry[0] == "markdown") == len(sub("help").classes)
 
 

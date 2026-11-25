@@ -29,6 +29,25 @@ Altre impostazioni in *Proprietà → Dati oggetto* (tavola, lettura, livelli) e
 **Con la web app**: *File → Importa / Esporta → Progetto Doodle Music web (.json)*
 porta lo stesso disegno tra l'iPad e Blender.
 """,
+    "TABLE": """\
+## Il tavolo delle composizioni
+
+Le composizioni stanno nella lista come i livelli: **in alto la più alta nel
+Video Sequencer**. Una nuova composizione è un nuovo livello: va sopra le altre,
+sul tavolo e nella timeline, e salta i canali dove c'è già una clip (anche un
+video aggiunto dopo la fa salire).
+
+- **Occhio** e **lucchetto** valgono per la composizione e la sua tavola.
+- **Su / giù** scambiano i canali con la vicina.
+- **Riordina** impila tutte le tavole, la più bassa resta dov'è.
+
+**Maniglie** (solo in Object Mode, si trascinano):
+
+- a **destra**: la durata (aggancio ai battiti, *Ctrl* libera);
+- la **goccia** sulla testina: sposta il cursore della timeline;
+- **sopra e sotto la tastiera**: mostrano o nascondono un'ottava.
+  Il disegno non si sposta e suona le stesse note.
+""",
     "READING": """\
 ## Le cinque letture
 
@@ -111,6 +130,7 @@ GP2M_PT_help_reading = _help_panel("READING")
 GP2M_PT_help_instrument = _help_panel("INSTRUMENT")
 GP2M_PT_help_export = _help_panel("EXPORT")
 GP2M_PT_help_modifiers = _help_panel("MODIFIERS")
+GP2M_PT_help_table = _help_panel("TABLE")
 
 
 def button(layout, key):
@@ -119,4 +139,4 @@ def button(layout, key):
 
 
 classes = (GP2M_PT_help_main, GP2M_PT_help_reading, GP2M_PT_help_instrument,
-           GP2M_PT_help_export, GP2M_PT_help_modifiers)
+           GP2M_PT_help_export, GP2M_PT_help_modifiers, GP2M_PT_help_table)

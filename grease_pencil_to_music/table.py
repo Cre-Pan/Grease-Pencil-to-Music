@@ -208,6 +208,10 @@ class GP2M_PT_compositions(bpy.types.Panel):
     bl_category = "Musica"
     bl_label = "Composizioni"
 
+    def draw_header_preset(self, _context):
+        from . import help
+        help.button(self.layout, "TABLE")
+
     def draw(self, context):
         draw_list(self.layout, context)
 

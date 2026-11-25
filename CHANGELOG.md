@@ -355,6 +355,33 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.22
+
+Il viewport come un tavolo: composizioni come livelli e maniglie disegnate
+
+- **Composizioni come livelli**: nella sidebar (*Musica → Composizioni*) le composizioni
+  della scena sono in una lista come i livelli, in alto la più alta nel Video Sequencer.
+  Per ognuna canale, muto, occhio e lucchetto (valgono anche per la sua tavola); accanto
+  aggiungi, duplica, elimina, su / giù (scambiano i canali con la vicina), inquadra e
+  **Riordina** (impila le tavole nell'ordine dei canali). Cliccando una riga la
+  composizione viene selezionata.
+- **Una nuova composizione è un nuovo livello**: nel Sequencer va sopra tutte le altre e
+  salta i canali che hanno già una clip; sul tavolo nasce sopra la più alta, allineata,
+  invece che sul 3D cursor sopra le altre. Se dopo si aggiunge una clip (un video) su un
+  suo canale, o un livello in più trova il canale occupato, la composizione sale fino
+  ai primi canali liberi: le clip non vengono mai spostate.
+- **Ottave sopra e sotto senza spostare il disegno** (*Tavola e tempo → Sopra / Sotto*,
+  o con le maniglie): aggiungere un'ottava sotto abbassa la nota più bassa e allarga la
+  tavola verso il basso, ma ogni tratto resta dov'è nel mondo e suona le stesse note.
+- **Maniglie disegnate (rig) in Object Mode**: *<composizione> · Rig* è un terzo
+  Grease Pencil, bloccato e mai renderizzato, con maniglie a tratto: a destra la durata
+  (si aggancia ai battiti, *Ctrl* per un valore libero; con *Segui In/Out* sposta l'End
+  della scena), una goccia sulla testina che sposta il cursore della timeline, e sopra
+  e sotto la tastiera le ottave. Si trascinano direttamente (sono gizmo invisibili sopra
+  i tratti, quindi il click non seleziona la tavola); mentre trascini si muove solo la
+  maniglia, tavola e suono cambiano al rilascio, con un solo passo di Annulla. In Draw,
+  Edit e Sculpt Mode spariscono.
+
 ## 0.0.21
 
 La griglia è un Grease Pencil a parte
