@@ -2384,3 +2384,19 @@ def test_layers_live_in_one_meta_clip(comp):
     assert engine.meta_strip(scene, comp) is None
     assert engine.top_strip(scene, comp).type == "SOUND"
     comp.gp2m.layer_channels = True
+
+
+def test_rig_handle_selection_and_g(comp):
+    rig = sub("rig")
+    assert rig.selected() is None
+    rig.select(comp.name, rig.LENGTH)
+    assert rig.selected() == (comp.name, rig.LENGTH)
+    assert "bl_rna" in rig.GP2M_OT_rig_grab.__dict__
+    # G is bound in Object Mode (before Blender's Move), so with no handle it moves objects.
+    items = [item for km, item in rig._keymaps if item.idname == "gp2m.rig_grab"]
+    assert items and items[0].type == "G"
+    # Idle handles are muted, not the full white of a hovered one.
+    colors = sub("theme").handle_colors(bpy.context)
+    assert sum(colors["idle"]) < sum(colors["hover"]) and colors["rim_idle"][3] < colors["rim"][3]
+    rig.select(None, None)
+    assert rig.selected() is None

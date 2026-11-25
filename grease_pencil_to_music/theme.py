@@ -103,13 +103,15 @@ def handle_colors(context=None):
     t = colors(context)
     accent = t["object_active"][:3]
     return {
-        "idle": HANDLE_COLOR,
+        # "Off" until the mouse comes: a muted grey, half way to the theme background.
+        "idle": mix(HANDLE_COLOR, t["back"], 0.45),
+        "rim_idle": (0.0, 0.0, 0.0, 0.3),
+        "glyph_idle": mix(GLYPH_COLOR, t["back"], 0.35),
         "hover": mix(HANDLE_COLOR, accent, 0.7),
         "active": accent,
         "rim": HANDLE_RIM,
         "glyph": GLYPH_COLOR,
         "playhead": t["playhead"][:3],
-        "playhead_hover": mix(t["playhead"], (1.0, 1.0, 1.0), 0.25),
         "text": t["text_hi"][:3],
     }
 

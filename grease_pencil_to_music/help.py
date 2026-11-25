@@ -48,6 +48,8 @@ video aggiunto dopo la fa salire).
 - a **destra**: la durata (aggancio ai battiti, *Ctrl* libera);
 - il **riquadro** con il fotogramma in cima alla testina: sposta il cursore della timeline;
 - **sopra e sotto la tastiera**: mostrano o nascondono un'ottava.
+
+Un clic seleziona una maniglia, **G** la sposta con il mouse (clic conferma, Esc annulla).
   Il disegno non si sposta e suona le stesse note.
 """,
     "READING": """\

@@ -31,9 +31,11 @@ def register():
     timeline.register()
     draw_sound.register()
     theme.register()
+    rig.register_keymap()
 
 
 def unregister():
+    rig.unregister_keymap()
     theme.unregister()
     draw_sound.unregister()
     timeline.unregister()

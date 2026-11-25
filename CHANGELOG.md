@@ -355,6 +355,23 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.24
+
+Ritocchi al rig
+
+- Niente più messaggio in alto nel viewport: le maniglie non hanno il tooltip e durante il
+  trascinamento l'header resta com'è. Il valore (durata in secondi, ottave) compare accanto
+  alla maniglia mentre la sposti.
+- Maniglie "spente" quando il mouse non è sopra: grigie e più trasparenti; si accendono
+  al passaggio del mouse e prendono il colore dell'*Oggetto attivo* quando le selezioni
+  o le trascini.
+- **Clic per selezionare, G per spostare**: un clic su una maniglia la seleziona; premendo
+  **G** la sposti con il mouse come un oggetto (clic o Invio conferma, Esc o tasto destro
+  annulla). Un clic altrove o Esc la deseleziona. Senza maniglia selezionata G sposta gli
+  oggetti come sempre.
+- Il riquadro della testina ha sempre il colore esatto della testina della Timeline (prima
+  sotto il mouse diventava più chiaro); hover e selezione si vedono sul bordo.
+
 ## 0.0.23
 
 Rig in stile Frame by Plane e colori del tema di Blender

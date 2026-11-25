@@ -125,6 +125,8 @@ def triangle(cx, cz, dx, dz, size):
     return [tip, left, right]
 
 
+LABEL_OFFSET = {LENGTH: (PAD + 20.0, 0.0), OCT_TOP: (PAD + 22.0, PAD + 7.0),
+                OCT_BOTTOM: (PAD + 22.0, -(PAD + 7.0))}  # value shown while dragging
 HEAD_BOX_HH = 8.0  # half height of the playhead box (pixels); its centre is this high + 3
 
 
@@ -239,15 +241,10 @@ def frame_at(scene, comp, x):
     return int(round(scene.frame_start + offset + seconds * fps))
 
 
-class GP2M_OT_rig_drag(bpy.types.Operator):
-    """Trascina la maniglia: durata, testina o ottave della tavola"""
+class _HandleMove:
+    """Shared by the drag of a handle and G on the selected one."""
 
-    bl_idname = "gp2m.rig_drag"
-    bl_label = "Trascina maniglia"
-    bl_options = {"REGISTER", "UNDO", "BLOCKING", "INTERNAL"}
-
-    name: StringProperty()
-    handle: EnumProperty(items=HANDLE_ITEMS)
+    grab = False  # G: follow the mouse until a click (Enter) confirms
 
     def _comp(self):
         obj = bpy.data.objects.get(self.name)
@@ -257,78 +254,186 @@ class GP2M_OT_rig_drag(bpy.types.Operator):
         comp = self._comp()
         if comp is None or context.area is None or context.area.type != "VIEW_3D":
             return {"CANCELLED"}
-        point = board_point(context, comp, (event.mouse_region_x, event.mouse_region_y))
+        mouse = (event.mouse_region_x, event.mouse_region_y)
+        point = board_point(context, comp, mouse)
         if point is None:
             return {"CANCELLED"}
         self.start = point
+        self.mouse = mouse
+        self.moved = False
         self.frame = context.scene.frame_current
+        self.length = comp.gp2m.length
+        self.head_x = playhead_x(comp, context.evaluated_depsgraph_get())
         self.value = None
-        _drag[(self.name, self.handle)] = (0.0, 0.0)
+        _drag[(self.name, self.handle)] = (0.0, 0.0, "")
         context.window_manager.modal_handler_add(self)
-        self._update(context, event)
+        if self.grab:
+            self.moved = True
         return {"RUNNING_MODAL"}
 
     def _update(self, context, event):
         comp = self._comp()
-        point = board_point(context, comp, (event.mouse_region_x, event.mouse_region_y))
-        if comp is None or point is None:
+        mouse = (event.mouse_region_x, event.mouse_region_y)
+        if not self.moved:
+            if abs(mouse[0] - self.mouse[0]) + abs(mouse[1] - self.mouse[1]) < 4:
+                return  # a click selects the handle, it does not move it
+            self.moved = True
+        point = board_point(context, comp, mouse) if comp is not None else None
+        if point is None:
             return
         s = comp.gp2m
         key = (self.name, self.handle)
-        x, z = point
+        dx, dz = point[0] - self.start[0], point[1] - self.start[1]
         if self.handle == HEAD:
-            frame = frame_at(context.scene, comp, x)
+            frame = frame_at(context.scene, comp, self.head_x + dx)
             if context.scene.frame_current != frame:
                 context.scene.frame_current = frame
             self.value = frame
-            context.area.header_text_set(f"Testina: fotogramma {frame}")
+            _drag[key] = (0.0, 0.0, "")
         elif self.handle == LENGTH:
-            seconds = snap_length(s, x / max(s.seconds_width, 1e-9), event.ctrl)
+            seconds = snap_length(s, self.length + dx / max(s.seconds_width, 1e-9), event.ctrl)
             self.value = seconds
-            _drag[key] = ((seconds - s.length) * s.seconds_width, 0.0)
-            context.area.header_text_set(
-                f"Durata: {seconds:g} s   (Ctrl: senza aggancio ai battiti)")
+            _drag[key] = ((seconds - s.length) * s.seconds_width, 0.0, f"{seconds:g} s")
         else:
             octave = 12 * s.row_height
-            steps = round((z - self.start[1]) / octave)
+            steps = round(dz / octave)
             if self.handle == OCT_BOTTOM:
                 steps = -steps  # dragging down shows more octaves below
             edge = "TOP" if self.handle == OCT_TOP else "BOTTOM"
             steps = board.octave_steps(s, edge, steps)
             self.value = steps
-            _drag[key] = (0.0, steps * octave * (1.0 if edge == "TOP" else -1.0))
             sign = "+" if steps > 0 else ""
-            context.area.header_text_set(
-                f"Ottave {'sopra' if edge == 'TOP' else 'sotto'}: {sign}{steps}")
+            _drag[key] = (0.0, steps * octave * (1.0 if edge == "TOP" else -1.0),
+                          f"{sign}{steps} ott." if steps else "")
         context.area.tag_redraw()
 
-    def _reset_preview(self, comp=None):
+    def _reset_preview(self):
         _drag.pop((self.name, self.handle), None)
         board.tag_redraw_views()
 
+    def _cancel(self, context):
+        self._reset_preview()
+        context.scene.frame_current = self.frame
+        return {"CANCELLED"}
+
     def modal(self, context, event):
-        if event.type == "MOUSEMOVE":
+        if event.type in {"MOUSEMOVE", "INBETWEEN_MOUSEMOVE"}:
             self._update(context, event)
             return {"RUNNING_MODAL"}
-        if event.type in {"LEFTMOUSE", "RET", "NUMPAD_ENTER"} and event.value == "RELEASE":
-            return self._finish(context)
         if event.type in {"ESC", "RIGHTMOUSE"} and event.value == "PRESS":
-            comp = self._comp()
-            self._reset_preview(comp)
-            context.scene.frame_current = self.frame
-            context.area.header_text_set(None)
-            return {"CANCELLED"}
+            return self._cancel(context)
+        confirm = {"RET", "NUMPAD_ENTER"}
+        if event.type in confirm and event.value == "PRESS":
+            return self._finish(context)
+        if event.type == "LEFTMOUSE" and event.value == ("PRESS" if self.grab else "RELEASE"):
+            return self._finish(context)
         if event.type in {"LEFT_CTRL", "RIGHT_CTRL"}:
             self._update(context, event)
         return {"RUNNING_MODAL"}
 
     def _finish(self, context):
-        context.area.header_text_set(None)
         comp = self._comp()
+        self._reset_preview()
         if comp is None:
             return {"CANCELLED"}
-        self._reset_preview(comp)
+        if not self.moved:  # a click: select the handle (G then moves it)
+            select(self.name, self.handle)
+            return {"CANCELLED"}
+        select(self.name, self.handle)
         return {"FINISHED"} if apply(comp, self.handle, self.value) else {"CANCELLED"}
+
+
+# --- Selection (a clicked handle; G moves it) ------------------------------------------------
+
+_selected = [None]  # (composition name, handle) or None
+
+
+def select(name, handle):
+    _selected[0] = (name, handle) if name else None
+    board.tag_redraw_views()
+
+
+def selected():
+    key = _selected[0]
+    if key is None:
+        return None
+    obj = bpy.data.objects.get(key[0])
+    if obj is None or obj.type != "GREASEPENCIL" or not obj.gp2m.is_composition:
+        _selected[0] = None
+        return None
+    return key
+
+
+class GP2M_OT_rig_drag(_HandleMove, bpy.types.Operator):
+    """Trascina la maniglia (clic: la selezioni, poi G per spostarla)"""
+
+    bl_idname = "gp2m.rig_drag"
+    bl_label = "Trascina maniglia"
+    bl_options = {"REGISTER", "UNDO", "BLOCKING", "INTERNAL"}
+
+    name: StringProperty()
+    handle: EnumProperty(items=HANDLE_ITEMS)
+
+
+class GP2M_OT_rig_grab(_HandleMove, bpy.types.Operator):
+    """Sposta la maniglia selezionata con il mouse, come G"""
+
+    bl_idname = "gp2m.rig_grab"
+    bl_label = "Sposta maniglia"
+    bl_options = {"REGISTER", "UNDO", "BLOCKING", "INTERNAL"}
+    grab = True
+
+    name: StringProperty(options={"HIDDEN", "SKIP_SAVE"})
+    handle: EnumProperty(items=HANDLE_ITEMS, options={"HIDDEN", "SKIP_SAVE"})
+
+    @classmethod
+    def poll(cls, context):
+        return (context.mode == "OBJECT" and context.area is not None
+                and context.area.type == "VIEW_3D" and selected() is not None)
+
+    def invoke(self, context, event):
+        self.name, self.handle = selected()
+        return _HandleMove.invoke(self, context, event)
+
+
+class GP2M_OT_rig_deselect(bpy.types.Operator):
+    """Deseleziona la maniglia (clic altrove o Esc); il clic prosegue verso la scena"""
+
+    bl_idname = "gp2m.rig_deselect"
+    bl_label = "Deseleziona maniglia"
+    bl_options = {"INTERNAL"}
+
+    @classmethod
+    def poll(cls, context):
+        return selected() is not None
+
+    def invoke(self, context, event):
+        select(None, None)
+        return {"PASS_THROUGH"}
+
+
+_keymaps = []
+
+
+def register_keymap():
+    kc = bpy.context.window_manager.keyconfigs.addon
+    if kc is None:
+        return
+    # "Object Mode" comes before "3D View", where G is Blender's Move: with no handle
+    # selected the poll fails and G goes on to move objects as usual.
+    km = kc.keymaps.new(name="Object Mode")
+    _keymaps.append((km, km.keymap_items.new(GP2M_OT_rig_grab.bl_idname, "G", "PRESS")))
+    for key in ("LEFTMOUSE", "ESC"):
+        _keymaps.append((km, km.keymap_items.new(GP2M_OT_rig_deselect.bl_idname, key, "PRESS")))
+
+
+def unregister_keymap():
+    for km, item in _keymaps:
+        try:
+            km.keymap_items.remove(item)
+        except (ReferenceError, RuntimeError):
+            pass
+    _keymaps.clear()
 
 
 def apply(comp, handle, value):
@@ -394,26 +499,35 @@ class GP2M_GT_handle(bpy.types.Gizmo):
         if self.gp2m_body is None:
             return
         colors = theme.handle_colors(context)
-        dragged = (self.gp2m_comp, self.gp2m_handle) in _drag
+        key = (self.gp2m_comp, self.gp2m_handle)
+        dragged = key in _drag
+        chosen = dragged or _selected[0] == key
+        glyph = colors["glyph"]
         if self.gp2m_handle == HEAD:
-            body = colors["playhead_hover"] if (self.is_highlight or dragged) \
-                else colors["playhead"]
-        elif dragged:
-            body = colors["active"]
+            # Exactly the Timeline's playhead; hover / selection show on the rim.
+            body = colors["playhead"]
+            rim = (*colors["active"], 1.0) if chosen else \
+                (*colors["hover"], 0.9) if self.is_highlight else colors["rim"]
+        elif chosen:
+            body, rim = colors["active"], colors["rim"]
         elif self.is_highlight:
-            body = colors["hover"]
-        else:
-            body = colors["idle"]
-        rim = colors["rim"]
+            body, rim = colors["hover"], colors["rim"]
+        else:  # "off": quiet until the mouse comes
+            body, rim, glyph = colors["idle"], colors["rim_idle"], colors["glyph_idle"]
         self._part(self.gp2m_rim, rim[:3], rim[3])
         self._part(self.gp2m_body, body)
         if self.gp2m_glyphs is not None:
-            self._part(self.gp2m_glyphs, colors["glyph"])
+            self._part(self.gp2m_glyphs, glyph)
         if self.gp2m_handle == HEAD:
-            self._draw_frame(context, colors["text"])
+            self._draw_text(context, str(context.scene.frame_current), colors["text"],
+                            (0.0, HEAD_BOX_HH + 3.0), "CENTER")
+        elif dragged and _drag[key][2]:
+            self._draw_text(context, _drag[key][2], colors["text"], LABEL_OFFSET[self.gp2m_handle],
+                            "LEFT")
 
-    def _draw_frame(self, context, color):
-        """The current frame inside the playhead box, like in the Timeline."""
+    def _draw_text(self, context, text, color, offset, align):
+        """Text beside the handle (pixels from its anchor): the frame in the playhead
+        box, like in the Timeline, or the value while dragging."""
         region, rv3d = context.region, context.region_data
         if region is None or rv3d is None:
             return
@@ -422,7 +536,6 @@ class GP2M_GT_handle(bpy.types.Gizmo):
         if anchor is None:
             return
         ui = context.preferences.system.ui_scale
-        text = str(context.scene.frame_current)
         font = 0
         blf.size(font, 10.0 * ui)
         width, height = blf.dimensions(font, text)
@@ -433,8 +546,8 @@ class GP2M_GT_handle(bpy.types.Gizmo):
             gpu.matrix.load_identity()
             gpu.matrix.load_projection_matrix(ortho)
             blf.color(font, *color[:3], 1.0)
-            blf.position(font, round(anchor.x - width / 2.0),
-                         round(anchor.y + (HEAD_BOX_HH + 3.0) * ui - height / 2.0), 0.0)
+            x = anchor.x + offset[0] * ui - (width / 2.0 if align == "CENTER" else 0.0)
+            blf.position(font, round(x), round(anchor.y + offset[1] * ui - height / 2.0), 0.0)
             blf.draw(font, text)
 
     def draw_select(self, context, select_id):
@@ -476,6 +589,7 @@ class GP2M_GGT_rig(bpy.types.GizmoGroup):
             if key in self.handles:
                 continue
             gz = self.gizmos.new(GP2M_GT_handle.bl_idname)
+            gz.use_tooltip = False  # no message over the viewport
             gz.set_handle(key[1])
             gz.gp2m_comp = key[0]
             op = gz.target_set_operator(GP2M_OT_rig_drag.bl_idname)
@@ -498,7 +612,7 @@ class GP2M_GGT_rig(bpy.types.GizmoGroup):
             gz.hide = False
             x, z = handle_point(comp, handle, playhead_x(comp, depsgraph)
                                 if handle == HEAD else 0.0)
-            dx, dz = _drag.get((name, handle), (0.0, 0.0))
+            dx, dz, _label = _drag.get((name, handle), (0.0, 0.0, ""))
             world = comp.matrix_world
             location = world @ Vector((x + dx, RIG_DEPTH, z + dz))
             rotation = world.to_quaternion().to_matrix().to_4x4()
@@ -508,4 +622,5 @@ class GP2M_GGT_rig(bpy.types.GizmoGroup):
                 gz.set_handle(HEAD, len(str(context.scene.frame_current)))
 
 
-classes = (GP2M_OT_rig_drag, GP2M_GT_handle, GP2M_GGT_rig)
+classes = (GP2M_OT_rig_drag, GP2M_OT_rig_grab, GP2M_OT_rig_deselect, GP2M_GT_handle,
+           GP2M_GGT_rig)
