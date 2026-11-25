@@ -97,6 +97,9 @@ class GP2M_OT_add_composition(bpy.types.Operator):
             gp.materials.append(material)
         props.ensure_layer_settings(gp)
         s.follow_scene = p.new_follow_scene  # In/Out of the scene (or the scene takes its length)
+        # A new level of the timeline: above the other compositions and any clip.
+        s.channel = engine.new_composition_channel(
+            scene, len(board.user_layers(gp)) if s.layer_channels else 1)
 
         board.rebuild(obj, scene)
         for other in context.selected_objects:

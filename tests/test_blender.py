@@ -934,14 +934,51 @@ def test_sequencer_channels_auto_and_manual(comp):
     other = _fresh(None)
     assert comp.gp2m.channel > 0 and other.gp2m.channel > 0
     assert comp.gp2m.channel != other.gp2m.channel
-    other.gp2m.channel = 120  # far from the strips (one per layer) of the other tests
+    used = {strip.channel for strip in scene.sequence_editor.strips_all
+            if strip not in engine.composition_strips(scene, other)}
+    free = engine._block_from(1, engine._channel_count(scene, other), used)
+    other.gp2m.channel = free  # a free block chosen by hand is kept
     engine.arrange(scene)
-    assert engine.find_strip(scene, other).channel == 120
+    assert engine.find_strip(scene, other).channel == free
     copy = other.copy()  # Shift+D copies the channel too
     copy.data = other.data.copy()
     bpy.context.collection.objects.link(copy)
     engine.resolve_channels(scene)
     assert copy.gp2m.channel != other.gp2m.channel
+
+
+def test_new_composition_goes_above_clips_and_compositions(comp):
+    """A new composition is a new level of the timeline: above every composition,
+    skipping channels with clips; a clip added later on its channel pushes it up."""
+    engine = sub("engine")
+    scene = bpy.context.scene
+    editor = scene.sequence_editor
+    channel = 1  # the other tests leave compositions all over the channels
+    for obj in engine.scene_compositions(scene):
+        obj.gp2m.channel = channel
+        channel += engine._channel_count(scene, obj)
+    engine.arrange(scene)
+    top = max(o.gp2m.channel + engine._channel_count(scene, o) - 1
+              for o in engine.scene_compositions(scene) if o.gp2m.channel)
+    clip = editor.strips.new_effect("Clip video", "COLOR", top + 1, frame_start=1,
+                                    length=10)
+    try:
+        other = _fresh(None)
+        base = other.gp2m.channel
+        assert base == top + 2
+        channels = {strip.channel for strip in engine.composition_strips(scene, other)}
+        assert clip.channel == top + 1 and clip.channel not in channels
+        # A clip added later on one of its channels (after the sound, so Blender
+        # lets it there): the composition moves up, the clip stays.
+        later = editor.strips.new_effect("Clip dopo", "COLOR", base + 1, frame_start=5000,
+                                         length=10)
+        engine.arrange(scene)
+        assert later.channel == base + 1 and other.gp2m.channel > base + 1
+        channels = {strip.channel for strip in engine.composition_strips(scene, other)}
+        assert later.channel not in channels and clip.channel not in channels
+        editor.strips.remove(later)
+    finally:
+        editor.strips.remove(clip)
 
 
 def test_new_compositions_use_the_preferences(addon):

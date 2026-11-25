@@ -499,31 +499,60 @@ def find_strip(scene, obj):
     return min(strips, key=lambda strip: strip.channel) if strips else None
 
 
-def _free_channel(editor, exclude=None):
-    """Lowest channel without strips (the composition's own strip excluded)."""
-    used = {strip.channel for strip in editor.strips_all if strip.name != exclude}
-    channel = 1
-    while channel in used:
-        channel += 1
-    return channel
-
-
 MAX_CHANNEL = 128
+
+
+def _is_composition_strip(strip):
+    return strip.name.startswith(STRIP_PREFIX)
+
+
+def foreign_channels(editor):
+    """Channels holding strips that belong to no composition (videos, images, sounds
+    added by hand): a composition never shares them."""
+    if editor is None:
+        return set()
+    return {strip.channel for strip in editor.strips_all if not _is_composition_strip(strip)}
+
+
+def _block_from(start, count, used):
+    """First block of ``count`` channels from ``start`` up that avoids ``used``;
+    when the top of the Sequencer is reached, the first gap from channel 1."""
+    count = max(1, count)
+    for first in (max(1, start), 1):
+        base = first
+        while base + count - 1 <= MAX_CHANNEL:
+            if not any(channel in used for channel in range(base, base + count)):
+                return base
+            base += 1
+    return min(max(1, start), MAX_CHANNEL - count + 1)  # full: overlap rather than fail
 
 
 def _channel_block(editor, obj, count):
     """First of ``count`` consecutive channels for the composition: its 'Canale'
-    when set (as for the mix strip), otherwise the first block with no strips."""
-    if obj.gp2m.channel > 0:
-        return obj.gp2m.channel
+    when the whole block is free, otherwise the next free block above it (a
+    composition never lands on a channel with other clips)."""
     used = {strip.channel for strip in editor.strips_all
-            if not (strip.name.startswith(STRIP_PREFIX) and _owned(strip, obj))}
-    count = max(1, count)
-    base = 1
-    while base + count - 1 < MAX_CHANNEL and any(
-            channel in used for channel in range(base, base + count)):
-        base += 1
-    return base
+            if not (_is_composition_strip(strip) and _owned(strip, obj))}
+    return _block_from(obj.gp2m.channel or 1, count, used)
+
+
+def new_composition_channel(scene, count):
+    """Channel of a new composition: a new level of the timeline, above every other
+    composition, skipping channels that already hold clips."""
+    editor = scene.sequence_editor
+    used = set()
+    top = 0
+    if editor is not None:
+        for strip in editor.strips_all:
+            used.add(strip.channel)
+            if _is_composition_strip(strip):
+                top = max(top, strip.channel)
+    for obj in scene_compositions(scene):
+        if obj.gp2m.channel:
+            span = range(obj.gp2m.channel, obj.gp2m.channel + _channel_count(scene, obj))
+            used.update(span)
+            top = max(top, span[-1])
+    return _block_from(top + 1, count, used)
 
 
 def _remove_strip(editor, strip):
@@ -570,12 +599,11 @@ def _place_strip(scene, obj, path, frames):
             and old.duration == frames):
         old.sound.filepath = path  # reloads the audio
         return old
-    if obj.gp2m.channel > 0:
-        channel = obj.gp2m.channel
-    elif old is not None:
-        channel = old.channel
-    else:
-        channel = _free_channel(editor, strip_name(obj))
+    if obj.gp2m.channel == 0 and old is not None:
+        obj.gp2m.channel = old.channel
+    channel = _channel_block(editor, obj, 1)
+    if obj.gp2m.channel != channel:
+        obj.gp2m.channel = channel
     if old is not None:
         _remove_strip(editor, old)
     return _new_strip(scene, strip_name(obj), path, channel, tags={OWNER_KEY: obj.name})
@@ -717,22 +745,19 @@ def _channel_count(scene, obj):
 
 
 def resolve_channels(scene):
-    """Duplicated compositions copy the channel: give the copies free ones (with
-    'Un canale per livello' a composition takes one channel per layer)."""
-    taken = set()
+    """Every composition on channels of its own: duplicated compositions copy the
+    channel, and a clip added by hand on a composition's channel pushes the
+    composition up to the next free block (with 'Un canale per livello' a
+    composition takes one channel per layer). The clips are never moved."""
     editor = scene.sequence_editor
+    taken = foreign_channels(editor)
     for obj in sorted(scene_compositions(scene), key=lambda o: o.name):
+        if not obj.gp2m.channel:
+            continue
         count = _channel_count(scene, obj)
-        span = set(range(obj.gp2m.channel, obj.gp2m.channel + count))
-        if obj.gp2m.channel and span & taken:
-            channel = _free_channel(editor, strip_name(obj)) if editor else 0
-            channel = max(channel, 1)
-            while set(range(channel, channel + count)) & taken:
-                channel += 1
-            obj.gp2m.channel = channel
-            span = set(range(channel, channel + count))
-        if obj.gp2m.channel:
-            taken |= span
+        if set(range(obj.gp2m.channel, obj.gp2m.channel + count)) & taken:
+            obj.gp2m.channel = _block_from(obj.gp2m.channel, count, taken)
+        taken |= set(range(obj.gp2m.channel, obj.gp2m.channel + count))
 
 
 def arrange(scene):
@@ -757,6 +782,7 @@ def _arrange(scene):
     comps = scene_compositions(scene)
     if not comps:
         return
+    resolve_channels(scene)
     play = scene.gp2m_play
     fps = _fps(scene)
     linked = [obj for obj in comps if follows_scene(obj, scene)]
