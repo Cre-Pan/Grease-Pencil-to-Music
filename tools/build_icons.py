@@ -1,18 +1,22 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Draw the add-on's own UI icons (Blender has no headphones icon).
+"""Draw the add-on's own UI icons (Blender has no headphones icon, nor instruments).
 
     python tools/build_icons.py      # -> grease_pencil_to_music/icons/*.png
 
 Needs Pillow (development only: the PNGs are committed and shipped in the zip).
 White shapes on transparent, like Blender's icons; "off" is the same shape, dimmed.
+The instrument icons (``inst_<name>.png``) are drawn in tools/instrument_icons.py.
 """
 
 import pathlib
+import sys
 
 from PIL import Image, ImageDraw
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "grease_pencil_to_music" / "icons"
+sys.path.insert(0, str(ROOT / "tools"))
+import instrument_icons  # noqa: E402
 SIZE = 64
 SS = 4  # supersampling
 
@@ -64,6 +68,8 @@ def main():
     headphones((230, 230, 230, 120)).save(OUT / "solo_off.png")
     speaker((255, 255, 255, 255)).save(OUT / "audio_on.png")
     speaker((230, 230, 230, 120), crossed=True).save(OUT / "audio_off.png")
+    for name, draw in instrument_icons.ICONS.items():
+        draw((255, 255, 255, 255)).save(OUT / f"inst_{name}.png", optimize=True)
     print(f"Icons written to {OUT}")
 
 

@@ -8,7 +8,7 @@ sound. Inspired by the drawn sound of Norman McLaren and Daphne Oram.
 
 import bpy
 
-from . import (draw_sound, handlers, help, keyboard, midi_import, midi_input,  # noqa: F401
+from . import (draw_sound, handlers, help, icons, keyboard, midi_import, midi_input,  # noqa: F401
                operators, prefs, props, samples, timeline, ui, web_io)
 
 _classes = (props.classes + prefs.classes + help.classes + operators.classes + midi_import.classes
@@ -16,6 +16,8 @@ _classes = (props.classes + prefs.classes + help.classes + operators.classes + m
 
 
 def register():
+    icons.load()  # first: the instrument lists show them
+    props.build_instrument_items()
     for cls in _classes:
         bpy.utils.register_class(cls)
     samples.register()
@@ -39,3 +41,4 @@ def unregister():
     samples.unregister()
     for cls in reversed(_classes):
         bpy.utils.unregister_class(cls)
+    icons.free()

@@ -476,43 +476,37 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
 
 
 def _instrument_items():
-    """Every instrument, by family. The numbers are the instruments' places in
-    ``synth.INSTRUMENTS``, so .blend files saved by older versions (where the list was
-    shorter) keep their instruments."""
+    """Every instrument, by family (see families.py), with its icon. The numbers are the
+    instruments' places in ``synth.INSTRUMENTS``, so .blend files saved by older versions
+    (where the list was shorter or in another order) keep their instruments. Built when the
+    add-on is registered, after the icons are loaded."""
+    from . import families, icons
     number = {inst.ident: index for index, inst in enumerate(synth.INSTRUMENTS)}
     items, listed = [], set()
-    for title, idents in INSTRUMENT_FAMILIES:
-        items.append(("", title, ""))
-        for ident in idents:
-            inst = synth.INSTRUMENT_BY_ID[ident]
-            items.append((ident, inst.label, inst.description, number[ident]))
-            listed.add(ident)
-    rest = [i for i in synth.INSTRUMENTS if i.ident not in listed]
+
+    def item(ident):
+        inst = synth.INSTRUMENT_BY_ID[ident]
+        name, value = icons.instrument_icon(ident)
+        listed.add(ident)
+        return (ident, inst.label, inst.description, value or name, number[ident])
+
+    for family in families.ALL:
+        items.append(("", family.title, ""))
+        items += [item(ident) for ident in families.idents(family)]
+    rest = [i.ident for i in synth.INSTRUMENTS if i.ident not in listed]
     if rest:
         items.append(("", "Altri", ""))
-        items += [(i.ident, i.label, i.description, number[i.ident]) for i in rest]
+        items += [item(ident) for ident in rest]
     return items
 
 
-def _families():
-    """(title, add-on idents): the synths, then the web app's recorded families."""
-    from . import web_instruments
-    synths = (
-        ("Synth melodici", ("EPIANO", "ORGAN", "SINE", "TRIANGLE", "MARIMBA", "BELL", "PLUCK",
-                            "STRINGS", "CHOIR", "PAD", "BRASS", "SAW", "SQUARE", "BASS")),
-        ("Batteria synth", ("DRUM", "KICK", "SNARE", "CLAP", "HIHAT", "OPENHAT", "TOM", "RIM",
-                            "SHAKER", "CRASH", "COWBELL")),
-    )
-    recorded = tuple(
-        (title, tuple(synth.SAMPLED_PREFIX + w for w in ids
-                      if synth.SAMPLED_PREFIX + w in synth.RECORDINGS))
-        for title, ids in web_instruments.MELODIC_FAMILIES + web_instruments.DRUM_FAMILIES)
-    return synths + tuple(f for f in recorded if f[1]) + (
-        ("Suoni", ("SAMPLE", "LIBRARY")),)
+INSTRUMENT_ITEMS = []  # filled by build_instrument_items; Blender keeps no copy of them
 
 
-INSTRUMENT_FAMILIES = _families()
-INSTRUMENT_ITEMS = _instrument_items()
+def build_instrument_items():
+    """Fill INSTRUMENT_ITEMS (with the icons): before any class that lists instruments is
+    registered."""
+    INSTRUMENT_ITEMS[:] = _instrument_items()
 
 
 def _get_active_layer(gp_data):

@@ -409,8 +409,8 @@ def test_panels_menus_and_preferences_draw(comp):
     menu = _Drawer(log)
     ui.GP2M_MT_add_instrument.draw(menu, bpy.context)
     ui.GP2M_MT_change_instrument.draw(_Drawer(log), bpy.context)
-    for recorded in ui.CHANGE_RECORDED_MENUS:  # the web app's families, in submenus
-        recorded.draw(_Drawer(log), bpy.context)
+    for family in ui.ADD_FAMILY_MENUS + ui.CHANGE_FAMILY_MENUS:  # one submenu per family
+        family.draw(_Drawer(log), bpy.context)
     ui.VIEW3D_MT_gp2m_add.draw(_Drawer(log), bpy.context)
     ui.draw_export_menu(_Drawer(log), bpy.context)
     ui.draw_add_menu(_Drawer(log), bpy.context)
@@ -425,7 +425,7 @@ def test_panels_menus_and_preferences_draw(comp):
             "channel", "new_bpm", "volume_feedback", "gp2m.import_midi", "gp2m.export_web",
             "GP2M_PT_help_main", "GP2M_PT_help_reading", "GP2M_PT_help_instrument",
             "GP2M_PT_help_export", "GP2M_UL_layers", "GP2M_MT_change_instrument",
-            "gp2m.set_instrument", ui.CHANGE_RECORDED_MENUS[0].bl_idname,
+            "gp2m.set_instrument", ui.CHANGE_FAMILY_MENUS[0].bl_idname,
             "solo", "mute", "lock", "use_array", "array_count", "mirror_time",
             "transpose_steps", "fade_direction", "noise_pitch", "use_echo", "delay_mix",
             "use_reverb", "use_lofi", "canon_voices", "use_master", "ambience",
@@ -1868,3 +1868,18 @@ def test_layer_modifiers_effects_and_copy_paste(comp):
         item = props.find_layer_settings(comp.data, layer.name)
         assert item.use_fade and item.fade_direction == "BOTH" and item.mode == "OPTICAL"
         assert item.use_canon and item.name == layer.name
+
+
+def test_instrument_icons_are_loaded(addon):
+    icons, families = sub("icons"), sub("families")
+    for name in families.icon_names():  # (icon ids stay 0 without a GPU, as here)
+        assert "inst_" + name in icons._previews, name
+    assert icons.instrument_icon("SAMPLE") == ("FILE_SOUND", 0)
+    assert icons.instrument_icon("S_VIOLIN") in (("", icons.icon("inst_violin")), ("DOT", 0))
+    # The instrument list keeps the old numbers (saved files) and is in family order.
+    items = bpy.types.Material.bl_rna.properties["gp2m_instrument"].enum_items
+    numbers = {i.identifier: i.value for i in items}
+    synth = sub("synth")
+    assert numbers == {inst.ident: n for n, inst in enumerate(synth.INSTRUMENTS)}
+    order = [i.identifier for i in items]
+    assert order.index("S_FLUTE") < order.index("SINE") < order.index("S_TRUMPET")
