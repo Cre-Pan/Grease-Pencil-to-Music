@@ -5,7 +5,7 @@ import math
 import os
 
 import bpy
-from bpy.props import EnumProperty, IntProperty, StringProperty
+from bpy.props import BoolProperty, EnumProperty, IntProperty, StringProperty
 from mathutils import Euler, Vector
 
 from . import board, engine, props, synth
@@ -583,6 +583,9 @@ class GP2M_OT_duplicate_layer(bpy.types.Operator):
     bl_label = "Duplica livello"
     bl_options = {"REGISTER", "UNDO"}
 
+    empty_keyframes: BoolProperty(name="Keyframe vuoti", default=False,
+                                  description="Copia i keyframe senza i tratti")
+
     @classmethod
     def poll(cls, context):
         comp = active_composition(context)
@@ -593,7 +596,7 @@ class GP2M_OT_duplicate_layer(bpy.types.Operator):
         comp = active_composition(context)
         gp = comp.data
         with context.temp_override(active_object=comp, object=comp):
-            result = bpy.ops.grease_pencil.layer_duplicate(empty_keyframes=False)
+            result = bpy.ops.grease_pencil.layer_duplicate(empty_keyframes=self.empty_keyframes)
         if result != {"FINISHED"}:
             return {"CANCELLED"}
         _after_tree_change(comp)
@@ -692,6 +695,134 @@ class GP2M_OT_ungroup(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class GP2M_OT_layers_reveal(bpy.types.Operator):
+    """Mostra tutti i livelli e i gruppi (la tavola non cambia)"""
+
+    bl_idname = "gp2m.layers_reveal"
+    bl_label = "Mostra tutti"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return _composition_poll(context)
+
+    def execute(self, context):
+        gp = active_composition(context).data
+        for node, _depth in board.user_tree(gp):
+            if node.hide:
+                node.hide = False
+        return {"FINISHED"}
+
+
+class GP2M_OT_layers_hide_others(bpy.types.Operator):
+    """Nascondi tutti i livelli tranne quello attivo (la tavola non cambia)"""
+
+    bl_idname = "gp2m.layers_hide_others"
+    bl_label = "Nascondi gli altri"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return GP2M_OT_duplicate_layer.poll(context)
+
+    def execute(self, context):
+        gp = active_composition(context).data
+        active = gp.layers.active
+        keep = {active.name} | {group.name for group in board.ancestors(active)}
+        for node, _depth in board.user_tree(gp):
+            if board.is_group(node):
+                if node.name in keep and node.hide:
+                    node.hide = False
+                continue
+            hide = node.name not in keep
+            if node.hide != hide:
+                node.hide = hide
+        return {"FINISHED"}
+
+
+class GP2M_OT_layers_lock(bpy.types.Operator):
+    """Blocca o sblocca tutti i livelli (la tavola resta bloccata)"""
+
+    bl_idname = "gp2m.layers_lock"
+    bl_label = "Blocca tutti"
+    bl_options = {"REGISTER", "UNDO"}
+
+    lock: BoolProperty(name="Blocca", default=True)
+
+    @classmethod
+    def poll(cls, context):
+        return _composition_poll(context)
+
+    def execute(self, context):
+        gp = active_composition(context).data
+        for node, _depth in board.user_tree(gp):
+            if node.lock != self.lock:
+                node.lock = self.lock
+        return {"FINISHED"}
+
+
+def _layer_below(gp, layer):
+    layers = list(gp.layers)
+    index = [l.name for l in layers].index(layer.name)
+    return layers[index - 1] if index > 0 else None
+
+
+class GP2M_OT_merge_layer(bpy.types.Operator):
+    """Unisci il livello attivo a quello sotto, o tutti i livelli di un gruppo in uno.
+    Gli strumenti dei livelli uniti passano al livello che resta"""
+
+    bl_idname = "gp2m.merge_layer"
+    bl_label = "Unisci"
+    bl_options = {"REGISTER", "UNDO"}
+
+    mode: EnumProperty(items=(("ACTIVE", "Unisci sotto", ""), ("GROUP", "Unisci gruppo", "")))
+
+    @classmethod
+    def poll(cls, context):
+        comp = active_composition(context)
+        if comp is None:
+            return False
+        gp = comp.data
+        if _target_group(gp) is not None:
+            return True
+        layer = gp.layers.active
+        if layer is None or board.is_board_layer(layer):
+            return False
+        below = _layer_below(gp, layer)
+        return below is not None and not board.is_board_layer(below)
+
+    def execute(self, context):
+        comp = active_composition(context)
+        gp = comp.data
+        before = {layer.name for layer in board.user_layers(gp)}
+        if self.mode == "GROUP":
+            group = _target_group(gp)
+            if group is None:
+                return {"CANCELLED"}
+            gp.layer_groups.active = group
+        else:
+            layer = gp.layers.active
+            below = _layer_below(gp, layer) if layer is not None else None
+            if below is None or board.is_board_layer(below):
+                return {"CANCELLED"}
+        with context.temp_override(active_object=comp, object=comp):
+            result = bpy.ops.grease_pencil.layer_merge(mode=self.mode)
+        if result != {"FINISHED"} or gp.layers.active is None:
+            return {"CANCELLED"}
+        merged = gp.layers.active.name
+        gone = before - {layer.name for layer in board.user_layers(gp)}
+        for material in gp.materials:
+            if material is not None and getattr(material, "gp2m_layer", "") in gone:
+                material.gp2m_layer = merged
+        for index in reversed(range(len(gp.gp2m_layers))):
+            item = gp.gp2m_layers[index]
+            if item.name in gone and not item.is_group:
+                gp.gp2m_layers.remove(index)
+        _after_tree_change(comp)
+        use_instrument(comp, merged)
+        return {"FINISHED"}
+
+
 def _target_group(gp):
     """The active group, or the group of the active layer."""
     group = gp.layer_groups.active
@@ -719,4 +850,8 @@ classes = (
     GP2M_OT_add_group,
     GP2M_OT_move_to_group,
     GP2M_OT_ungroup,
+    GP2M_OT_layers_reveal,
+    GP2M_OT_layers_hide_others,
+    GP2M_OT_layers_lock,
+    GP2M_OT_merge_layer,
 )

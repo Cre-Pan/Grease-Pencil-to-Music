@@ -5,7 +5,7 @@ Everything lives in the composition's own Grease Pencil data, so a
 composition is one single object (no parent lines, Shift+D duplicates a whole
 work plane):
 
-* layer group "GP2M Tavola" (bottom, locked): background, grid, note rows,
+* layer group "Tavola Composizione" (bottom, locked): background, grid, note rows,
   piano keys, labels and the dark boxes outside the scene Preview Range;
 * layer group "GP2M Testina" (top, locked): the playhead, moved by a driver
   on the layer translation;
@@ -23,9 +23,10 @@ import bpy
 
 from . import glyphs, music, synth
 
-BOARD_GROUP = "GP2M Tavola"
+BOARD_GROUP = "Tavola Composizione"
+LEGACY_BOARD_GROUP = "GP2M Tavola"  # name up to 0.0.12, renamed when found
 HEAD_GROUP = "GP2M Testina"
-BOARD_GROUPS = (BOARD_GROUP, HEAD_GROUP)
+BOARD_GROUPS = (BOARD_GROUP, HEAD_GROUP, LEGACY_BOARD_GROUP)
 HEAD_LAYER = "GP2M Linea testina"
 BOARD_FLAG = "gp2m_board"  # custom property on board materials
 LEGACY_ROLE = "gp2m_role"  # 0.0.1 used separate child objects
@@ -645,6 +646,7 @@ def ensure_order(gp):
         roots = list(gp.root_nodes)
         if roots and roots[-1].name != HEAD_GROUP:
             gp.layer_groups.move_top(head)
+    rename_legacy_board(gp)
     tavola = gp.layer_groups.get(BOARD_GROUP)
     if tavola is not None and tavola.parent_group is None:
         roots = list(gp.root_nodes)
@@ -671,7 +673,17 @@ def protect_board(obj):
 
 
 def has_board(comp):
-    return comp.data.layer_groups.get(BOARD_GROUP) is not None
+    groups = comp.data.layer_groups
+    return groups.get(BOARD_GROUP) is not None or groups.get(LEGACY_BOARD_GROUP) is not None
+
+
+def rename_legacy_board(gp):
+    """Files up to 0.0.12 call the board group "GP2M Tavola". Returns True if renamed."""
+    legacy = gp.layer_groups.get(LEGACY_BOARD_GROUP)
+    if legacy is None or gp.layer_groups.get(BOARD_GROUP) is not None:
+        return False
+    legacy.name = BOARD_GROUP
+    return legacy.name == BOARD_GROUP
 
 
 # Board layer -> materials its strokes may use.
@@ -729,6 +741,7 @@ def rebuild(comp, scene=None):
     lit = preview_lit(comp, scene)
     gp[SHADE_KEY] = _shade_signature(s, lit)
 
+    rename_legacy_board(gp)
     for layer in [layer for layer in gp.layers if is_board_layer(layer)]:
         gp.layers.remove(layer)
     board_group = _ensure_group(gp, BOARD_GROUP, bottom=True)

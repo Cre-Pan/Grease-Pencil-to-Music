@@ -415,7 +415,7 @@ def test_panels_menus_and_preferences_draw(comp):
             "GP2M_PT_help_main", "GP2M_PT_help_reading", "GP2M_PT_help_instrument",
             "GP2M_PT_help_export", "GP2M_UL_layers", "GP2M_MT_change_instrument",
             "gp2m.set_instrument", ui.CHANGE_RECORDED_MENUS[0].bl_idname,
-            "solo", "mute", "use_onion_skinning", "lock"} <= drawn
+            "solo", "mute", "lock"} <= drawn
     assert sum(1 for entry in log if entry[0] == "markdown") == len(sub("help").classes)
 
 
@@ -1657,3 +1657,52 @@ def test_group_made_in_blenders_list_keeps_the_playhead_on_top(comp):
     assert _shown(gp)[:2] == ["Archi", "Livello 3"]
     group.is_expanded = False  # a closed group shows only its own row
     assert _shown(gp)[:2] == ["Archi", "Livello 2"]
+
+
+def test_layer_specials_like_blender(comp):
+    board, props, engine = sub("board"), sub("props"), sub("engine")
+    gp = comp.data
+    gp.layers.active = gp.layers["Livello 2"]
+    # Hide others / show all / lock: never the board.
+    assert bpy.ops.gp2m.layers_hide_others() == {"FINISHED"}
+    assert [l.hide for l in board.user_layers(gp)] == [True, False, True]
+    assert not any(l.hide for l in gp.layers if board.is_board_layer(l)
+                   and l.name != board.SHADE_LAYER)
+    assert bpy.ops.gp2m.layers_reveal() == {"FINISHED"}
+    assert not any(l.hide for l in board.user_layers(gp))
+    assert bpy.ops.gp2m.layers_lock(lock=True) == {"FINISHED"}
+    assert all(l.lock for l in board.user_layers(gp))
+    assert bpy.ops.gp2m.layers_lock(lock=False) == {"FINISHED"}
+    assert not any(l.lock for l in board.user_layers(gp))
+    assert all(l.lock for l in gp.layers if board.is_board_layer(l))
+    # Merge down: the instruments of the merged layer move to the one that stays.
+    add_stroke(comp, 1, line(comp, 1.0, 2.0, 64), material_index=0)
+    count = len(board.layer_instruments(comp, "Livello 1"))
+    moved = len(board.layer_instruments(comp, "Livello 2"))
+    assert bpy.ops.gp2m.merge_layer(mode="ACTIVE") == {"FINISHED"}
+    assert gp.layers.get("Livello 2") is None and gp.layers.active.name == "Livello 1"
+    assert len(board.layer_instruments(comp, "Livello 1")) == count + moved
+    assert props.find_layer_settings(gp, "Livello 2") is None
+    assert list(gp.root_nodes)[-1].name == board.HEAD_GROUP
+    assert list(gp.root_nodes)[0].name == board.BOARD_GROUP
+    assert [n.pitch for n in engine.regenerate(comp).notes] == [64]
+    # Merging the bottom layer would cross the board.
+    gp.layers.active = board.user_layers(gp)[0]
+    assert not bpy.ops.gp2m.merge_layer.poll()
+    # Duplicate with empty keyframes.
+    assert bpy.ops.gp2m.duplicate_layer(empty_keyframes=True) == {"FINISHED"}
+    assert len(gp.layers.active.frames[0].drawing.strokes) == 0
+
+
+def test_old_board_group_is_renamed(comp):
+    board = sub("board")
+    gp = comp.data
+    gp.layer_groups[board.BOARD_GROUP].name = board.LEGACY_BOARD_GROUP  # a 0.0.12 file
+    assert board.has_board(comp)
+    assert all(board.is_board_layer(l) for l in gp.layer_groups[board.LEGACY_BOARD_GROUP]
+               .children)
+    board.ensure_order(gp)
+    assert gp.layer_groups.get(board.BOARD_GROUP) is not None
+    assert gp.layer_groups.get(board.LEGACY_BOARD_GROUP) is None
+    board.rebuild(comp)
+    assert [g.name for g in gp.layer_groups] .count(board.BOARD_GROUP) == 1

@@ -357,22 +357,30 @@
 
 ## 0.0.13
 
-Duplicare i livelli e gruppi di livelli
+Duplicare i livelli, gruppi di livelli, lista come quella di Blender
 
 - Corretto un **crash** duplicando un livello dalla lista dei livelli Grease Pencil di Blender:
   la lista *Livelli e strumenti* restava un attimo indietro rispetto ai livelli e chiedeva a
   Blender un ordine con un buco. Ora l'ordine è sempre valido, e un livello aggiunto,
   duplicato o rinominato nella lista di Blender riceve subito le sue impostazioni (anche con
   Auto spento).
-- **Duplica livello** (menu ▾ accanto alla lista, o Duplica nella lista di Blender): la copia
-  ha la stessa lettura, gli stessi effetti e le **sue copie degli strumenti**, così cambiare
-  lo strumento della copia non cambia l'originale.
-- **Gruppi di livelli**: nella lista compaiono i gruppi, con la freccia per aprirli e
-  chiuderli, e accanto **muto**, **Solo**, onion skin, occhio e lucchetto del gruppo intero.
-  Un gruppo muto (o nascosto) non suona; un gruppo in Solo fa suonare tutti i suoi livelli.
-  Dal menu ▾: *Nuovo gruppo* (mette il livello attivo in un gruppo nuovo, al suo posto),
-  *Sposta nel gruppo* e *Sciogli gruppo*; ↑ / ↓ entrano ed escono dai gruppi. Anche i gruppi
-  creati nella lista di Blender funzionano, e la testina resta sempre sopra.
+- **Lista dei livelli come quella di Blender**: ogni riga ha icona del livello (o del gruppo),
+  lucchetto, occhio, nome, **audio** acceso/spento (si spegne e diventa grigio quando un altro
+  livello è in Solo) e **Solo**. Il ♪ non è più nella lista: lo strumento si cambia sotto,
+  con il pulsante icona + tendina accanto a ogni strumento. A destra: +, **nuovo gruppo**, −,
+  ▾, ↑, ↓.
+- Menu **▾** come quello di Blender: *Duplica* e *Duplica con keyframe vuoti* (la copia ha la
+  stessa lettura, gli stessi effetti e le **sue copie degli strumenti**), *Mostra tutti*,
+  *Nascondi gli altri*, *Blocca tutti*, *Sblocca tutti*, *Blocca i livelli inattivi*,
+  *Ignora il blocco dei materiali*, *Unisci sotto*, *Unisci gruppo* (gli strumenti dei livelli
+  uniti passano a quello che resta), poi *Nuovo gruppo*, *Sposta nel gruppo*, *Sciogli gruppo*.
+  La tavola non viene mai toccata.
+- **Gruppi di livelli**: si aprono e chiudono come in Blender; audio, Solo, occhio e lucchetto
+  del gruppo valgono per tutti i suoi livelli (un gruppo spento o nascosto non suona, un
+  gruppo in Solo fa suonare tutti i suoi livelli). ↑ / ↓ entrano ed escono dai gruppi. Anche
+  i gruppi creati nella lista di Blender funzionano, e la testina resta sempre sopra.
+- Il gruppo della tavola si chiama **Tavola Composizione** (i file salvati prima vengono
+  rinominati all'apertura).
 
 ## 0.0.12
 

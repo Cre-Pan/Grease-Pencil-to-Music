@@ -194,14 +194,33 @@ class GP2M_MT_change_instrument(bpy.types.Menu):
 
 
 class GP2M_MT_layer_specials(bpy.types.Menu):
-    """Duplicate the active layer, make and undo groups."""
+    """Like Blender's layer specials menu (the board layers are never touched)."""
 
     bl_idname = "GP2M_MT_layer_specials"
     bl_label = "Livelli e gruppi"
 
     def draw(self, context):
         layout = self.layout
+        comp = active_composition(context)
         layout.operator("gp2m.duplicate_layer", icon="DUPLICATE")
+        layout.operator("gp2m.duplicate_layer",
+                        text="Duplica con keyframe vuoti").empty_keyframes = True
+        layout.separator()
+        layout.operator("gp2m.layers_reveal", icon="HIDE_OFF")
+        layout.operator("gp2m.layers_hide_others", icon="HIDE_ON")
+        layout.separator()
+        layout.operator("gp2m.layers_lock", text="Blocca tutti", icon="LOCKED").lock = True
+        layout.operator("gp2m.layers_lock", text="Sblocca tutti", icon="UNLOCKED").lock = False
+        if comp is not None:
+            layout.separator()
+            layout.prop(comp.data, "use_autolock_layers", text="Blocca i livelli inattivi")
+            layer = comp.data.layers.active
+            if layer is not None and not board.is_board_layer(layer):
+                layout.prop(layer, "ignore_locked_materials",
+                            text="Ignora il blocco dei materiali")
+        layout.separator()
+        layout.operator("gp2m.merge_layer", text="Unisci sotto").mode = "ACTIVE"
+        layout.operator("gp2m.merge_layer", text="Unisci gruppo").mode = "GROUP"
         layout.separator()
         layout.operator("gp2m.add_group", icon="NEWFOLDER")
         layout.menu("GP2M_MT_move_to_group", icon="FILE_FOLDER")
@@ -243,14 +262,36 @@ def _solo_prop(layout, item):
                     icon="SOLO_ON" if item.solo else "SOLO_OFF")
 
 
+def _audio_prop(layout, gp, item):
+    """Audio on/off (the inverse of mute): shown off and greyed while another
+    layer or group is in Solo."""
+    silent = props.layer_silent(gp, item.name)
+    sub = layout.row(align=True)
+    sub.active = item.mute or not silent
+    on = not silent
+    value = icon("audio_on" if on else "audio_off")
+    if value:
+        sub.prop(item, "mute", text="", emboss=False, icon_value=value, invert_checkbox=True)
+    else:
+        sub.prop(item, "mute", text="", emboss=False, invert_checkbox=True,
+                 icon="OUTLINER_DATA_SPEAKER" if on else "MUTE_IPO_ON")
+
+
 def _indent(layout, depth):
     for _ in range(depth):
         layout.separator(factor=1.6)
 
 
+def _lock_and_eye(layout, node):
+    icons = layout.row(align=True)
+    icons.emboss = "NONE"
+    icons.prop(node, "lock", text="", emboss=False)
+    icons.prop(node, "hide", text="", emboss=False)
+
+
 class GP2M_UL_layers(bpy.types.UIList):
     """The layers and groups of the composition, top first, like Blender's own
-    layer tree, with instrument, mute and solo on the right."""
+    layer tree: icon, lock, eye, name, then audio on/off and Solo."""
 
     bl_idname = "GP2M_UL_layers"
 
@@ -264,28 +305,16 @@ class GP2M_UL_layers(bpy.types.UIList):
         if layer is None:
             layout.label(text=item.name, icon="ERROR")
             return
-        comp = active_composition(context)
-        silent = props.layer_silent(gp, item.name)
         row = layout.row(align=True)
         _indent(row, len(board.ancestors(layer)))
+        row.label(text="", icon="OUTLINER_DATA_GP_LAYER")
+        _lock_and_eye(row, layer)
         name = row.row(align=True)
-        name.active = not board.is_hidden(layer) and not silent
-        name.prop(layer, "name", text="", emboss=False, icon="OUTLINER_DATA_GP_LAYER")
-
-        icons = row.row(align=True)
-        icons.emboss = "NONE"
-        note = icons.row(align=True)
-        note.context_pointer_set("gp2m_layer", item)
-        slot = layer_instrument_slot(comp, item.name) if comp is not None else None
-        note.menu("GP2M_MT_change_instrument", text="", icon="FILE_SOUND")
-        note.active = slot is not None
-        icons.prop(item, "mute", text="", emboss=False,
-                   icon="MUTE_IPO_ON" if item.mute else "MUTE_IPO_OFF")
-        _solo_prop(icons, item)
-        icons.prop(layer, "use_onion_skinning", text="", emboss=False,
-                   icon="ONIONSKIN_ON" if layer.use_onion_skinning else "ONIONSKIN_OFF")
-        icons.prop(layer, "hide", text="", emboss=False)
-        icons.prop(layer, "lock", text="", emboss=False)
+        name.active = not board.is_hidden(layer) and not props.layer_silent(gp, item.name)
+        name.prop(layer, "name", text="", emboss=False)
+        right = row.row(align=True)
+        _audio_prop(right, gp, item)
+        _solo_prop(right, item)
 
     @staticmethod
     def _draw_group(layout, gp, item):
@@ -297,18 +326,14 @@ class GP2M_UL_layers(bpy.types.UIList):
         _indent(row, len(board.ancestors(group)))
         row.prop(group, "is_expanded", text="", emboss=False,
                  icon="DISCLOSURE_TRI_DOWN" if group.is_expanded else "DISCLOSURE_TRI_RIGHT")
+        row.label(text="", icon="FILE_FOLDER")
+        _lock_and_eye(row, group)
         name = row.row(align=True)
         name.active = not group.hide and not props.layer_silent(gp, item.name)
-        name.prop(group, "name", text="", emboss=False, icon="FILE_FOLDER")
-        icons = row.row(align=True)
-        icons.emboss = "NONE"
-        icons.prop(item, "mute", text="", emboss=False,
-                   icon="MUTE_IPO_ON" if item.mute else "MUTE_IPO_OFF")
-        _solo_prop(icons, item)
-        icons.prop(group, "use_onion_skinning", text="", emboss=False,
-                   icon="ONIONSKIN_ON" if group.use_onion_skinning else "ONIONSKIN_OFF")
-        icons.prop(group, "hide", text="", emboss=False)
-        icons.prop(group, "lock", text="", emboss=False)
+        name.prop(group, "name", text="", emboss=False)
+        right = row.row(align=True)
+        _audio_prop(right, gp, item)
+        _solo_prop(right, item)
 
     def filter_items(self, _context, data, propname):
         """Tree order, children of closed groups hidden.
@@ -351,9 +376,10 @@ def _instrument_row(layout, comp, layer_name, index, material, active):
                       depress=active, emboss=active)
     op.layer = layer_name
     op.index = index
-    change = row.row()
+    change = row.row(align=True)
     change.context_pointer_set("gp2m_material", material)
     change.menu("GP2M_MT_change_instrument", text="", icon="FILE_SOUND")
+    change.menu("GP2M_MT_change_instrument", text="", icon="DOWNARROW_HLT")
     volume = row.row(align=True)
     volume.ui_units_x = 4
     volume.prop(material, "gp2m_volume", text="", slider=True)
@@ -370,6 +396,7 @@ def draw_layers_and_instruments(layout, comp, details=True):
                       rows=rows, sort_lock=True)
     col = row.column(align=True)
     col.operator("gp2m.add_layer", text="", icon="ADD")
+    col.operator("gp2m.add_group", text="", icon="NEWFOLDER")
     col.operator("gp2m.remove_layer", text="", icon="REMOVE")
     col.separator()
     col.menu("GP2M_MT_layer_specials", text="", icon="DOWNARROW_HLT")
