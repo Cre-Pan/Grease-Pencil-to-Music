@@ -1513,3 +1513,147 @@ def test_auto_update_waits_for_a_running_transform(comp, monkeypatch):
     monkeypatch.setattr(handlers, "transform_running", lambda: False)
     assert handlers._tick() is None
     assert engine.state(comp).get("key") is not None  # regenerated once it ended
+
+
+def _list_order(gp):
+    """(flags, order) of the layer list, checked like Blender does."""
+    fake = type("FakeList", (), {"bitflag_filter_item": 1 << 30})()
+    flags, order = sub("ui").GP2M_UL_layers.filter_items(fake, bpy.context, gp, "gp2m_layers")
+    assert sorted(order) == list(range(len(gp.gp2m_layers)))  # a gap crashes Blender
+    return flags, order
+
+
+def _shown(gp):
+    flags, order = _list_order(gp)
+    return [name for _o, name in sorted((o, item.name) for o, item, f
+                                         in zip(order, gp.gp2m_layers, flags) if f)]
+
+
+def test_layer_list_order_stays_valid_while_settings_lag(comp):
+    gp = comp.data
+    gp.layers.active = gp.layers["Livello 2"]
+    # Blender's own Duplicate: the new layer has no settings yet when the list redraws.
+    with bpy.context.temp_override(active_object=comp, object=comp):
+        assert bpy.ops.grease_pencil.layer_duplicate(empty_keyframes=False) == {"FINISHED"}
+    assert sub("props").find_layer_settings(gp, "Livello 2.001") is None
+    _list_order(gp)
+    # And a layer deleted in Blender's list leaves settings without a layer.
+    gp.layers.remove(gp.layers["Livello 3"])
+    _list_order(gp)
+    ui_log = []
+    sub("ui").draw_layers_and_instruments(MockLayout(ui_log), comp)
+    # The automatic sync gives the duplicate its settings, even with Auto off.
+    comp.gp2m.auto_update = False
+    sub("handlers").request_layer_sync(gp)
+    sub("handlers")._layer_sync_tick()
+    assert sub("props").find_layer_settings(gp, "Livello 2.001") is not None
+    assert "Livello 2.001" in _shown(gp)
+
+
+def test_duplicated_layer_gets_its_own_settings_and_instruments(comp):
+    engine, props, board = sub("engine"), sub("props"), sub("board")
+    gp = comp.data
+    source = props.find_layer_settings(gp, "Livello 1")
+    source.mode = "LEGATO"
+    source.reverb_mix = 0.4
+    own = board.layer_instruments(comp, "Livello 1")
+    index, material = own[0]
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60), material_index=index)
+    before = len(engine.regenerate(comp).notes)
+    gp.layers.active = gp.layers["Livello 1"]
+    assert bpy.ops.gp2m.duplicate_layer() == {"FINISHED"}
+    copy = gp.layers.active
+    assert copy.name == "Livello 1.001"
+    settings = props.find_layer_settings(gp, copy.name)
+    assert settings.mode == "LEGATO" and abs(settings.reverb_mix - 0.4) < 1e-6
+    # Its instruments are copies: changing one does not change the original.
+    copies = board.layer_instruments(comp, copy.name)
+    assert [m.gp2m_instrument for _i, m in copies] == [m.gp2m_instrument for _i, m in own]
+    assert all(m != material for _i, m in copies)
+    stroke = copy.frames[0].drawing.strokes[0]
+    assert stroke.material_index == copies[0][0]
+    copies[0][1].gp2m_instrument = "PLUCK"
+    assert material.gp2m_instrument != "PLUCK"
+    assert len(engine.regenerate(comp).notes) == 2 * before
+    # The playhead stays on top.
+    assert list(gp.root_nodes)[-1].name == board.HEAD_GROUP
+
+
+def test_layer_groups(comp):
+    engine, props, board = sub("engine"), sub("props"), sub("board")
+    gp = comp.data
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60), material_index=0)
+    add_stroke(comp, 1, line(comp, 3.0, 4.0, 64), material_index=0)
+    add_stroke(comp, 2, line(comp, 5.0, 6.0, 67), material_index=0)
+    pitches = lambda: sorted(n.pitch for n in engine.regenerate(comp).notes)  # noqa: E731
+    assert pitches() == [60, 64, 67]
+    # New group around "Livello 2", in its place.
+    gp.layers.active = gp.layers["Livello 2"]
+    assert bpy.ops.gp2m.add_group() == {"FINISHED"}
+    group = gp.layers["Livello 2"].parent_group
+    assert group is not None and group.name == "Gruppo 1"
+    assert gp.layers.active.name == "Livello 2"
+    assert _shown(gp) == ["Livello 3", "Gruppo 1", "Livello 2", "Livello 1"]
+    settings = props.find_layer_settings(gp, "Gruppo 1")
+    assert settings is not None and settings.is_group
+    # Moving into and out of the group.
+    gp.layers.active = gp.layers["Livello 1"]
+    assert bpy.ops.gp2m.move_layer(direction="UP") == {"FINISHED"}
+    assert gp.layers["Livello 1"].parent_group.name == "Gruppo 1"
+    assert _shown(gp) == ["Livello 3", "Gruppo 1", "Livello 2", "Livello 1"]
+    assert bpy.ops.gp2m.move_layer(direction="DOWN") == {"FINISHED"}
+    assert gp.layers["Livello 1"].parent_group is None
+    assert bpy.ops.gp2m.move_layer(direction="DOWN") == {"CANCELLED"}  # the board is below
+    assert bpy.ops.gp2m.move_to_group(group="Gruppo 1") == {"FINISHED"}
+    assert [c.name for c in group.children] == ["Livello 2", "Livello 1"]
+    # Mute, Solo and hide of the whole group.
+    settings = props.find_layer_settings(gp, "Gruppo 1")
+    settings.mute = True
+    assert pitches() == [67]
+    settings.mute = False
+    settings.solo = True
+    assert pitches() == [60, 64]
+    assert abs(gp.layers["Livello 3"].opacity - props.SOLO_OPACITY) < 1e-6
+    settings.solo = False
+    assert abs(gp.layers["Livello 3"].opacity - 1.0) < 1e-6
+    group.hide = True
+    assert pitches() == [67]
+    group.hide = False
+    # A closed group hides its layers in the list.
+    group.is_expanded = False
+    assert _shown(gp) == ["Livello 3", "Gruppo 1"]
+    group.is_expanded = True
+    # Clicking the group row picks its top layer.
+    gp.gp2m_layer_index = [i.name for i in gp.gp2m_layers].index("Gruppo 1")
+    assert gp.layers.active.name == "Livello 1"
+    # The panel draws groups too.
+    log = []
+    sub("ui").draw_layers_and_instruments(MockLayout(log), comp)
+    sub("ui").GP2M_MT_layer_specials.draw(_Drawer(log), bpy.context)
+    sub("ui").GP2M_MT_move_to_group.draw(_Drawer(log), bpy.context)
+    drawn = {entry[1] for entry in log}
+    assert {"is_expanded", "gp2m.duplicate_layer", "gp2m.add_group", "gp2m.move_to_group",
+            "gp2m.ungroup", "GP2M_MT_layer_specials"} <= drawn
+    # Ungroup: the layers stay, the playhead stays on top.
+    assert bpy.ops.gp2m.ungroup() == {"FINISHED"}
+    assert gp.layer_groups.get("Gruppo 1") is None
+    assert props.find_layer_settings(gp, "Gruppo 1") is None
+    assert _shown(gp) == ["Livello 3", "Livello 1", "Livello 2"]
+    assert list(gp.root_nodes)[-1].name == board.HEAD_GROUP
+    assert pitches() == [60, 64, 67]
+
+
+def test_group_made_in_blenders_list_keeps_the_playhead_on_top(comp):
+    board, props = sub("board"), sub("props")
+    gp = comp.data
+    group = gp.layer_groups.new("Archi")  # Blender's own "+ group": on top of everything
+    gp.layers.move_to_layer_group(gp.layers["Livello 3"], group)
+    board.ensure_order(gp)
+    props.ensure_layer_settings(gp)
+    roots = [n.name for n in gp.root_nodes]
+    assert roots[-1] == board.HEAD_GROUP and roots[0] == board.BOARD_GROUP
+    assert props.find_layer_settings(gp, "Archi").is_group
+    group.is_expanded = True
+    assert _shown(gp)[:2] == ["Archi", "Livello 3"]
+    group.is_expanded = False  # a closed group shows only its own row
+    assert _shown(gp)[:2] == ["Archi", "Livello 2"]

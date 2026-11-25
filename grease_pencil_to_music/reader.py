@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 import bpy
 import numpy as np
 
-from .board import is_board_layer
+from .board import is_board_layer, is_hidden
 from .props import layer_silent, layer_volume
 from .interpret import StrokeData
 from . import synth
@@ -158,7 +158,7 @@ def read_composition(obj, frame_number, use_modifiers=False, depsgraph=None):
         divisors = radius_divisors(obj)
     result = []
     for layer in gp.layers:
-        if layer.hide or is_board_layer(layer) or layer_silent(obj.data, layer.name):
+        if is_hidden(layer) or is_board_layer(layer) or layer_silent(obj.data, layer.name):
             continue
         read = LayerRead(name=layer.name, opacity=layer_volume(obj.data, layer),
                          keyframes=len(layer.frames))

@@ -355,6 +355,25 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.13
+
+Duplicare i livelli e gruppi di livelli
+
+- Corretto un **crash** duplicando un livello dalla lista dei livelli Grease Pencil di Blender:
+  la lista *Livelli e strumenti* restava un attimo indietro rispetto ai livelli e chiedeva a
+  Blender un ordine con un buco. Ora l'ordine è sempre valido, e un livello aggiunto,
+  duplicato o rinominato nella lista di Blender riceve subito le sue impostazioni (anche con
+  Auto spento).
+- **Duplica livello** (menu ▾ accanto alla lista, o Duplica nella lista di Blender): la copia
+  ha la stessa lettura, gli stessi effetti e le **sue copie degli strumenti**, così cambiare
+  lo strumento della copia non cambia l'originale.
+- **Gruppi di livelli**: nella lista compaiono i gruppi, con la freccia per aprirli e
+  chiuderli, e accanto **muto**, **Solo**, onion skin, occhio e lucchetto del gruppo intero.
+  Un gruppo muto (o nascosto) non suona; un gruppo in Solo fa suonare tutti i suoi livelli.
+  Dal menu ▾: *Nuovo gruppo* (mette il livello attivo in un gruppo nuovo, al suo posto),
+  *Sposta nel gruppo* e *Sciogli gruppo*; ↑ / ↓ entrano ed escono dai gruppi. Anche i gruppi
+  creati nella lista di Blender funzionano, e la testina resta sempre sopra.
+
 ## 0.0.12
 
 Livelli, Solo e Preview Range

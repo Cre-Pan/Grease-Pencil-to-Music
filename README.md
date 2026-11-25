@@ -34,7 +34,10 @@ disegna su una tavola, e la tavola suona.
    dei livelli Grease Pencil (**+** / **−**, ↑ / ↓, doppio clic per rinominare). A destra di
    ogni livello: **♪** per cambiare lo strumento, **muto** (si vede ma non suona),
    **cuffie** per il *Solo* (gli altri livelli tacciono e scendono al 10% di opacità),
-   onion skin, occhio e lucchetto. Sotto la lista ci sono lettura, volume e gli strumenti del
+   onion skin, occhio e lucchetto. Il menu **▾** accanto alla lista **duplica** il livello
+   (con impostazioni e strumenti copiati) e crea i **gruppi**: un gruppo si apre e chiude come
+   in Blender, e si può silenziare, mettere in *Solo* o nascondere tutto insieme; ↑ / ↓
+   entrano ed escono dai gruppi. Sotto la lista ci sono lettura, volume e gli strumenti del
    livello attivo: **+ Strumento** ne aggiunge altri (sintetizzati, percussioni, Campione,
    Libreria), **♪** accanto a uno strumento lo cambia (i tratti restano), il pulsante col nome
    lo rende quello con cui disegni.
@@ -125,7 +128,7 @@ Tutto si controlla dalla barra laterale **N → Musica**:
 | Doodle Music | stato, muto, avvisi, *Auto* (aggiornamento automatico), *Genera suono*, **Ascolto** (insieme / solo l'attiva / una dopo l'altra) |
 | Tavola e tempo | BPM, durata del loop, nota più bassa, ottave, **etichette dei tasti** (solo Do, tasti bianchi, tutte, nessuna), griglia |
 | Lettura | scala e tonica, quantizzazione ritmica, **swing**, nota minima, volume, **Suono finito** con *Ambiente*, **Usa modificatori** |
-| Livelli e strumenti | lista dei livelli come in Grease Pencil (+ / −, ↑ / ↓) con **♪ cambia strumento**, **muto**, **Solo** (cuffie: gli altri al 10%), onion skin, occhio, lucchetto; sotto, lettura, volume e **strumenti** del livello attivo (colore, nome, ♪, **volume**, occhio); **+ Strumento**; forme piene, canone ed effetti del livello |
+| Livelli e strumenti | lista dei livelli e dei **gruppi** come in Grease Pencil (+ / −, ▾ duplica e gruppi, ↑ / ↓) con **♪ cambia strumento**, **muto**, **Solo** (cuffie: gli altri al 10%), onion skin, occhio, lucchetto; sotto, lettura, volume e **strumenti** del livello attivo (colore, nome, ♪, **volume**, occhio); **+ Strumento**; forme piene, canone ed effetti del livello |
 | Esporta | **WAV**, **MP3**, **MIDI** |
 
 ### Come viene letto un tratto

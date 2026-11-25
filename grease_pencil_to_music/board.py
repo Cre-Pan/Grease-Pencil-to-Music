@@ -198,6 +198,57 @@ def user_layers(gp):
     return [layer for layer in gp.layers if not is_board_layer(layer)]
 
 
+def is_group(node):
+    return isinstance(node, bpy.types.GreasePencilLayerGroup)
+
+
+def is_board_group(group):
+    while group is not None:
+        if group.name in BOARD_GROUPS:
+            return True
+        group = group.parent_group
+    return False
+
+
+def user_groups(gp):
+    """The layer groups made by the user (the board's own groups excluded)."""
+    return [group for group in gp.layer_groups if not is_board_group(group)]
+
+
+def ancestors(node):
+    """The groups that contain ``node``, innermost first."""
+    groups = []
+    group = node.parent_group
+    while group is not None:
+        groups.append(group)
+        group = group.parent_group
+    return groups
+
+
+def is_hidden(layer):
+    """Hidden itself or inside a hidden group (Blender does not draw it either)."""
+    return layer.hide or any(group.hide for group in ancestors(layer))
+
+
+def user_tree(gp):
+    """``[(node, depth)]`` of the user's layers and groups, top first, as Blender's
+    layer tree shows them (a group comes before its children)."""
+    rows = []
+
+    def walk(nodes, depth):
+        for node in reversed(list(nodes)):  # Blender lists nodes bottom to top
+            if is_group(node):
+                if node.name in BOARD_GROUPS:
+                    continue
+                rows.append((node, depth))
+                walk(node.children, depth + 1)
+            else:
+                rows.append((node, depth))
+
+    walk(gp.root_nodes, 0)
+    return rows
+
+
 def _rect(x0, z0, x1, z1):
     return [(x0, z0), (x1, z0), (x1, z1), (x0, z1)]
 
@@ -589,15 +640,16 @@ def _set_playhead_driver(gp, scene, seconds_width, offset_frames=0):
 
 def ensure_order(gp):
     """Board group at the bottom, playhead group on top (writes only if needed)."""
-    layers = list(gp.layers)
-    if not layers:
-        return
     head = gp.layer_groups.get(HEAD_GROUP)
-    if head is not None and layers[-1].parent_group is None:
-        gp.layer_groups.move_top(head)
+    if head is not None and head.parent_group is None:
+        roots = list(gp.root_nodes)
+        if roots and roots[-1].name != HEAD_GROUP:
+            gp.layer_groups.move_top(head)
     tavola = gp.layer_groups.get(BOARD_GROUP)
-    if tavola is not None and layers[0].parent_group is None:
-        gp.layer_groups.move_bottom(tavola)
+    if tavola is not None and tavola.parent_group is None:
+        roots = list(gp.root_nodes)
+        if roots and roots[0].name != BOARD_GROUP:
+            gp.layer_groups.move_bottom(tavola)
 
 
 def protect_board(obj):

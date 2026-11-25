@@ -87,20 +87,45 @@ def _solo_changed(self, _context):
     _sound_changed(self, _context)
 
 
+def _live_settings(gp_data):
+    """Settings of the layers and groups that still exist."""
+    return [item for item in gp_data.gp2m_layers
+            if (gp_data.layer_groups.get(item.name) if item.is_group
+                else gp_data.layers.get(item.name)) is not None]
+
+
+def _chain(gp_data, node):
+    """Settings of ``node`` and of the groups that contain it (missing ones skipped)."""
+    from .board import ancestors
+    names = [node.name] + [group.name for group in ancestors(node)]
+    by_name = {item.name: item for item in gp_data.gp2m_layers}
+    return [by_name[name] for name in names if name in by_name]
+
+
+def _node(gp_data, name):
+    node = gp_data.layers.get(name)
+    return node if node is not None else gp_data.layer_groups.get(name)
+
+
 def apply_solo(gp_data):
     """Dim the layers that are not in Solo to 10% opacity, restore them after.
 
-    The opacity a layer had is kept in its settings: the volume of the layer is
-    still that one (a dimmed layer is silent anyway, and exports read the saved
-    value). If the opacity was changed by hand while dimmed, that value wins.
+    A group in Solo puts every layer inside it in Solo. The opacity a layer had
+    is kept in its settings: the volume of the layer is still that one (a dimmed
+    layer is silent anyway, and exports read the saved value). If the opacity
+    was changed by hand while dimmed, that value wins.
     """
-    settings = list(gp_data.gp2m_layers)
-    any_solo = any(item.solo for item in settings)
-    for item in settings:
+    any_solo = any(item.solo for item in _live_settings(gp_data))
+    soloed = {}
+    for layer in gp_data.layers:
+        soloed[layer.name] = any(item.solo for item in _chain(gp_data, layer))
+    for item in list(gp_data.gp2m_layers):
+        if item.is_group:
+            continue
         layer = gp_data.layers.get(item.name)
         if layer is None:
             continue
-        dim = any_solo and not item.solo
+        dim = any_solo and not soloed.get(item.name, False)
         if dim and item.solo_saved_opacity < 0.0:
             item.solo_saved_opacity = layer.opacity
             layer.opacity = SOLO_OPACITY
@@ -119,18 +144,32 @@ def layer_volume(gp_data, layer):
 
 
 def layer_silent(gp_data, layer_name):
-    """Muted, or another layer is in Solo."""
-    settings = gp_data.gp2m_layers
-    item = find_layer_settings(gp_data, layer_name)
-    if item is not None and item.mute:
+    """Muted (itself or one of its groups), or something else is in Solo.
+
+    A group in Solo makes its layers play; a group is not silent while one of
+    its layers is in Solo."""
+    from .board import ancestors
+    node = _node(gp_data, layer_name)
+    if node is None:
+        return False
+    chain = _chain(gp_data, node)
+    if any(item.mute for item in chain):
         return True
-    return any(other.solo for other in settings) and (item is None or not item.solo)
+    live = _live_settings(gp_data)
+    if not any(item.solo for item in live) or any(item.solo for item in chain):
+        return False
+    if getattr(node, "children", None) is not None:  # a group
+        return not any(item.solo and not item.is_group
+                       and node in ancestors(gp_data.layers[item.name]) for item in live)
+    return True
 
 
 class GP2M_LayerSettings(bpy.types.PropertyGroup):
     """Settings of one Grease Pencil layer, matched by layer name."""
 
     name: StringProperty()
+    is_group: BoolProperty(default=False, options={"HIDDEN"},
+                           description="Impostazioni di un gruppo di livelli")
     mute: BoolProperty(name="Muto", default=False, update=_sound_changed,
                        description="Il livello resta visibile ma non suona (anche negli export)")
     solo: BoolProperty(name="Solo", default=False, update=_solo_changed,
@@ -475,8 +514,10 @@ def unregister_properties():
 
 
 def _get_layer_index(self):
-    """Index in ``gp2m_layers`` of the active layer (for the UI list)."""
+    """Index in ``gp2m_layers`` of the active layer, or of the active group (for the UI list)."""
     active = self.layers.active
+    if active is None:
+        active = self.layer_groups.active
     if active is None:
         return -1
     for index, item in enumerate(self.gp2m_layers):
@@ -489,7 +530,17 @@ def _set_layer_index(self, value):
     if not 0 <= value < len(self.gp2m_layers):
         return
     from . import board, operators
-    layer = self.layers.get(self.gp2m_layers[value].name)
+    item = self.gp2m_layers[value]
+    if item.is_group:
+        # A group is not drawn on: its top layer becomes the active one.
+        group = self.layer_groups.get(item.name)
+        layers = [node for node, _depth in board.user_tree(self)
+                  if not board.is_group(node) and group in board.ancestors(node)]
+        if not layers:
+            return
+        layer = layers[0]
+    else:
+        layer = self.layers.get(item.name)
     if layer is None or board.is_board_layer(layer):
         return
     for obj in bpy.data.objects:
@@ -506,24 +557,117 @@ def find_layer_settings(gp_data, layer_name):
     return None
 
 
-def ensure_layer_settings(gp_data):
-    """Add settings for new layers (writes only when something is missing)."""
-    from .board import is_board_layer
-    layer_names = [layer.name for layer in gp_data.layers if not is_board_layer(layer)]
-    existing = {item.name for item in gp_data.gp2m_layers}
-    missing = [name for name in layer_names if name not in existing]
-    if not missing:
+_COPY_SKIP = {"rna_type", "name", "is_group", "solo"}
+
+
+def _base_name(name):
+    """``"Basso.002"`` -> ``"Basso"`` (Blender's suffix for duplicated names)."""
+    head, dot, tail = name.rpartition(".")
+    return head if dot and tail.isdigit() and len(tail) >= 3 else name
+
+
+def _duplicate_source(gp_data, layer, known):
+    """The layer that ``layer`` was duplicated from, or None.
+
+    Blender puts a duplicated layer right above its source and gives it the same
+    name with a ``.001`` suffix."""
+    source = layer.prev_node
+    if (source is None or getattr(source, "frames", None) is None
+            or source.name not in known or _base_name(source.name) != _base_name(layer.name)):
+        return None
+    return source
+
+
+def _copy_instruments(gp_data, source_name, layer):
+    """Give a duplicated layer its own copies of the source's instruments, so
+    changing an instrument of one does not change the other."""
+    from .board import is_board_material
+    remap = {}
+    for index, material in enumerate(list(gp_data.materials)):
+        if (material is None or is_board_material(material)
+                or getattr(material, "gp2m_layer", "") != source_name):
+            continue
+        copy = material.copy()
+        copy.gp2m_layer = layer.name
+        gp_data.materials.append(copy)
+        remap[index] = len(gp_data.materials) - 1
+    if not remap:
         return
-    orphans = [item for item in gp_data.gp2m_layers if item.name not in layer_names]
-    if len(missing) == 1 and len(orphans) == 1:
+    done = set()
+    for frame in layer.frames:
+        drawing = frame.drawing
+        if drawing is None or drawing.as_pointer() in done:
+            continue
+        done.add(drawing.as_pointer())
+        for stroke in drawing.strokes:
+            new_index = remap.get(stroke.material_index)
+            if new_index is not None:
+                stroke.material_index = new_index
+
+
+def ensure_layer_settings(gp_data):
+    """Add settings for new layers and groups (writes only when something is missing).
+
+    A layer duplicated in Blender's own layer list gets a copy of the settings
+    (reading mode, effects...) and of the instruments of the layer it comes from."""
+    from .board import user_groups, user_layers
+    layers = user_layers(gp_data)
+    layer_names = [layer.name for layer in layers]
+    group_names = [group.name for group in user_groups(gp_data)]
+    known = {item.name for item in gp_data.gp2m_layers}
+    for item in gp_data.gp2m_layers:  # a name can pass from a layer to a group
+        should_be_group = item.name in group_names
+        if (should_be_group or item.name in layer_names) and item.is_group != should_be_group:
+            item.is_group = should_be_group
+    missing = [layer for layer in layers if layer.name not in known]
+    missing_groups = [name for name in group_names if name not in known]
+    if not missing and not missing_groups:
+        return
+    live = set(layer_names) | set(group_names)
+    # Duplicates first: read the source settings now, before the collection grows
+    # (adding to a collection can move its items in memory).
+    duplicates = {}
+    for layer in missing:
+        source = _duplicate_source(gp_data, layer, known)
+        if source is not None:
+            item = find_layer_settings(gp_data, source.name)
+            values = {prop.identifier: getattr(item, prop.identifier)
+                      for prop in item.bl_rna.properties
+                      if prop.identifier not in _COPY_SKIP and not prop.is_readonly}
+            duplicates[layer.name] = (source.name, values)
+    fresh = [layer.name for layer in missing if layer.name not in duplicates]
+    orphans = [item for item in gp_data.gp2m_layers
+               if not item.is_group and item.name not in live]
+    if len(fresh) == 1 and len(orphans) == 1:
         # Most likely a renamed layer: keep its settings and its instruments.
         old = orphans[0].name
-        orphans[0].name = missing[0]
+        orphans[0].name = fresh[0]
         for material in gp_data.materials:
             if material is not None and getattr(material, "gp2m_layer", "") == old:
-                material.gp2m_layer = missing[0]
-        return
-    for name in missing:
-        gp_data.gp2m_layers.add().name = name
+                material.gp2m_layer = fresh[0]
+        fresh = []
+    group_orphans = [item for item in gp_data.gp2m_layers
+                     if item.is_group and item.name not in live]
+    if len(missing_groups) == 1 and len(group_orphans) == 1:
+        group_orphans[0].name = missing_groups[0]  # a renamed group
+        missing_groups = []
+    for layer in missing:
+        name = layer.name
+        if name in duplicates:
+            source_name, values = duplicates[name]
+            item = gp_data.gp2m_layers.add()
+            item.name = name
+            for key, value in values.items():
+                try:
+                    setattr(item, key, value)
+                except (AttributeError, TypeError, ValueError):
+                    pass
+            _copy_instruments(gp_data, source_name, layer)
+        elif name in fresh:
+            gp_data.gp2m_layers.add().name = name
+    for name in missing_groups:
+        item = gp_data.gp2m_layers.add()
+        item.name = name
+        item.is_group = True
     if any(item.solo for item in gp_data.gp2m_layers):
         apply_solo(gp_data)  # a new layer joins the dimmed ones

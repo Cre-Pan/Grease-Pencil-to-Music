@@ -478,8 +478,61 @@ class GP2M_OT_remove_layer(bpy.types.Operator):
         return {"FINISHED"}
 
 
+def _siblings(gp, node):
+    """The nodes next to ``node`` in its group (or at the root), bottom first."""
+    parent = node.parent_group
+    return list(parent.children) if parent is not None else list(gp.root_nodes)
+
+
+def _sibling_index(gp, node):
+    return [n.name for n in _siblings(gp, node)].index(node.name)
+
+
+def _move_node(gp, node, direction):
+    if board.is_group(node):
+        gp.layer_groups.move(node, direction)
+    else:
+        gp.layers.move(node, direction)
+
+
+def _place_next_to(gp, node, target, above=True):
+    """Move ``node`` right above (or below) ``target``, a node of the same group."""
+    for _ in range(len(gp.layers) + len(gp.layer_groups) + 2):
+        names = [n.name for n in _siblings(gp, node)]
+        if target.name not in names:
+            return
+        index = names.index(node.name)
+        wanted = names.index(target.name) + (1 if above else -1)
+        if index == wanted:
+            return
+        _move_node(gp, node, "DOWN" if index > wanted else "UP")
+        if [n.name for n in _siblings(gp, node)] == names:
+            return  # could not move further
+
+
+def _move_out_of_group(gp, layer, above):
+    """Take ``layer`` out of its group, right above or below the group."""
+    group = layer.parent_group
+    gp.layers.move_to_layer_group(layer, group.parent_group)
+    _place_next_to(gp, layer, group, above=above)
+
+
+def _unique_node_name(gp, base):
+    index = 1
+    while (gp.layers.get(f"{base} {index}") is not None
+           or gp.layer_groups.get(f"{base} {index}") is not None):
+        index += 1
+    return f"{base} {index}"
+
+
+def _after_tree_change(comp):
+    gp = comp.data
+    board.ensure_order(gp)
+    props.ensure_layer_settings(gp)
+
+
 class GP2M_OT_move_layer(bpy.types.Operator):
-    """Sposta il livello attivo sopra o sotto"""
+    """Sposta il livello attivo sopra o sotto (entra ed esce dai gruppi)"""
 
     bl_idname = "gp2m.move_layer"
     bl_label = "Sposta livello"
@@ -494,16 +547,159 @@ class GP2M_OT_move_layer(bpy.types.Operator):
                 and not board.is_board_layer(comp.data.layers.active))
 
     def execute(self, context):
-        gp = active_composition(context).data
+        comp = active_composition(context)
+        gp = comp.data
         layer = gp.layers.active
-        layers = list(gp.layers)
-        index = [l.name for l in layers].index(layer.name)
-        neighbour = index + (1 if self.direction == "UP" else -1)
-        # Never cross the board (below) or the playhead (above).
-        if not 0 <= neighbour < len(layers) or board.is_board_layer(layers[neighbour]):
-            return {"CANCELLED"}
-        gp.layers.move(layer, self.direction)
+        up = self.direction == "UP"
+        siblings = _siblings(gp, layer)
+        index = _sibling_index(gp, layer)
+        neighbour_index = index + (1 if up else -1)
+        if not 0 <= neighbour_index < len(siblings):
+            if layer.parent_group is None:
+                return {"CANCELLED"}
+            _move_out_of_group(gp, layer, above=up)  # past the edge of its group
+        else:
+            neighbour = siblings[neighbour_index]
+            if board.is_group(neighbour):
+                # Never cross the board (below) or the playhead (above).
+                if neighbour.name in board.BOARD_GROUPS:
+                    return {"CANCELLED"}
+                # Into the group, at its bottom going up and at its top going down.
+                gp.layers.move_to_layer_group(layer, neighbour)
+                if up:
+                    gp.layers.move_bottom(layer)
+            else:
+                gp.layers.move(layer, self.direction)
+        gp.layers.active = layer
+        _after_tree_change(comp)
         return {"FINISHED"}
+
+
+class GP2M_OT_duplicate_layer(bpy.types.Operator):
+    """Duplica il livello attivo con i suoi tratti, le sue impostazioni e i suoi strumenti
+    (copiati: puoi cambiarli senza toccare l'originale)"""
+
+    bl_idname = "gp2m.duplicate_layer"
+    bl_label = "Duplica livello"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        comp = active_composition(context)
+        return (comp is not None and comp.data.layers.active is not None
+                and not board.is_board_layer(comp.data.layers.active))
+
+    def execute(self, context):
+        comp = active_composition(context)
+        gp = comp.data
+        with context.temp_override(active_object=comp, object=comp):
+            result = bpy.ops.grease_pencil.layer_duplicate(empty_keyframes=False)
+        if result != {"FINISHED"}:
+            return {"CANCELLED"}
+        _after_tree_change(comp)
+        if gp.layers.active is not None:
+            use_instrument(comp, gp.layers.active.name)
+        return {"FINISHED"}
+
+
+class GP2M_OT_add_group(bpy.types.Operator):
+    """Metti il livello attivo in un nuovo gruppo. Un gruppo si può silenziare, mettere in
+    Solo e nascondere tutto insieme"""
+
+    bl_idname = "gp2m.add_group"
+    bl_label = "Nuovo gruppo"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return GP2M_OT_duplicate_layer.poll(context)
+
+    def execute(self, context):
+        comp = active_composition(context)
+        gp = comp.data
+        layer = gp.layers.active
+        group = gp.layer_groups.new(_unique_node_name(gp, "Gruppo"),
+                                    parent_group=layer.parent_group)
+        group.is_expanded = True
+        _place_next_to(gp, group, layer, above=True)
+        gp.layers.move_to_layer_group(layer, group)
+        gp.layers.active = layer
+        _after_tree_change(comp)
+        return {"FINISHED"}
+
+
+class GP2M_OT_move_to_group(bpy.types.Operator):
+    """Sposta il livello attivo in un gruppo (in cima), o fuori dal suo gruppo"""
+
+    bl_idname = "gp2m.move_to_group"
+    bl_label = "Sposta nel gruppo"
+    bl_options = {"REGISTER", "UNDO"}
+
+    group: StringProperty(name="Gruppo", description="Vuoto = fuori dal gruppo")
+
+    @classmethod
+    def poll(cls, context):
+        return GP2M_OT_duplicate_layer.poll(context)
+
+    def execute(self, context):
+        comp = active_composition(context)
+        gp = comp.data
+        layer = gp.layers.active
+        if not self.group:
+            if layer.parent_group is None:
+                return {"CANCELLED"}
+            _move_out_of_group(gp, layer, above=True)
+        else:
+            group = gp.layer_groups.get(self.group)
+            if group is None or board.is_board_group(group):
+                return {"CANCELLED"}
+            gp.layers.move_to_layer_group(layer, group)
+            group.is_expanded = True
+        gp.layers.active = layer
+        _after_tree_change(comp)
+        return {"FINISHED"}
+
+
+class GP2M_OT_ungroup(bpy.types.Operator):
+    """Sciogli il gruppo del livello attivo: i suoi livelli restano al loro posto"""
+
+    bl_idname = "gp2m.ungroup"
+    bl_label = "Sciogli gruppo"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        comp = active_composition(context)
+        return comp is not None and _target_group(comp.data) is not None
+
+    def execute(self, context):
+        comp = active_composition(context)
+        gp = comp.data
+        group = _target_group(gp)
+        if group is None:
+            return {"CANCELLED"}
+        layer = gp.layers.active
+        name = group.name
+        gp.layer_groups.remove(group, keep_children=True)
+        for index, item in enumerate(gp.gp2m_layers):
+            if item.name == name and item.is_group:
+                gp.gp2m_layers.remove(index)
+                break
+        if layer is not None:
+            gp.layers.active = layer
+        _after_tree_change(comp)
+        props.apply_solo(gp)  # a Solo of the group no longer holds
+        return {"FINISHED"}
+
+
+def _target_group(gp):
+    """The active group, or the group of the active layer."""
+    group = gp.layer_groups.active
+    if group is None and gp.layers.active is not None:
+        group = gp.layers.active.parent_group
+    if group is None or board.is_board_group(group):
+        return None
+    return group
 
 
 classes = (
@@ -519,4 +715,8 @@ classes = (
     GP2M_OT_add_layer,
     GP2M_OT_remove_layer,
     GP2M_OT_move_layer,
+    GP2M_OT_duplicate_layer,
+    GP2M_OT_add_group,
+    GP2M_OT_move_to_group,
+    GP2M_OT_ungroup,
 )

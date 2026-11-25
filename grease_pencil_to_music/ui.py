@@ -193,15 +193,73 @@ class GP2M_MT_change_instrument(bpy.types.Menu):
                      icon="CHECKMARK" if current in idents else "SOUND")
 
 
+class GP2M_MT_layer_specials(bpy.types.Menu):
+    """Duplicate the active layer, make and undo groups."""
+
+    bl_idname = "GP2M_MT_layer_specials"
+    bl_label = "Livelli e gruppi"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.operator("gp2m.duplicate_layer", icon="DUPLICATE")
+        layout.separator()
+        layout.operator("gp2m.add_group", icon="NEWFOLDER")
+        layout.menu("GP2M_MT_move_to_group", icon="FILE_FOLDER")
+        layout.operator("gp2m.ungroup", icon="X")
+
+
+class GP2M_MT_move_to_group(bpy.types.Menu):
+    bl_idname = "GP2M_MT_move_to_group"
+    bl_label = "Sposta nel gruppo"
+
+    def draw(self, context):
+        layout = self.layout
+        comp = active_composition(context)
+        if comp is None:
+            return
+        gp = comp.data
+        layer = gp.layers.active
+        current = layer.parent_group.name if layer is not None and layer.parent_group else ""
+        groups = [node for node, _depth in board.user_tree(gp) if board.is_group(node)]
+        for group in groups:
+            row = layout.row()
+            row.enabled = group.name != current
+            row.operator("gp2m.move_to_group", text=group.name,
+                         icon="FILE_FOLDER").group = group.name
+        if groups:
+            layout.separator()
+        row = layout.row()
+        row.enabled = bool(current)
+        row.operator("gp2m.move_to_group", text="Fuori dal gruppo",
+                     icon="PANEL_CLOSE").group = ""
+
+
+def _solo_prop(layout, item):
+    solo_icon = icon("solo_on" if item.solo else "solo_off")
+    if solo_icon:
+        layout.prop(item, "solo", text="", emboss=False, icon_value=solo_icon)
+    else:
+        layout.prop(item, "solo", text="", emboss=False,
+                    icon="SOLO_ON" if item.solo else "SOLO_OFF")
+
+
+def _indent(layout, depth):
+    for _ in range(depth):
+        layout.separator(factor=1.6)
+
+
 class GP2M_UL_layers(bpy.types.UIList):
-    """The layers of the composition, top first, like Blender's own layer list,
-    with instrument, mute and solo on the right."""
+    """The layers and groups of the composition, top first, like Blender's own
+    layer tree, with instrument, mute and solo on the right."""
 
     bl_idname = "GP2M_UL_layers"
 
     def draw_item(self, context, layout, data, item, _icon, _active_data, _active_prop,
                   _index=0, _flt_flag=0):
         gp = data
+        if item.is_group:
+            GP2M_UL_layers._draw_group(layout, gp, item)
+            return
         layer = gp.layers.get(item.name)
         if layer is None:
             layout.label(text=item.name, icon="ERROR")
@@ -209,8 +267,9 @@ class GP2M_UL_layers(bpy.types.UIList):
         comp = active_composition(context)
         silent = props.layer_silent(gp, item.name)
         row = layout.row(align=True)
+        _indent(row, len(board.ancestors(layer)))
         name = row.row(align=True)
-        name.active = not layer.hide and not silent
+        name.active = not board.is_hidden(layer) and not silent
         name.prop(layer, "name", text="", emboss=False, icon="OUTLINER_DATA_GP_LAYER")
 
         icons = row.row(align=True)
@@ -222,36 +281,64 @@ class GP2M_UL_layers(bpy.types.UIList):
         note.active = slot is not None
         icons.prop(item, "mute", text="", emboss=False,
                    icon="MUTE_IPO_ON" if item.mute else "MUTE_IPO_OFF")
-        solo_icon = icon("solo_on" if item.solo else "solo_off")
-        if solo_icon:
-            icons.prop(item, "solo", text="", emboss=False, icon_value=solo_icon)
-        else:
-            icons.prop(item, "solo", text="", emboss=False,
-                       icon="SOLO_ON" if item.solo else "SOLO_OFF")
+        _solo_prop(icons, item)
         icons.prop(layer, "use_onion_skinning", text="", emboss=False,
                    icon="ONIONSKIN_ON" if layer.use_onion_skinning else "ONIONSKIN_OFF")
         icons.prop(layer, "hide", text="", emboss=False)
         icons.prop(layer, "lock", text="", emboss=False)
 
+    @staticmethod
+    def _draw_group(layout, gp, item):
+        group = gp.layer_groups.get(item.name)
+        if group is None:
+            layout.label(text=item.name, icon="ERROR")
+            return
+        row = layout.row(align=True)
+        _indent(row, len(board.ancestors(group)))
+        row.prop(group, "is_expanded", text="", emboss=False,
+                 icon="DISCLOSURE_TRI_DOWN" if group.is_expanded else "DISCLOSURE_TRI_RIGHT")
+        name = row.row(align=True)
+        name.active = not group.hide and not props.layer_silent(gp, item.name)
+        name.prop(group, "name", text="", emboss=False, icon="FILE_FOLDER")
+        icons = row.row(align=True)
+        icons.emboss = "NONE"
+        icons.prop(item, "mute", text="", emboss=False,
+                   icon="MUTE_IPO_ON" if item.mute else "MUTE_IPO_OFF")
+        _solo_prop(icons, item)
+        icons.prop(group, "use_onion_skinning", text="", emboss=False,
+                   icon="ONIONSKIN_ON" if group.use_onion_skinning else "ONIONSKIN_OFF")
+        icons.prop(group, "hide", text="", emboss=False)
+        icons.prop(group, "lock", text="", emboss=False)
+
     def filter_items(self, _context, data, propname):
+        """Tree order, children of closed groups hidden.
+
+        The order is always a permutation of all the items, also while the
+        settings lag behind the layers (a layer just duplicated or deleted in
+        Blender's own list): an order with gaps makes Blender crash."""
         items = getattr(data, propname)
-        stack = [layer.name for layer in reversed(board.user_layers(data))]  # top first
-        position = {name: i for i, name in enumerate(stack)}
-        flags = []
-        order = []
-        tail = len(stack)
-        needle = getattr(self, "filter_name", "").lower()
+        rows = board.user_tree(data)
+        position = {}
+        folded = set()
+        for index, (node, _depth) in enumerate(rows):
+            position[node.name] = index
+            if any(not group.is_expanded for group in board.ancestors(node)):
+                folded.add(node.name)
+        needle = getattr(self, "filter_name", "").lower().strip("*")
         invert = getattr(self, "use_filter_invert", False)
-        for item in items:
-            visible = item.name in position and (not needle or needle in item.name.lower())
-            if invert and needle:
-                visible = item.name in position and needle not in item.name.lower()
+        flags = []
+        keys = []
+        for index, item in enumerate(items):
+            visible = item.name in position
+            if visible and needle:
+                visible = (needle in item.name.lower()) != invert
+            elif visible:
+                visible = item.name not in folded
             flags.append(self.bitflag_filter_item if visible else 0)
-            if item.name in position:
-                order.append(position[item.name])
-            else:
-                order.append(tail)
-                tail += 1
+            keys.append((position.get(item.name, len(rows)), index))
+        order = [0] * len(keys)
+        for rank, (_key, index) in enumerate(sorted(keys)):
+            order[index] = rank
         return flags, order
 
 
@@ -277,13 +364,15 @@ def _instrument_row(layout, comp, layer_name, index, material, active):
 def draw_layers_and_instruments(layout, comp, details=True):
     """Layer list like Blender's (top first), then the active layer's instruments."""
     gp = comp.data
-    rows = max(3, min(8, len(gp.gp2m_layers)))
+    rows = max(4, min(10, len(gp.gp2m_layers)))
     row = layout.row()
     row.template_list("GP2M_UL_layers", "", gp, "gp2m_layers", gp, "gp2m_layer_index",
                       rows=rows, sort_lock=True)
     col = row.column(align=True)
     col.operator("gp2m.add_layer", text="", icon="ADD")
     col.operator("gp2m.remove_layer", text="", icon="REMOVE")
+    col.separator()
+    col.menu("GP2M_MT_layer_specials", text="", icon="DOWNARROW_HLT")
     col.separator()
     col.operator("gp2m.move_layer", text="", icon="TRIA_UP").direction = "UP"
     col.operator("gp2m.move_layer", text="", icon="TRIA_DOWN").direction = "DOWN"
@@ -712,6 +801,8 @@ def draw_export_menu(self, _context):
 classes = RECORDED_MENUS + CHANGE_RECORDED_MENUS + (
     GP2M_MT_add_instrument,
     GP2M_MT_change_instrument,
+    GP2M_MT_layer_specials,
+    GP2M_MT_move_to_group,
     GP2M_UL_layers,
     GP2M_PT_data,
     GP2M_PT_data_board,
