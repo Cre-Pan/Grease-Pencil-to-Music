@@ -9,7 +9,7 @@ sound. Inspired by the drawn sound of Norman McLaren and Daphne Oram.
 import bpy
 
 from . import (draw_sound, handlers, help, keyboard, midi_import, midi_input,  # noqa: F401
-               operators, prefs, props, timeline, ui, web_io)
+               operators, prefs, props, samples, timeline, ui, web_io)
 
 _classes = (props.classes + prefs.classes + help.classes + operators.classes + midi_import.classes
             + keyboard.classes + timeline.classes + ui.classes + web_io.classes)
@@ -18,6 +18,7 @@ _classes = (props.classes + prefs.classes + help.classes + operators.classes + m
 def register():
     for cls in _classes:
         bpy.utils.register_class(cls)
+    samples.register()
     props.register_properties()
     ui.register()
     midi_import.register()
@@ -35,5 +36,6 @@ def unregister():
     midi_import.unregister()
     ui.unregister()
     props.unregister_properties()
+    samples.unregister()
     for cls in reversed(_classes):
         bpy.utils.unregister_class(cls)

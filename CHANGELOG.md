@@ -355,6 +355,32 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.11
+
+Tutti gli strumenti della web app
+- **69 strumenti registrati**, con i loro suoni dentro l'add-on (gli stessi file MP3 della web
+  app, VSCO 2 CE e VCSL, CC0): pianoforti, clavicembalo, organo a canne, percussioni intonate,
+  archi (anche tremolo, staccato e pizzicato), arpa, legni, ottoni e 37 percussioni registrate.
+  Si scelgono per famiglia in *+ Strumento → Registrati (web app)* e nel menu *Strumento* del
+  materiale. Suonano come nella web app: la nota registrata più vicina riaccordata sulla linea,
+  le note tenute in loop con dissolvenze oltre la fine della registrazione, i colpi interi, gli
+  sfregamenti e i rullati lunghi quanto il tratto.
+- **Organo, Coro e Ottoni**: i tre synth della web app che mancavano.
+- **Ambiente del riverbero** (scheda Composizione, sotto *Ambiente*): Sala (sintetica, come
+  prima), Stanza, Auditorium o Chiesa, dalle stesse risposte all'impulso della web app
+  (HybridReverb2, CC BY-SA 4.0). Vale per tutti i riverberi della composizione.
+- **Progetti della web app**: ogni strumento della web app si apre col suo strumento
+  dell'add-on (prima i registrati diventavano il synth più vicino) e torna uguale salvando;
+  anche l'ambiente del riverbero va e viene.
+- **Importa MIDI**: un programma General MIDI che ha uno strumento registrato (violoncello,
+  pianoforte, tromba…) usa quello; le note di batteria senza synth (conga, bongo, triangolo…)
+  usano il colpo registrato.
+- I synth con lo stesso nome di un registrato si chiamano ora *Flauto (synth)*, *Ocarina
+  (synth)*, *Archi (synth)* e *Marimba (synth)*. I file .blend salvati prima tengono i loro
+  strumenti.
+- Lo zip passa da ~0,4 a ~16 MB per i suoni. `tools/build_addon_instruments.py` rigenera la
+  lista degli strumenti dalla web app.
+
 ## 0.0.10
 
 Timeline e finestre

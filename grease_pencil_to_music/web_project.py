@@ -115,14 +115,32 @@ WEB_TO_ADDON.update({
     "DARBUKA": WEB_TO_ADDON["CONGA"],
     "CAJON": WEB_TO_ADDON["SNARE"],
 })
+# The web app's own synths that the add-on now has too (0.0.11).
+WEB_TO_ADDON.update({"ORGAN": ("ORGAN", "SINE"), "CHOIR": ("CHOIR", "PAD", "STRINGS"),
+                     "BRASS": ("BRASS", "SAW")})
+# Recorded instruments: the add-on has the same recordings ("S_<id>"); the synth stand-ins
+# above stay as the second choice.
+RECORDED = ('PIANO', 'GRAND', 'HARPSI', 'PIPEORGAN', 'MARIMBA', 'VIBES', 'XYLO', 'TUBULAR',
+            'KALIMBA', 'GLOCK', 'STRINGS', 'STRINGS_TREM', 'STRINGS_PIZZ', 'VIOLIN',
+            'VIOLIN_STAC', 'VIOLIN_PIZZ', 'CELLO', 'CELLO_STAC', 'CELLO_PIZZ', 'HARP', 'FLUTE',
+            'OCARINA', 'RECORDER', 'CLARINET', 'OBOE', 'BASSOON', 'SAX', 'HARMONICA', 'TRUMPET',
+            'TROMBONE', 'HORN', 'TUBA', 'CONGA', 'GRANCASSA', 'SNARE_ORCH', 'TAIKO', 'FRAME',
+            'BONGO', 'TUMBA', 'DARBUKA', 'CAJON', 'GONG', 'SUSCYMB', 'CLASH', 'TRIANGLE', 'NEPAL',
+            'SLEIGH', 'AGOGO', 'BRAKE', 'BELLTREE', 'CLAVES', 'TEMPLE', 'LOGDRUM', 'MARACAS',
+            'CABASA', 'TAMB', 'TAMBROLL', 'GUIRO', 'RATCHET', 'RUB', 'BOW', 'GONGSCRAPE', 'ANVIL',
+            'METAL', 'SPOONS', 'CHAIN', 'BRICK', 'BUBBLES', 'GLASS')
+for _web in RECORDED:
+    WEB_TO_ADDON[_web] = ("S_" + _web,) + WEB_TO_ADDON.get(_web, ())
 ADDON_TO_WEB = {
     "SINE": "FLUTE", "TRIANGLE": "OCARINA", "SQUARE": "SQUARE", "SAW": "SAW",
     "STRINGS": "STRINGS", "PLUCK": "GUITAR", "BELL": "BELL", "EPIANO": "EPIANO",
     "MARIMBA": "MARIMBA", "PAD": "PAD", "BASS": "BASS",
     "DRUM": "SNARE", "KICK": "KICK", "SNARE": "SNARE", "HIHAT": "HAT", "OPENHAT": "OHAT",
     "CRASH": "CRASH", "CLAP": "CLAP", "TOM": "TOM", "COWBELL": "COWBELL", "RIM": "RIM",
-    "SHAKER": "SHAKER",
+    "SHAKER": "SHAKER", "ORGAN": "ORGAN", "CHOIR": "CHOIR", "BRASS": "BRASS",
 }
+ADDON_TO_WEB.update({"S_" + web: web for web in RECORDED})
+ROOMS = {"hall": "HALL", "room": "ROOM", "concert": "CONCERT", "church": "CHURCH"}
 WEB_DRUMS = ("KICK", "SNARE", "CLAP", "HAT", "OHAT", "TOM", "RIM", "SHAKER")
 WEB_DRUM_NOTES = {"KICK": 36, "SNARE": 38, "CLAP": 39, "HAT": 42, "OHAT": 46, "TOM": 45,
                   "RIM": 37, "SHAKER": 70}
@@ -206,6 +224,7 @@ class Project:
     layers: list = field(default_factory=list)
     sounds: list = field(default_factory=list)
     skipped: list = field(default_factory=list)  # web instruments with no match (waves)
+    room: str = "HALL"  # add-on room (effects.ROOMS) of every reverb
 
 
 def _clamp(value, low, high):
@@ -351,6 +370,7 @@ def parse(text, available, row_height=0.12, seconds_width=1.0, beat_layer_name="
         name=str(state.get("name") or "Composizione")[:60], board=board,
         scale=SCALE_TO_ADDON.get(state.get("scale"), "MAJOR"),
         root=int(_num(state.get("root"), 0)) % 12, grid=grid_ident(state.get("grid", 0.25)),
+        room=ROOMS.get(state.get("room"), "HALL"),
     )
     sounds = data.get("sounds") if isinstance(data.get("sounds"), dict) else {}
     for meta in state.get("samples") or []:
@@ -468,5 +488,8 @@ def dump(project):
         "grid": grid_beats(project.grid), "layers": layers, "active": layers[-1]["id"],
         "strokes": strokes, "beat": _blank_beat(), "samples": samples, "waves": [],
     }
+    room = next((web for web, ident in ROOMS.items() if ident == project.room), "hall")
+    if room != "hall":  # the web app leaves out its default room
+        state["room"] = room
     return json.dumps({"app": APP_ID, "version": VERSION, "state": state, "sounds": sounds},
                       ensure_ascii=False, separators=(",", ":"))

@@ -71,7 +71,8 @@ def _naming_changed(_self, _context):
 INSTRUMENT_SET_ITEMS = (
     ("ONE", "Uno (Flauto)", "Si parte con un solo strumento; gli altri si aggiungono nel livello"),
     ("NONE", "Nessuno", "Livello vuoto: gli strumenti si aggiungono con '+ Strumento'"),
-    ("ALL", "Tutti", "Tutti gli strumenti sintetizzati (Campione e Libreria si aggiungono con +)"),
+    ("ALL", "Tutti i synth", "Tutti gli strumenti sintetizzati (i registrati, Campione e "
+     "Libreria si aggiungono con +)"),
     ("ESSENTIAL", "Essenziali", "Flauto, 8-bit, Synth, Archi, Chitarra, Cassa, Rullante, "
      "Charleston"),
     ("MELODIC", "Solo melodici", "Gli strumenti intonati, senza percussioni"),
@@ -254,7 +255,7 @@ def new_instrument_idents():
     if p.new_instruments in INSTRUMENT_SETS:
         return INSTRUMENT_SETS[p.new_instruments]
     from . import synth
-    return tuple(i.ident for i in synth.INSTRUMENTS if i.ident not in ("SAMPLE", "LIBRARY"))
+    return tuple(i.ident for i in synth.SYNTH_INSTRUMENTS)
 
 
 def feedback_mode():

@@ -109,7 +109,7 @@ def test_add_composition_is_one_object(comp):
     assert comp.data.layers.active.name == "Livello 1"
     instruments = [slot.material.gp2m_instrument for slot in comp.material_slots
                    if not board.is_board_material(slot.material)]
-    assert len(instruments) == 22 and {"PLUCK", "KICK", "SNARE", "HIHAT"} <= set(instruments)
+    assert len(instruments) == 25 and {"PLUCK", "KICK", "SNARE", "HIHAT"} <= set(instruments)
     labels = comp.data.layers.get("GP2M Etichette").frames[0].drawing
     assert len(labels.strokes) > 10
     # Empty composition: a silent strip already exists and the scene loops 8 s.
@@ -545,7 +545,7 @@ def test_compositions_have_their_own_instruments(comp):
     theirs = {slot.material.name for slot in other.material_slots
               if not board.is_board_material(slot.material)}
     assert not (mine & theirs)  # muting/volume in one never touches the other
-    assert board.material_label(other.material_slots[0].material) == "Flauto"
+    assert board.material_label(other.material_slots[0].material) == "Flauto (synth)"
 
 
 def test_duplicates_become_independent(comp):
@@ -889,7 +889,9 @@ def test_midi_import_creates_layers_and_instruments(addon, tmp_path):
     assert [l.name for l in board.user_layers(comp.data)] == ["Archi", "Batteria"]
     assert comp.gp2m.bpm == pytest.approx(100.0, abs=0.01) and comp.gp2m.length == 4.0
     result = sub("engine").regenerate(comp)
-    assert sorted(n.pitch for n in result.notes if n.instrument == "STRINGS") == list(range(60, 68))
+    # GM 48 (string ensemble): the recorded strings of the web app.
+    assert sorted(n.pitch for n in result.notes if n.instrument == "S_STRINGS") == list(
+        range(60, 68))
     assert sum(1 for n in result.notes if n.instrument == "KICK") == 4
 
 
@@ -1369,3 +1371,30 @@ def test_web_project_rejects_other_files(addon, tmp_path):
     path.write_text('{"hello": 1}', encoding="utf-8")
     with pytest.raises(RuntimeError):
         bpy.ops.gp2m.import_web(filepath=str(path))
+
+
+def test_installed_addon_plays_the_web_app_recordings(comp):
+    """The zip carries the recordings and the rooms; old .blend values keep their instrument."""
+    import os
+    samples, synth, props, engine = sub("samples"), sub("synth"), sub("props"), sub("engine")
+    sounds = samples.sounds_dir()
+    assert sounds.endswith("sounds") and os.path.isfile(os.path.join(sounds, "rooms", "church.mp3"))
+    assert len([d for d in os.listdir(os.path.join(sounds, "samples"))
+                if os.path.isdir(os.path.join(sounds, "samples", d))]) == 69
+    items = bpy.types.Material.bl_rna.properties["gp2m_instrument"].enum_items
+    values = {item.identifier: item.value for item in items}
+    old = ("SINE", "TRIANGLE", "SQUARE", "SAW", "STRINGS", "PLUCK", "BELL", "EPIANO", "MARIMBA",
+           "PAD", "BASS", "DRUM", "KICK", "SNARE", "HIHAT", "OPENHAT", "CRASH", "CLAP", "TOM",
+           "COWBELL", "RIM", "SHAKER", "SAMPLE", "LIBRARY")  # the 0.0.10 list, in its order
+    assert [values[ident] for ident in old] == list(range(len(old)))
+    assert len(values) == len(synth.INSTRUMENTS) == 96
+    material = sub("board").instrument_material(synth.get_instrument("S_HARP"))
+    assert material.gp2m_instrument == "S_HARP" and material.name.startswith("Arpa")
+    sub("operators").append_instrument(comp, material)
+    material.gp2m_layer = "Livello 1"
+    index = list(comp.data.materials).index(material)
+    add_stroke(comp, 0, line(comp, 0.5, 1.5, 62), material_index=index)
+    comp.gp2m.room = "CHURCH"
+    result = engine.regenerate(comp)
+    assert any(n.instrument == "S_HARP" for n in result.notes)
+    assert np.max(np.abs(result.audio)) > 0.05

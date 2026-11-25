@@ -73,6 +73,31 @@ def reverb_ir(sample_rate, size=0.5, seed=7):
     return found, key
 
 
+ROOMS = ("HALL", "ROOM", "CONCERT", "CHURCH")  # HALL: the synthetic response above
+ROOM_LOADER = None  # (room, rate) -> (n, 2) recorded response (samples.py, needs bpy)
+
+
+def room_ir(room, sample_rate):
+    """The recorded response of ``room`` at unit energy per channel, or None (synthetic
+    hall, or the recording cannot be read)."""
+    if room in (None, "", "HALL") or ROOM_LOADER is None:
+        return None
+    key = ("room", room, int(sample_rate))
+    found = _IRS.get(key)
+    if found is None:
+        try:
+            found = np.asarray(ROOM_LOADER(room, sample_rate), dtype=np.float64)
+        except Exception as error:  # noqa: BLE001 - the synthetic hall plays instead
+            print(f"[Doodle Music] ambiente {room} non letto: {error!r}")
+            return None
+        found = found / np.maximum(np.sqrt(np.sum(found ** 2, axis=0)), 1e-9)
+        found.flags.writeable = False
+        if len(_IRS) > 8:
+            _IRS.clear()
+        _IRS[key] = found
+    return found, key
+
+
 def delay(buffer, sample_rate, time_seconds, feedback, mix, ping_pong=True, max_tail=4.0):
     """Echo repeats; with ``ping_pong`` they bounce between left and right."""
     step = int(round(time_seconds * sample_rate))
@@ -91,13 +116,15 @@ def delay(buffer, sample_rate, time_seconds, feedback, mix, ping_pong=True, max_
     return out
 
 
-def reverb(buffer, sample_rate, mix, size=0.5, seed=7):
-    """Convolution with a synthetic, exponentially decaying noise tail."""
+def reverb(buffer, sample_rate, mix, size=0.5, seed=7, room="HALL"):
+    """Convolution with a synthetic, exponentially decaying noise tail, or (``room``) with
+    the recorded response of a room: then ``size`` is the room's own."""
     if mix <= 0.0 or len(buffer) == 0:
         return buffer
-    ir, key = reverb_ir(sample_rate, size, seed)
+    recorded = room_ir(room, sample_rate)
+    ir, key = recorded if recorded is not None else reverb_ir(sample_rate, size, seed)
     length = len(ir)
-    predelay = int(0.015 * sample_rate)
+    predelay = 0 if recorded is not None else int(0.015 * sample_rate)
     out = np.zeros((len(buffer) + length + predelay - 1, 2), dtype=np.float32)
     out[:len(buffer)] += buffer
     wet = _fft_convolve(np.asarray(buffer[:, :2], dtype=np.float64), ir, key=key)
@@ -124,14 +151,14 @@ def lofi(buffer, sample_rate, amount, seed=11):
     return (crushed + hiss).astype(np.float32)
 
 
-def apply_chain(buffer, sample_rate, settings, bpm):
+def apply_chain(buffer, sample_rate, settings, bpm, room="HALL"):
     """``settings``: object with delay_mix, delay_beats, delay_feedback,
-    reverb_mix, reverb_size and lofi attributes."""
+    reverb_mix, reverb_size and lofi attributes; ``room``: the composition's room."""
     out = lofi(buffer, sample_rate, settings.lofi)
     beat = 60.0 / bpm if bpm > 0 else 0.5
     out = delay(out, sample_rate, settings.delay_beats * beat, settings.delay_feedback,
                 settings.delay_mix)
-    out = reverb(out, sample_rate, settings.reverb_mix, settings.reverb_size)
+    out = reverb(out, sample_rate, settings.reverb_mix, settings.reverb_size, room=room)
     return out
 
 
@@ -273,7 +300,7 @@ def _fold(buffer, length):
     return out
 
 
-def master(buffer, rate, ambience=0.25, loop=True, wrap=2.0):
+def master(buffer, rate, ambience=0.25, loop=True, wrap=2.0, room="HALL"):
     """The finished sound of a whole mix: room, glue, saturation, limiter.
 
     With ``loop`` the buffer is one loop: reverb tails fold back onto the start
@@ -286,7 +313,7 @@ def master(buffer, rate, ambience=0.25, loop=True, wrap=2.0):
     out = np.asarray(buffer, dtype=np.float64)
     if ambience > 0:
         dry = out
-        wet = reverb(out.astype(np.float32), rate, 1.0, 0.55).astype(np.float64)
+        wet = reverb(out.astype(np.float32), rate, 1.0, 0.55, room=room).astype(np.float64)
         wet[:n] -= dry  # reverb() returns dry + wet
         wet *= 0.35 * float(np.clip(ambience, 0.0, 1.0))
         if loop:

@@ -169,10 +169,34 @@ disegno suona pieno e rotondo e non distorce mai, anche con tanti tratti spessi 
 code e il compressore rientrano dall'inizio del loop, senza giunture. Spento, resta solo il
 controllo dei picchi di prima.
 
-### Strumenti (sintetizzati)
+*Ambiente del riverbero* (sotto *Ambiente*) sceglie, come nella web app, la sala di tutti i
+riverberi della composizione: **Sala** (il riverbero sintetico, con *Ampiezza stanza*),
+Stanza, Auditorium o Chiesa, risposte all'impulso registrate del database di HybridReverb2
+(Ruhr-Universität Bochum, CC BY-SA 4.0). Vale per il riverbero dei livelli, degli strumenti e
+per l'ambiente comune, e si salva nei progetti della web app.
 
-Melodici: Piano elettrico (FM), Flauto, Marimba, Campana (FM), Chitarra (Karplus-Strong),
-Archi, Pad, Synth, 8-bit, Ocarina, Basso.
+### Strumenti
+
+L'add-on ha tutti gli 89 strumenti della web app. *+ Strumento* li mostra per famiglia: i synth
+in colonna, i registrati nei sottomenu *Registrati (web app)*; nella scheda Materiale il menu
+*Strumento* ha le stesse famiglie.
+
+**Registrati** (69, gli stessi file della web app, dentro lo zip dell'add-on): dal VS Chamber
+Orchestra Community Edition e dalla Versilian Community Sample Library (CC0). Tastiere
+(Pianoforte, Pianoforte a coda, Clavicembalo, Organo a canne), percussioni intonate (Marimba,
+Vibrafono, Xilofono, Glockenspiel, Campane tubolari, Kalimba), archi (Archi, tremolo,
+pizzicato; Violino e Violoncello, anche staccato e pizzicato), Arpa, legni (Flauto, Flauto
+dolce, Ocarina, Clarinetto, Oboe, Fagotto, Sassofono, Armonica), ottoni (Tromba, Trombone,
+Corno, Tuba) e 37 percussioni registrate (membrane, metalli, legni e blocchi, fruscii e
+sfregamenti, oggetti). Suonano la nota registrata più vicina, riaccordata sulla linea; quelli
+tenuti (archi, fiati, organo a canne) ripetono la parte centrale con dissolvenze quando la
+nota dura più della registrazione. Le percussioni registrate sono un colpo intero; quelle
+sfregate o rullate (Güiro, Raganella, Tamburello rullato…) durano quanto il tratto. I file si
+leggono la prima volta che lo strumento suona.
+
+**Sintetizzati** — Melodici: Piano elettrico (FM), Organo, Flauto (synth), Marimba (synth),
+Campana (FM), Chitarra (Karplus-Strong), Archi (synth), Coro, Pad, Ottoni, Synth, 8-bit,
+Ocarina (synth), Basso.
 Percussioni: Percussioni (generiche, dipendono dalla riga), Cassa, Rullante, Battimani,
 Charleston, Charleston aperto, Tom (intonato sulla riga), Rimshot, Shaker, Piatto, Campanaccio.
 **Campione**: qualsiasi suono di Blender (*Carica suono…* o un suono del Sequencer),

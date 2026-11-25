@@ -118,3 +118,69 @@ def library_key(material):
         synth.register_zones(key, zones)
         _loaded[key] = True
     return synth.LIBRARY_PREFIX + key
+
+
+# --- The web app's recorded instruments and rooms (bundled with the add-on) -----------------
+
+PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def sounds_dir():
+    """``sounds/`` of the installed add-on; from a source checkout, the web app's docs/app."""
+    bundled = os.path.join(PACKAGE_DIR, "sounds")
+    if os.path.isdir(bundled):
+        return bundled
+    return os.path.join(os.path.dirname(PACKAGE_DIR), "docs", "app")
+
+
+def _onset(data, rate):
+    """Where the sound starts in the decoded file (MP3 decoders add a little silence)."""
+    peak = float(np.max(np.abs(data))) if len(data) else 0.0
+    if peak <= 0:
+        return 0
+    first = int(np.argmax(np.abs(data) > peak * 0.02))
+    return max(0, first - int(0.004 * rate))
+
+
+def load_recorded(ident):
+    """Zones of a recorded instrument (``synth.SAMPLE_LOADER``)."""
+    rec = synth.RECORDINGS[ident]
+    folder = os.path.join(sounds_dir(), "samples", rec.web_id)
+    zones = []
+    for note in rec.zones:
+        data, rate = read_audio(os.path.join(folder, f"{note}.mp3"))
+        zones.append(synth.Zone(data, rate, float(note), 0, 127, False, 0, len(data), 1.0,
+                                _onset(data, rate)))
+    return zones
+
+
+ROOM_FILES = {"ROOM": "room", "CONCERT": "concert", "CHURCH": "church"}
+
+
+def load_room(room, rate):
+    """Stereo impulse response of a recorded room at ``rate`` (``effects.ROOM_LOADER``)."""
+    import aud
+    sound = aud.Sound(os.path.join(sounds_dir(), "rooms", ROOM_FILES[room] + ".mp3"))
+    data = np.asarray(sound.data(), dtype=np.float64)
+    if data.ndim == 1:
+        data = data[:, None]
+    if data.shape[1] == 1:
+        data = np.repeat(data, 2, axis=1)
+    source_rate = float(sound.specs[0])
+    if int(source_rate) != int(rate):
+        grid = np.arange(int(len(data) * rate / source_rate)) * (source_rate / rate)
+        data = np.stack([np.interp(grid, np.arange(len(data)), data[:, ch]) for ch in range(2)],
+                        axis=1)
+    return data[:, :2]
+
+
+def register():
+    from . import effects
+    synth.SAMPLE_LOADER = load_recorded
+    effects.ROOM_LOADER = load_room
+
+
+def unregister():
+    from . import effects
+    synth.SAMPLE_LOADER = None
+    effects.ROOM_LOADER = None

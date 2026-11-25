@@ -147,6 +147,14 @@ class GP2M_Effects(bpy.types.PropertyGroup):
 SAMPLE_RATES = (("44100", "44.1 kHz", ""), ("48000", "48 kHz", ""))
 
 
+ROOM_ITEMS = (
+    ("HALL", "Sala", "Il riverbero sintetico (la sua grandezza si regola)"),
+    ("ROOM", "Stanza", "Un soggiorno registrato (HybridReverb2, CC BY-SA 4.0)"),
+    ("CONCERT", "Auditorium", "Una grande sala da concerto registrata (HybridReverb2)"),
+    ("CHURCH", "Chiesa", "Una chiesa registrata, coda lunga (HybridReverb2)"),
+)
+
+
 class GP2M_CompositionSettings(bpy.types.PropertyGroup):
     is_composition: BoolProperty(default=False)
     channel: IntProperty(name="Canale Sequencer", default=0, min=0, max=128,
@@ -205,6 +213,10 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
     ambience: FloatProperty(name="Ambiente", default=0.25, min=0.0, max=1.0,
                             subtype="FACTOR", description="Quanto si sente la sala comune "
                             "(un riverbero che lega tutti i livelli)", update=_sound_changed)
+    room: EnumProperty(name="Ambiente del riverbero", items=ROOM_ITEMS, default="HALL",
+                       description="La sala di tutti i riverberi della composizione (livelli, "
+                       "strumenti e ambiente comune), come nella web app",
+                       update=_sound_changed)
     loop: BoolProperty(name="Loop", default=True,
                        description="Le code (eco, riverbero, note lunghe) rientrano "
                        "dall'inizio del loop",
@@ -220,7 +232,44 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
                               update=_sound_changed)
 
 
-INSTRUMENT_ITEMS = [(i.ident, i.label, i.description) for i in synth.INSTRUMENTS]
+def _instrument_items():
+    """Every instrument, by family. The numbers are the instruments' places in
+    ``synth.INSTRUMENTS``, so .blend files saved by older versions (where the list was
+    shorter) keep their instruments."""
+    number = {inst.ident: index for index, inst in enumerate(synth.INSTRUMENTS)}
+    items, listed = [], set()
+    for title, idents in INSTRUMENT_FAMILIES:
+        items.append(("", title, ""))
+        for ident in idents:
+            inst = synth.INSTRUMENT_BY_ID[ident]
+            items.append((ident, inst.label, inst.description, number[ident]))
+            listed.add(ident)
+    rest = [i for i in synth.INSTRUMENTS if i.ident not in listed]
+    if rest:
+        items.append(("", "Altri", ""))
+        items += [(i.ident, i.label, i.description, number[i.ident]) for i in rest]
+    return items
+
+
+def _families():
+    """(title, add-on idents): the synths, then the web app's recorded families."""
+    from . import web_instruments
+    synths = (
+        ("Synth melodici", ("EPIANO", "ORGAN", "SINE", "TRIANGLE", "MARIMBA", "BELL", "PLUCK",
+                            "STRINGS", "CHOIR", "PAD", "BRASS", "SAW", "SQUARE", "BASS")),
+        ("Batteria synth", ("DRUM", "KICK", "SNARE", "CLAP", "HIHAT", "OPENHAT", "TOM", "RIM",
+                            "SHAKER", "CRASH", "COWBELL")),
+    )
+    recorded = tuple(
+        (title, tuple(synth.SAMPLED_PREFIX + w for w in ids
+                      if synth.SAMPLED_PREFIX + w in synth.RECORDINGS))
+        for title, ids in web_instruments.MELODIC_FAMILIES + web_instruments.DRUM_FAMILIES)
+    return synths + tuple(f for f in recorded if f[1]) + (
+        ("Suoni", ("SAMPLE", "LIBRARY")),)
+
+
+INSTRUMENT_FAMILIES = _families()
+INSTRUMENT_ITEMS = _instrument_items()
 
 
 def _get_active_layer(gp_data):

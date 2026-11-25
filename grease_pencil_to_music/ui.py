@@ -16,14 +16,37 @@ from .operators import active_composition
 
 # --- Layers with their instruments ---------------------------------------------------
 
-INSTRUMENT_GROUPS = (
-    ("Melodici", ("EPIANO", "SINE", "MARIMBA", "BELL", "PLUCK", "STRINGS", "PAD", "SAW",
-                  "SQUARE", "TRIANGLE", "BASS")),
-    ("Percussioni", ("DRUM", "KICK", "SNARE", "CLAP", "HIHAT", "OPENHAT", "TOM", "RIM",
-                     "SHAKER", "CRASH", "COWBELL")),
-    ("Suoni", ("SAMPLE", "LIBRARY")),
-)
 INSTRUMENT_ICONS = {"SAMPLE": "FILE_SOUND", "LIBRARY": "ASSET_MANAGER"}
+
+
+def _add_instrument_buttons(layout, context, idents):
+    from . import synth
+    layer = getattr(context, "gp2m_layer", None)
+    for ident in idents:
+        inst = synth.INSTRUMENT_BY_ID.get(ident)
+        if inst is None:
+            continue
+        op = layout.operator("gp2m.add_instrument", text=inst.label,
+                             icon=INSTRUMENT_ICONS.get(ident, "DOT"))
+        op.instrument = ident
+        op.layer = layer.name if layer is not None else ""
+
+
+def _recorded_families():
+    """(menu id, title, idents) of the web app's recorded families."""
+    return [(f"GP2M_MT_add_recorded_{index}", title, idents)
+            for index, (title, idents) in enumerate(props.INSTRUMENT_FAMILIES)
+            if idents and idents[0].startswith("S_")]
+
+
+def _recorded_menu(menu_id, title, idents):
+    def draw(self, context):
+        _add_instrument_buttons(self.layout.column(), context, idents)
+    return type(menu_id, (bpy.types.Menu,), {"bl_idname": menu_id, "bl_label": title,
+                                             "draw": draw})
+
+
+RECORDED_MENUS = tuple(_recorded_menu(*family) for family in _recorded_families())
 
 
 class GP2M_MT_add_instrument(bpy.types.Menu):
@@ -33,20 +56,18 @@ class GP2M_MT_add_instrument(bpy.types.Menu):
     bl_label = "Aggiungi strumento"
 
     def draw(self, context):
-        from . import synth
-        layer = getattr(context, "gp2m_layer", None)
         row = self.layout.row()
-        for title, idents in INSTRUMENT_GROUPS:
+        recorded = _recorded_families()
+        for title, idents in props.INSTRUMENT_FAMILIES:
+            if idents and idents[0].startswith("S_"):
+                continue
             col = row.column()
             col.label(text=title)
-            for ident in idents:
-                if ident not in synth.INSTRUMENT_BY_ID:
-                    continue
-                inst = synth.INSTRUMENT_BY_ID[ident]
-                op = col.operator("gp2m.add_instrument", text=inst.label,
-                                  icon=INSTRUMENT_ICONS.get(ident, "DOT"))
-                op.instrument = ident
-                op.layer = layer.name if layer is not None else ""
+            _add_instrument_buttons(col, context, idents)
+        col = row.column()
+        col.label(text="Registrati (web app)")
+        for menu_id, title, _idents in recorded:
+            col.menu(menu_id, text=title, icon="SOUND")
 
 
 def _instrument_row(layout, comp, layer_name, index, material, active):
@@ -202,6 +223,7 @@ def draw_reading(layout, s):
     sub = col.column(align=True)
     sub.active = s.use_master
     sub.prop(s, "ambience")
+    col.prop(s, "room")
     col.prop(s, "sample_rate")
     layout.prop(s, "use_modifiers")
 
@@ -497,7 +519,7 @@ def draw_export_menu(self, _context):
         self.layout.operator("gp2m.export", text=label, icon="FILE_SOUND").format = fmt
 
 
-classes = (
+classes = RECORDED_MENUS + (
     GP2M_MT_add_instrument,
     GP2M_PT_data,
     GP2M_PT_data_board,

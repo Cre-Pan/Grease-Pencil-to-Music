@@ -58,7 +58,8 @@ def _layer_fx(settings):
 
 
 def master_fx(settings):
-    return mixer.MasterFx(enabled=settings.use_master, ambience=settings.ambience)
+    return mixer.MasterFx(enabled=settings.use_master, ambience=settings.ambience,
+                          room=getattr(settings, "room", "HALL"))
 
 
 MAX_SECTIONS = 24
