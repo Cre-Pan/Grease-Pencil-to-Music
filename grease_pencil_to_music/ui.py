@@ -394,6 +394,8 @@ def draw_layer_list(layout, comp):
     if settings is not None:
         col.prop(settings, "mode")
     col.prop(layer, "opacity", text="Volume", slider=True)
+    if settings is not None:
+        col.prop(settings, "pan_percent", slider=True)
     _clip_mix_props(col, settings)
     if settings is not None and settings.solo_saved_opacity >= 0.0:
         col.label(text="Attenuato dal Solo di un altro livello", icon="INFO")
@@ -405,7 +407,6 @@ def _clip_mix_props(col, settings):
         return
     sub = col.column(align=True)
     sub.prop(settings, "clip_volume", slider=True)
-    sub.prop(settings, "clip_pan", slider=True)
 
 
 def draw_layer_instruments(layout, comp, layer, settings):
@@ -681,9 +682,12 @@ def draw_board(layout, s):
     col = layout.column(align=True)
     low = s.low_note
     col.prop(s, "low_note", text=f"Nota più bassa ({music.note_name(low, style)})")
-    col.prop(s, "octaves", text=f"Ottave (fino a {music.note_name(low + s.octaves * 12, style)})")
+    col.prop(s, "octaves", text=f"Ottave (fino a {music.note_name(low + board.span(s), style)})")
+    if s.extra_keys:
+        col.prop(s, "extra_keys")
     _octave_buttons(col)
     col.prop(s, "key_labels")
+    layout.prop(s, "grid_opacity", slider=True)
     col = layout.column(align=True)
     col.prop(s, "row_height")
     col.prop(s, "seconds_width")
@@ -753,6 +757,8 @@ def draw_layer_details(layout, gp, layer):
     settings = props.find_layer_settings(gp, layer.name)
     col = _split(layout)
     col.prop(layer, "opacity", text="Volume", slider=True)
+    if settings is not None:
+        col.prop(settings, "pan_percent", slider=True)
     _clip_mix_props(col, settings)
     if settings is None:
         col.label(text="Impostazioni in preparazione…")

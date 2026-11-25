@@ -5,11 +5,12 @@ Frame by Plane rigs.
 * Four handles, drawn as gizmos at a fixed size on screen (they never get tiny when
   you zoom out, nor huge when you zoom in): light, with a dark rim; under the mouse
   and while dragged they take the theme's Active Object color, like a selected object.
-  - on the right edge: the length of the timeline (snaps to beats, Ctrl: free);
+  - on the right edge: the length of the timeline (free, Ctrl: whole bars); board,
+    sound and the meta-clip in the Sequencer follow while dragging;
   - on top of the playhead, a box in the theme's playhead color: moves the scene's
     current frame, like the playhead of the Timeline;
-  - above and below the keyboard: show or hide octaves on top / at the bottom
-    (the drawing never moves, see :func:`board.shift_octaves`).
+  - above and below the keyboard: show or hide keys on top / at the bottom, one key
+    at a time (Ctrl: whole octaves; the drawing never moves, see :func:`board.shift_keys`).
   They show only in Object Mode (and with the viewport's Gizmos overlay on).
 * Gizmos are clicked before objects, so dragging a handle never selects the board;
   it runs ``gp2m.rig_drag``, a modal operator: while dragging only the handle moves
@@ -224,12 +225,52 @@ def board_point(context, comp, mouse):
     return local.x, local.z
 
 
-def snap_length(settings, seconds, free=False):
-    seconds = min(max(seconds, 1.0), 300.0)
-    if free:
-        return round(seconds, 3)
-    step = 60.0 / settings.bpm if settings.show_beats and settings.bpm > 0 else 0.5
-    return min(max(round(seconds / step) * step, 1.0), 300.0)
+BEATS_PER_BAR = 4  # the board has no meter: bars of 4/4
+
+
+def bar_seconds(settings):
+    return BEATS_PER_BAR * 60.0 / settings.bpm if settings.bpm > 0 else 2.0
+
+
+def snap_to_bars(settings, seconds):
+    bar = bar_seconds(settings)
+    return round(seconds / bar) * bar
+
+
+def length_value(settings, seconds, fps, bars=False):
+    """Length for a drag: free (to the frame); with Ctrl on whole bars."""
+    if bars:
+        bar = bar_seconds(settings)
+        seconds = max(bar, snap_to_bars(settings, seconds))
+    else:
+        seconds = round(seconds * fps) / fps
+    return round(min(max(seconds, 1.0), 300.0), 4)
+
+
+def _fps(scene):
+    return scene.render.fps / scene.render.fps_base
+
+
+def _preview_meta(scene, comp, seconds):
+    """While the length is dragged the composition's meta-clip in the Sequencer follows
+    at once (the sound follows after the pause, then the clip fits it again)."""
+    from . import engine
+    if comp.gp2m.use_sections:
+        return
+    meta = engine.meta_strip(scene, comp)
+    if meta is None:
+        return
+    end = int(meta.left_handle + max(1, round(seconds * _fps(scene))))
+    try:
+        if meta.right_handle != end:
+            meta.right_handle = end
+    except (AttributeError, RuntimeError, ValueError):
+        pass
+
+
+def dragging():
+    """True while a handle is dragged (the Sequencer sync waits)."""
+    return bool(_drag)
 
 
 def frame_at(scene, comp, x):
@@ -285,26 +326,44 @@ class _HandleMove:
         key = (self.name, self.handle)
         dx, dz = point[0] - self.start[0], point[1] - self.start[1]
         if self.handle == HEAD:
-            frame = frame_at(context.scene, comp, self.head_x + dx)
+            x = self.head_x + dx
+            if event.ctrl:  # on the bars
+                width = max(s.seconds_width, 1e-9)
+                x = snap_to_bars(s, x / width) * width
+            frame = frame_at(context.scene, comp, x)
             if context.scene.frame_current != frame:
                 context.scene.frame_current = frame
             self.value = frame
             _drag[key] = (0.0, 0.0, "")
         elif self.handle == LENGTH:
-            seconds = snap_length(s, self.length + dx / max(s.seconds_width, 1e-9), event.ctrl)
+            # No snap (Ctrl: whole bars); the board, the sound and the meta-clip follow
+            # while dragging, so the handle sits on the real edge.
+            seconds = length_value(s, self.length + dx / max(s.seconds_width, 1e-9),
+                                   _fps(context.scene), event.ctrl)
             self.value = seconds
-            _drag[key] = ((seconds - s.length) * s.seconds_width, 0.0, f"{seconds:g} s")
+            if abs(s.length - seconds) > 1e-6:
+                s.length = seconds
+            _preview_meta(context.scene, comp, seconds)
+            _drag[key] = (0.0, 0.0, f"{seconds:.2f} s".replace(".", ","))
         else:
-            octave = 12 * s.row_height
-            steps = round(dz / octave)
+            # One key at a time; Ctrl: whole octaves.
+            raw = dz / max(s.row_height, 1e-9)
+            steps = 12 * round(raw / 12.0) if event.ctrl else round(raw)
             if self.handle == OCT_BOTTOM:
-                steps = -steps  # dragging down shows more octaves below
+                steps = -steps  # dragging down shows more keys below
             edge = "TOP" if self.handle == OCT_TOP else "BOTTOM"
-            steps = board.octave_steps(s, edge, steps)
+            steps = board.key_steps(s, edge, steps)
+            if event.ctrl:
+                steps = int(steps / 12) * 12
             self.value = steps
             sign = "+" if steps > 0 else ""
-            _drag[key] = (0.0, steps * octave * (1.0 if edge == "TOP" else -1.0),
-                          f"{sign}{steps} ott." if steps else "")
+            if not steps:
+                label = ""
+            elif steps % 12 == 0:
+                label = f"{sign}{steps // 12} ott."
+            else:
+                label = f"{sign}{steps} tast{'o' if abs(steps) == 1 else 'i'}"
+            _drag[key] = (0.0, steps * s.row_height * (1.0 if edge == "TOP" else -1.0), label)
         context.area.tag_redraw()
 
     def _reset_preview(self):
@@ -314,6 +373,9 @@ class _HandleMove:
     def _cancel(self, context):
         self._reset_preview()
         context.scene.frame_current = self.frame
+        comp = self._comp()
+        if comp is not None and self.handle == LENGTH and comp.gp2m.length != self.length:
+            comp.gp2m.length = self.length
         return {"CANCELLED"}
 
     def modal(self, context, event):
@@ -340,6 +402,11 @@ class _HandleMove:
             select(self.name, self.handle)
             return {"CANCELLED"}
         select(self.name, self.handle)
+        if self.handle == LENGTH:  # already applied while dragging
+            from . import engine
+            engine.arrange_safe(context.scene)  # the meta-clip fits its sound again
+            return {"FINISHED"} if abs(comp.gp2m.length - self.length) > 1e-6 \
+                else {"CANCELLED"}
         return {"FINISHED"} if apply(comp, self.handle, self.value) else {"CANCELLED"}
 
 
@@ -448,8 +515,8 @@ def apply(comp, handle, value):
             return False
         s.length = value
         return True
-    edge = "TOP" if handle == OCT_TOP else "BOTTOM"
-    return bool(value) and bool(board.shift_octaves(comp, edge, value))
+    edge = "TOP" if handle == OCT_TOP else "BOTTOM"  # value: keys (semitones)
+    return bool(value) and bool(board.shift_keys(comp, edge, value))
 
 
 # --- Gizmos --------------------------------------------------------------------------------

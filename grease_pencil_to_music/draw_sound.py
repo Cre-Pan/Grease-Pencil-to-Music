@@ -22,7 +22,7 @@ import time
 
 import numpy as np
 
-from . import interpret, music
+from . import board, interpret, music
 
 IDLE_INTERVAL = 0.25  # seconds between checks outside Draw Mode
 DRAW_INTERVAL = 0.02  # seconds between checks in Draw Mode
@@ -170,7 +170,7 @@ def _play(obj, tip, event):
         return
     settings = props.find_layer_settings(obj.data, layer.name)
     mode = settings.mode if settings is not None else "QUANTIZED"
-    pitch = tip_pitch(z, engine.board_spec(s), mode, s.octaves * 12)
+    pitch = tip_pitch(z, engine.board_spec(s), mode, board.span(s))
     if event == "start":
         _silence()
         _Live.instrument = reader.material_instrument(material)

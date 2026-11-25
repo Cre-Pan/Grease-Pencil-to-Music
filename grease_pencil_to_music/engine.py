@@ -1079,6 +1079,7 @@ def _arrange_layers(scene, obj, strips, target, mute):
         if shift:
             meta.content_start = meta.content_start + shift  # moves what is inside too
     fit_meta(meta)
+    state(obj)["meta_span"] = (int(meta.left_handle), int(meta.right_handle))
     if meta.mute != mute:
         meta.mute = mute
 
@@ -1117,7 +1118,7 @@ def timeline_data(result, settings):
     return {"peaks": (peaks / top).astype(np.float32), "rate": PEAKS_PER_SECOND,
             "notes": notes, "curves": curves, "curve_rate": interpret.CONTROL_RATE / 4,
             "low": settings.low_note,
-            "high": settings.low_note + settings.octaves * 12,
+            "high": settings.low_note + board.span(settings),
             "length": result.duration or settings.length}
 
 

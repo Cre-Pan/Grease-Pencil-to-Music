@@ -46,9 +46,9 @@ video aggiunto dopo la fa salire).
 
 **Maniglie** (solo in Object Mode, con i Gizmo del viewport accesi; si trascinano):
 
-- a **destra**: la durata (aggancio ai battiti, *Ctrl* libera);
-- il **riquadro** con il fotogramma in cima alla testina: sposta il cursore della timeline;
-- **sopra e sotto la tastiera**: mostrano o nascondono un'ottava.
+- a **destra**: la durata (libera, *Ctrl* sulle battute); tavola e meta-clip la seguono;
+- il **riquadro** con il fotogramma in cima alla testina: sposta il cursore della timeline (*Ctrl*: sulle battute);
+- **sopra e sotto la tastiera**: mostrano o nascondono un tasto alla volta (*Ctrl*: un'ottava).
 
 Un clic seleziona una maniglia, **G** la sposta con il mouse (clic conferma, Esc annulla).
   Il disegno non si sposta e suona le stesse note.

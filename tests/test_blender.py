@@ -2316,9 +2316,9 @@ def test_rig_handles_change_length_playhead_and_octaves(comp):
     rig = sub("rig")
     s = comp.gp2m
     s.bpm, s.show_beats = 120.0, True
-    assert rig.snap_length(s, 6.2) == 6.0  # half-second beats
-    assert rig.snap_length(s, 6.2, free=True) == 6.2
-    assert rig.snap_length(s, 0.1) == 1.0
+    assert rig.length_value(s, 6.21, 24) == round(149 / 24, 4)  # free, to the frame
+    assert rig.length_value(s, 6.2, 24, bars=True) == 6.0  # Ctrl: bars of 2 s at 120 BPM
+    assert rig.length_value(s, 0.1, 24) == 1.0
     assert rig.apply(comp, rig.LENGTH, 6.0) and s.length == 6.0
     assert not rig.apply(comp, rig.LENGTH, 6.0)
     scene = bpy.context.scene
@@ -2327,8 +2327,13 @@ def test_rig_handles_change_length_playhead_and_octaves(comp):
     assert frame == round(scene.frame_start + sub("engine").state(comp).get(
         "offset_frames", 0) + 2.0 * fps)
     s.low_note, s.octaves = 48, 2
-    assert rig.apply(comp, rig.OCT_BOTTOM, 1) and (s.low_note, s.octaves) == (36, 3)
-    assert rig.apply(comp, rig.OCT_TOP, 1) and s.octaves == 4
+    assert rig.apply(comp, rig.OCT_BOTTOM, 12) and (s.low_note, s.octaves) == (36, 3)
+    assert rig.apply(comp, rig.OCT_TOP, 12) and s.octaves == 4
+    # One key at a time: the lowest note goes down a semitone, the top gains one key.
+    assert rig.apply(comp, rig.OCT_BOTTOM, 1) and s.low_note == 35
+    assert rig.apply(comp, rig.OCT_TOP, 2) and (s.octaves, s.extra_keys) == (4, 3)
+    assert sub("board").dimensions(s)[0] == 4 * 12 + 3 + 1
+    assert rig.apply(comp, rig.OCT_TOP, -3) and (s.octaves, s.extra_keys) == (4, 0)
     # The handles sit outside the board: right edge, above the keys, below the keys.
     rows, width, top = sub("board").dimensions(s)
     assert rig.handle_point(comp, rig.LENGTH)[0] == width
@@ -2500,3 +2505,36 @@ def test_clip_volume_pan_color_and_time_follow_the_sequencer(comp, tmp_path):
     comp.gp2m.start_delay = 0.0
     assert min(s.content_start for s in engine.layer_strips(scene, comp).values()) \
         == scene.frame_start + engine.state(comp)["offset_frames"]
+
+
+def test_grid_opacity_and_layer_pan(comp):
+    board = sub("board")
+    s = comp.gp2m
+    s.grid_opacity = 0.4
+    grid = board.grid_object(comp)
+    assert all(abs(layer.opacity - 0.4) < 1e-6 for layer in grid.data.layers)
+    board.rebuild(comp)
+    assert all(abs(layer.opacity - 0.4) < 1e-6 for layer in board.grid_object(comp).data.layers)
+    # The drawing is not touched.
+    assert all(layer.opacity == 1.0 for layer in board.user_layers(comp.data))
+    item = sub("props").find_layer_settings(comp.data, "Livello 1")
+    item.pan_percent = 0.0
+    assert abs(item.clip_pan + 1.0) < 1e-6
+    item.pan_percent = 100.0
+    assert abs(item.clip_pan - 1.0) < 1e-6
+    item.pan_percent = 50.0
+    assert abs(item.clip_pan) < 1e-6
+
+
+def test_meta_clip_end_changes_the_length(comp):
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
+    engine.regenerate(comp)
+    meta = engine.meta_strip(scene, comp)
+    assert meta is not None and engine.state(comp).get("meta_span")
+    fps = scene.render.fps / scene.render.fps_base
+    before = comp.gp2m.length
+    meta.right_handle = meta.right_handle + int(2 * fps)
+    assert seqsync.sync_scene(scene)
+    assert abs(comp.gp2m.length - (before + 2.0)) < 1e-3

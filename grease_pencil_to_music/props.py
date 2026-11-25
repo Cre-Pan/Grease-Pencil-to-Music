@@ -306,6 +306,21 @@ def migrate_layer_settings(item):
     item.settings_version = SETTINGS_VERSION
 
 
+def _get_pan_percent(self):
+    return (self.clip_pan + 1.0) * 50.0
+
+
+def _set_pan_percent(self, value):
+    self.clip_pan = max(-1.0, min(1.0, value / 50.0 - 1.0))
+
+
+def _grid_opacity_changed(self, _context):
+    from . import board
+    obj = self.id_data
+    if isinstance(obj, bpy.types.Object) and obj.gp2m.is_composition:
+        board.apply_grid_opacity(obj)
+
+
 class GP2M_LayerSettings(bpy.types.PropertyGroup):
     """Settings of one Grease Pencil layer, matched by layer name."""
 
@@ -375,6 +390,11 @@ class GP2M_LayerSettings(bpy.types.PropertyGroup):
         update=lambda self, context: apply_layer_mix(self.id_data, self),
         description="Bilanciamento sinistra/destra della clip del livello nel Video "
         "Sequencer (lo stesso valore). Vale anche negli export")
+    pan_percent: FloatProperty(
+        name="Pan", min=0.0, max=100.0, precision=0, get=_get_pan_percent,
+        set=_set_pan_percent,
+        description="Sinistra / destra: 0 = tutto a sinistra, 50 = al centro, 100 = tutto "
+        "a destra (è il Pan della clip del livello nel Video Sequencer)")
     color: EnumProperty(name="Colore", items=LAYER_COLOR_ITEMS, default="NONE",
                         update=_color_changed,
                         description="Colore del livello: la sua strip nel Video Sequencer "
@@ -544,6 +564,13 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
                           description="Nota MIDI della riga più bassa (48 = C3)",
                           update=_board_changed)
     octaves: IntProperty(name="Ottave", default=3, min=1, max=7, update=_board_changed)
+    extra_keys: IntProperty(name="Tasti in più", default=0, min=0, max=11,
+                            description="Semitoni sopra le ottave intere (le maniglie delle "
+                            "ottave si fermano su ogni tasto)", update=_board_changed)
+    grid_opacity: FloatProperty(name="Opacità griglia", default=1.0, min=0.0, max=1.0,
+                                subtype="FACTOR", update=_grid_opacity_changed,
+                                description="Opacità della tavola: sfondo, righe, tastiera "
+                                "ed etichette (il disegno resta pieno)")
     row_height: FloatProperty(name="Altezza riga", default=0.12, min=0.02, max=1.0,
                               description="Altezza di un semitono sulla tavola",
                               update=_board_changed)

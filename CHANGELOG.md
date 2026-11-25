@@ -359,7 +359,20 @@
 
 Tutto insieme: rig e colori del tema (0.0.23, 0.0.24) con la meta-clip per composizione e la
 sincronizzazione tra Sequencer e livelli (vedi 0.0.22: muto, ordine, ritardo d'inizio, volume,
-pan e colore tra livelli e clip). Provato insieme in Blender 5.3.
+pan e colore tra livelli e clip). Provato insieme in Blender 5.3. In più:
+
+- **Opacità della griglia** (*Tavola e tempo*): sfondo, righe, tastiera ed etichette diventano
+  trasparenti quanto vuoi; il disegno resta pieno.
+- **Maniglie delle ottave un tasto alla volta**: trascinandole aggiungi o togli un semitono
+  per volta (in alto e in basso); con **Ctrl** un'ottava intera. Il disegno non si sposta.
+- **Maniglia della durata senza aggancio**: si ferma su ogni fotogramma e, mentre trascini,
+  la tavola e la meta-clip nel Sequencer cambiano insieme (il suono segue appena ti fermi).
+  Al contrario, allungando o accorciando la fine della meta-clip nel Sequencer la
+  composizione cambia durata e la tavola con il suo rig la segue.
+- **Ctrl nel viewport aggancia alle battute** (4/4 al BPM della composizione): per la
+  durata e per la testina.
+- **Pan da 0 a 100** sotto il volume di ogni livello: 0 tutto a sinistra, 50 al centro,
+  100 tutto a destra (è il Pan della clip del livello).
 
 ## 0.0.24
 

@@ -100,6 +100,29 @@ def _sync_time(scene, obj):
     return True
 
 
+def _sync_length(scene, obj):
+    """The meta-clip's end dragged in the Sequencer: the composition gets longer or
+    shorter by as much (the board and its rig follow)."""
+    meta = engine.meta_strip(scene, obj)
+    st = engine.state(obj)
+    span = st.get("meta_span")
+    if meta is None or span is None:
+        return False
+    left, right = int(meta.left_handle), int(meta.right_handle)
+    if (left, right) == tuple(span):
+        return False
+    st["meta_span"] = (left, right)
+    s = obj.gp2m
+    if left != span[0] or s.use_sections or engine.follows_scene(obj, scene):
+        return False  # moved in time (see _sync_time), or the length is not free
+    fps = scene.render.fps / scene.render.fps_base
+    length = round(min(max(s.length + (right - span[1]) / fps, 1.0), 300.0), 4)
+    if abs(length - s.length) < 0.5 / fps:
+        return False
+    s.length = length
+    return True
+
+
 def _reorder(gp, wanted):
     """Put the layers ``wanted`` (bottom first) in that order, the other layers and
     groups keep their places. Only layers with the same parent group."""
@@ -151,6 +174,9 @@ def sync_scene(scene):
     """Read back what was changed in the Sequencer. Returns True if anything changed."""
     if _busy[0] or engine._arranging[0] or scene.sequence_editor is None:
         return False
+    from . import rig
+    if rig.dragging():  # the rig moves the meta-clip itself while dragging
+        return False
     _busy[0] = True
     changed = False
     try:
@@ -164,6 +190,7 @@ def sync_scene(scene):
             changed |= _sync_mix(scene, obj)
             changed |= _sync_order(scene, obj)
             changed |= _sync_channel(scene, obj)
+            changed |= _sync_length(scene, obj)
             changed |= _sync_time(scene, obj)
     finally:
         _busy[0] = False

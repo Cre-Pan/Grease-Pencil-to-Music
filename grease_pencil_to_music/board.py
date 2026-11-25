@@ -310,8 +310,22 @@ def add_strokes_bulk(drawing, strokes):
     drawing.tag_positions_changed()
 
 
+def span(settings):
+    """Semitones from the lowest to the highest row (whole octaves plus extra keys)."""
+    return settings.octaves * 12 + settings.extra_keys
+
+
+def _set_span(settings, semitones):
+    semitones = max(12, min(MAX_OCTAVES * 12, semitones))
+    octaves, extra = divmod(semitones, 12)
+    if settings.octaves != octaves:
+        settings.octaves = octaves
+    if settings.extra_keys != extra:
+        settings.extra_keys = extra
+
+
 def dimensions(settings):
-    rows = settings.octaves * 12 + 1
+    rows = span(settings) + 1
     return rows, settings.length * settings.seconds_width, rows * settings.row_height
 
 
@@ -327,15 +341,23 @@ def vertical_extent(settings):
 MIN_LOW_NOTE, MAX_LOW_NOTE, MAX_OCTAVES = 12, 96, 7
 
 
-def octave_steps(settings, edge, delta):
-    """How many octaves (signed) can really be added (+) or hidden (-) at ``edge``."""
+def key_steps(settings, edge, delta):
+    """How many keys (semitones, signed) can really be added (+) or hidden (-) at
+    ``edge``: the board shows from 1 to 7 octaves."""
+    now = span(settings)
     if edge == "TOP":
-        return max(1, min(MAX_OCTAVES, settings.octaves + delta)) - settings.octaves
+        return max(12, min(MAX_OCTAVES * 12, now + delta)) - now
     if delta > 0:  # show more below: the lowest note goes down, the board grows
-        room = min((settings.low_note - MIN_LOW_NOTE) // 12, MAX_OCTAVES - settings.octaves)
+        room = min(settings.low_note - MIN_LOW_NOTE, MAX_OCTAVES * 12 - now)
         return max(0, min(delta, room))
-    room = min((MAX_LOW_NOTE - settings.low_note) // 12, settings.octaves - 1)
+    room = min(MAX_LOW_NOTE - settings.low_note, now - 12)
     return -max(0, min(-delta, room))
+
+
+def octave_steps(settings, edge, delta):
+    """How many whole octaves (signed) can really be added (+) or hidden (-)."""
+    keys = key_steps(settings, edge, 12 * delta)
+    return int(keys / 12)
 
 
 def shift_octaves(comp, edge, delta):
@@ -346,15 +368,22 @@ def shift_octaves(comp, edge, delta):
     The top only changes "Ottave". At the bottom the lowest note changes, so the
     board origin (z = 0, the lowest row) moves down or up by whole octaves and the
     strokes move the opposite way inside the object. Returns the octaves changed."""
+    steps = octave_steps(comp.gp2m, edge, delta)
+    return shift_keys(comp, edge, 12 * steps) // 12 if steps else 0
+
+
+def shift_keys(comp, edge, delta):
+    """Like :func:`shift_octaves`, one key (semitone) at a time. Returns the keys
+    changed (signed)."""
     import numpy as np
     s = comp.gp2m
-    steps = octave_steps(s, edge, delta)
+    steps = key_steps(s, edge, delta)
     if not steps:
         return 0
     if edge == "TOP":
-        s.octaves += steps
+        _set_span(s, span(s) + steps)
         return steps
-    dz = 12 * steps * s.row_height  # local z the strokes move up (down if negative)
+    dz = steps * s.row_height  # local z the strokes move up (down if negative)
     for layer in user_layers(comp.data):
         for frame in layer.frames:
             attr = frame.drawing.attributes.get("position")
@@ -369,8 +398,8 @@ def shift_octaves(comp, edge, delta):
     world = comp.matrix_world.copy()
     world.translation = world @ Vector((0.0, 0.0, -dz))
     comp.matrix_world = world
-    s.octaves += steps  # rebuild and sound are deferred: one for both changes
-    s.low_note -= 12 * steps
+    _set_span(s, span(s) + steps)  # rebuild and sound are deferred: one for both changes
+    s.low_note -= steps
     return steps
 
 
@@ -906,6 +935,7 @@ def rebuild(comp, scene=None):
         _add_strokes(layer.frames.new(frame).drawing, specs)
         layer.lock = True
 
+    apply_grid_opacity(comp)
     head = gp.layers.new(HEAD_LAYER, set_active=False, layer_group=head_group)
     head.use_lights = False
     head.pass_index = BOARD_PASS
@@ -947,7 +977,20 @@ def _rebuild_pending():
                 rebuild(obj)
             except Exception as error:  # keep Blender responsive
                 print(f"[Doodle Music] rebuild failed: {error!r}")
+    if names:
+        tag_redraw_views()  # also while a handle is dragged (no other redraw comes)
     return None
+
+
+def apply_grid_opacity(comp):
+    """Opacity of every layer of the grid (the drawing stays opaque)."""
+    grid = grid_object(comp)
+    if grid is None or grid.data is None:
+        return
+    value = comp.gp2m.grid_opacity
+    for layer in grid.data.layers:
+        if abs(layer.opacity - value) > 1e-6:
+            layer.opacity = value
 
 
 def rig_lift():
