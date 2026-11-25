@@ -1275,3 +1275,20 @@ def test_web_project_rejects_other_files(addon, tmp_path):
     path.write_text('{"hello": 1}', encoding="utf-8")
     with pytest.raises(RuntimeError):
         bpy.ops.gp2m.import_web(filepath=str(path))
+
+
+def test_auto_update_waits_for_a_running_transform(comp, monkeypatch):
+    """Regenerating while G/R/S or Alt+S is still dragging crashed Blender 5.3
+    (the transform holds pointers into the drawings): the timer waits for it."""
+    engine, handlers = sub("engine"), sub("handlers")
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
+    engine.state(comp).pop("key", None)
+    handlers.mark_dirty(comp)
+    handlers._last_change[0] = 0.0
+    monkeypatch.setattr(handlers, "transform_running", lambda: True)
+    assert handlers._tick() == handlers.TRANSFORM_POLL
+    assert comp.name in handlers._dirty  # still pending
+    assert engine.state(comp).get("key") is None  # nothing regenerated yet
+    monkeypatch.setattr(handlers, "transform_running", lambda: False)
+    assert handlers._tick() is None
+    assert engine.state(comp).get("key") is not None  # regenerated once it ended
