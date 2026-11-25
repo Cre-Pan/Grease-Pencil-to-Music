@@ -355,6 +355,15 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.18
+
+Icone degli strumenti più semplici
+
+- **Icone minimali a due toni**: le 34 icone degli strumenti sono ridisegnate con meno
+  dettagli, poche forme grandi e due toni come le icone di Blender: la forma principale piena e
+  una parte secondaria (manico, asta, bacchette, corde, supporto) più tenue. Si leggono meglio
+  a 16 px nei menu e sotto i livelli.
+
 ## 0.0.17
 
 Strumenti riordinati, con le loro icone

@@ -207,7 +207,7 @@ archi, corde pizzicate, legni, ottoni, voci e pad, synth), *Percussioni* (batter
 metalli, legni e blocchi, fruscii e sfregamenti, oggetti) e *Suoni tuoi* (Campione, Libreria).
 Ogni famiglia è un sottomenu con prima i registrati e poi i sintetizzati dello stesso tipo
 (per esempio *Flauto* e *Flauto (synth)* stanno insieme). Ogni strumento ha un'icona
-monocromatica nello stile di Blender, la stessa nella lista dei livelli, nei menu e nel menu
+minimale a due toni nello stile di Blender, la stessa nella lista dei livelli, nei menu e nel menu
 *Strumento* della scheda Materiale.
 
 **Registrati** (69, gli stessi file della web app, dentro lo zip dell'add-on): dal VS Chamber
