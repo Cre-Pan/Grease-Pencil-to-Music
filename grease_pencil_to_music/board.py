@@ -5,7 +5,7 @@ Everything lives in the composition's own Grease Pencil data, so a
 composition is one single object (no parent lines, Shift+D duplicates a whole
 work plane):
 
-* layer group "GP2M Tavola" (bottom, locked): background, grid, note rows,
+* layer group "Tavola Composizione" (bottom, locked): background, grid, note rows,
   piano keys, labels and the dark boxes outside the scene Preview Range;
 * layer group "GP2M Testina" (top, locked): the playhead, moved by a driver
   on the layer translation;
@@ -23,9 +23,10 @@ import bpy
 
 from . import glyphs, music, synth
 
-BOARD_GROUP = "GP2M Tavola"
+BOARD_GROUP = "Tavola Composizione"
+LEGACY_BOARD_GROUP = "GP2M Tavola"  # name up to 0.0.12, renamed when found
 HEAD_GROUP = "GP2M Testina"
-BOARD_GROUPS = (BOARD_GROUP, HEAD_GROUP)
+BOARD_GROUPS = (BOARD_GROUP, HEAD_GROUP, LEGACY_BOARD_GROUP)
 HEAD_LAYER = "GP2M Linea testina"
 BOARD_FLAG = "gp2m_board"  # custom property on board materials
 LEGACY_ROLE = "gp2m_role"  # 0.0.1 used separate child objects
@@ -196,6 +197,57 @@ def is_board_layer(layer):
 
 def user_layers(gp):
     return [layer for layer in gp.layers if not is_board_layer(layer)]
+
+
+def is_group(node):
+    return isinstance(node, bpy.types.GreasePencilLayerGroup)
+
+
+def is_board_group(group):
+    while group is not None:
+        if group.name in BOARD_GROUPS:
+            return True
+        group = group.parent_group
+    return False
+
+
+def user_groups(gp):
+    """The layer groups made by the user (the board's own groups excluded)."""
+    return [group for group in gp.layer_groups if not is_board_group(group)]
+
+
+def ancestors(node):
+    """The groups that contain ``node``, innermost first."""
+    groups = []
+    group = node.parent_group
+    while group is not None:
+        groups.append(group)
+        group = group.parent_group
+    return groups
+
+
+def is_hidden(layer):
+    """Hidden itself or inside a hidden group (Blender does not draw it either)."""
+    return layer.hide or any(group.hide for group in ancestors(layer))
+
+
+def user_tree(gp):
+    """``[(node, depth)]`` of the user's layers and groups, top first, as Blender's
+    layer tree shows them (a group comes before its children)."""
+    rows = []
+
+    def walk(nodes, depth):
+        for node in reversed(list(nodes)):  # Blender lists nodes bottom to top
+            if is_group(node):
+                if node.name in BOARD_GROUPS:
+                    continue
+                rows.append((node, depth))
+                walk(node.children, depth + 1)
+            else:
+                rows.append((node, depth))
+
+    walk(gp.root_nodes, 0)
+    return rows
 
 
 def _rect(x0, z0, x1, z1):
@@ -589,15 +641,17 @@ def _set_playhead_driver(gp, scene, seconds_width, offset_frames=0):
 
 def ensure_order(gp):
     """Board group at the bottom, playhead group on top (writes only if needed)."""
-    layers = list(gp.layers)
-    if not layers:
-        return
     head = gp.layer_groups.get(HEAD_GROUP)
-    if head is not None and layers[-1].parent_group is None:
-        gp.layer_groups.move_top(head)
+    if head is not None and head.parent_group is None:
+        roots = list(gp.root_nodes)
+        if roots and roots[-1].name != HEAD_GROUP:
+            gp.layer_groups.move_top(head)
+    rename_legacy_board(gp)
     tavola = gp.layer_groups.get(BOARD_GROUP)
-    if tavola is not None and layers[0].parent_group is None:
-        gp.layer_groups.move_bottom(tavola)
+    if tavola is not None and tavola.parent_group is None:
+        roots = list(gp.root_nodes)
+        if roots and roots[0].name != BOARD_GROUP:
+            gp.layer_groups.move_bottom(tavola)
 
 
 def protect_board(obj):
@@ -619,7 +673,17 @@ def protect_board(obj):
 
 
 def has_board(comp):
-    return comp.data.layer_groups.get(BOARD_GROUP) is not None
+    groups = comp.data.layer_groups
+    return groups.get(BOARD_GROUP) is not None or groups.get(LEGACY_BOARD_GROUP) is not None
+
+
+def rename_legacy_board(gp):
+    """Files up to 0.0.12 call the board group "GP2M Tavola". Returns True if renamed."""
+    legacy = gp.layer_groups.get(LEGACY_BOARD_GROUP)
+    if legacy is None or gp.layer_groups.get(BOARD_GROUP) is not None:
+        return False
+    legacy.name = BOARD_GROUP
+    return legacy.name == BOARD_GROUP
 
 
 # Board layer -> materials its strokes may use.
@@ -677,6 +741,7 @@ def rebuild(comp, scene=None):
     lit = preview_lit(comp, scene)
     gp[SHADE_KEY] = _shade_signature(s, lit)
 
+    rename_legacy_board(gp)
     for layer in [layer for layer in gp.layers if is_board_layer(layer)]:
         gp.layers.remove(layer)
     board_group = _ensure_group(gp, BOARD_GROUP, bottom=True)

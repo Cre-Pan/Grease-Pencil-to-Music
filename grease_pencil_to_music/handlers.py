@@ -12,7 +12,7 @@ import time
 import bpy
 from bpy.app.handlers import persistent
 
-from . import board, engine, feedback, prefs
+from . import board, engine, feedback, prefs, props
 
 _dirty = set()
 _last_change = [0.0]
@@ -194,6 +194,33 @@ def _tick():
     return None
 
 
+_layer_syncs = set()  # Grease Pencil data whose layer settings must be checked
+
+
+def request_layer_sync(gp_data):
+    """Layers or groups added, duplicated or renamed (also with Blender's own layer
+    list): give them their settings right away, even with Auto off."""
+    _layer_syncs.add(gp_data.name)
+    if not bpy.app.timers.is_registered(_layer_sync_tick):
+        bpy.app.timers.register(_layer_sync_tick, first_interval=0.0)
+
+
+def _layer_sync_tick():
+    if transform_running():
+        return TRANSFORM_POLL
+    names = set(_layer_syncs)
+    _layer_syncs.clear()
+    for obj in compositions():
+        if obj.data is None or obj.data.name not in names:
+            continue
+        try:
+            props.ensure_layer_settings(obj.data)
+            board.ensure_order(obj.data)
+        except Exception as error:
+            print(f"[Doodle Music] layer settings update failed: {error!r}")
+    return None
+
+
 def _stack_count(obj):
     return len(feedback.user_modifiers(obj)) + len(getattr(obj, "shader_effects", ()))
 
@@ -243,6 +270,7 @@ def on_depsgraph_update(_scene, depsgraph):
             for obj in comps:
                 if obj.data == original:
                     mark_dirty(obj)
+                    request_layer_sync(original)
         elif isinstance(original, bpy.types.Object):
             if original.type == "GREASEPENCIL" and original.gp2m.is_composition:
                 _check_stack(original)
@@ -429,6 +457,6 @@ def unregister():
         if func in handler_list:
             handler_list.remove(func)
     bpy.msgbus.clear_by_owner(_msgbus_owner)
-    for timer in (_tick, _resume_playback, _shade_tick):
+    for timer in (_tick, _resume_playback, _shade_tick, _layer_sync_tick):
         if bpy.app.timers.is_registered(timer):
             bpy.app.timers.unregister(timer)

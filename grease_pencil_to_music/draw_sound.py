@@ -133,7 +133,7 @@ def _tip(obj, scene):
     from . import board, reader
     gp = obj.data
     layer = gp.layers.active
-    if layer is None or layer.hide or board.is_board_layer(layer):
+    if layer is None or board.is_hidden(layer) or board.is_board_layer(layer):
         return None
     drawing = reader.drawing_at(layer, scene.frame_current)
     if drawing is None:
