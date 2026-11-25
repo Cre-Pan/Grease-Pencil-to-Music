@@ -108,8 +108,7 @@ def test_add_composition_has_its_grid_apart(comp):
     assert s.is_composition and comp.name.startswith("Composizione Musicale")
     # The grid is its own Grease Pencil object, a child of the composition.
     grid = board.grid_object(comp)
-    handles = sub("rig").rig_object(comp)
-    assert set(comp.children) == {grid, handles} and grid.name == comp.name + board.GRID_SUFFIX
+    assert set(comp.children) == {grid} and grid.name == comp.name + board.GRID_SUFFIX
     assert board.is_grid(grid) and not grid.gp2m.is_composition
     assert all(grid.lock_location) and all(grid.lock_scale)
     assert comp.show_in_front and not grid.show_in_front
@@ -2247,25 +2246,65 @@ def test_octaves_below_and_above_keep_the_drawing(comp):
     assert board.octave_steps(s, "BOTTOM", 1) == 0  # no room below C0
 
 
-# --- Drawn rig (Object Mode handles) ------------------------------------------------------
+# --- Rig (Object Mode handles, gizmos) -------------------------------------------------
 
-def test_rig_has_drawn_handles_that_never_render(comp):
+def test_rig_handles_are_gizmos_with_theme_colors(comp):
     rig = sub("rig")
-    handles = rig.rig_object(comp)
-    assert handles is not None and handles.name == comp.name + rig.RIG_SUFFIX
-    assert handles.hide_render and handles.hide_select and all(handles.lock_location)
-    names = {layer.name for layer in handles.data.layers}
-    assert names == set(rig.HANDLE_LAYERS.values())
-    for layer in handles.data.layers:
-        assert len(layer.frames[0].drawing.strokes) >= 1
-    # The playhead handle follows the playhead (same driver).
-    curve = handles.data.animation_data.drivers.find(
-        f'layers["{rig.HANDLE_LAYERS[rig.HEAD]}"].translation', index=0)
-    head = comp.data.animation_data.drivers.find(
-        f'layers["{sub("board").HEAD_LAYER}"].translation', index=0)
-    assert curve.driver.expression == head.driver.expression
-    assert "bl_rna" in sub("rig").GP2M_GGT_rig.__dict__
-    assert "bl_rna" in sub("rig").GP2M_GT_handle.__dict__
+    assert rig.rig_object(comp) is None  # no object: the handles are gizmos
+    assert "bl_rna" in rig.GP2M_GGT_rig.__dict__
+    assert "bl_rna" in rig.GP2M_GT_handle.__dict__
+    for handle in rig.HANDLE_NAMES:
+        body, rim, glyphs = rig.handle_geometry(handle)
+        assert len(body) % 3 == 0 and len(rim) % 3 == 0 and len(glyphs) % 3 == 0
+        # Drawn outside the board, beside the anchor (pixels).
+        xs = [p[0] for p in rim]
+        zs = [p[2] for p in rim]
+        if handle == rig.LENGTH:
+            assert min(xs) > 0
+        elif handle in (rig.OCT_TOP, rig.HEAD):
+            assert min(zs) >= -3.0
+        else:
+            assert max(zs) < 0
+    colors = sub("theme").handle_colors(bpy.context)
+    active = tuple(bpy.context.preferences.themes[0].view_3d.object_active)
+    assert np.allclose(colors["active"], active)
+    playhead = tuple(bpy.context.preferences.themes[0].common.anim.playhead)[:3]
+    assert np.allclose(colors["playhead"], playhead)
+
+
+def test_rig_of_0_0_22_is_removed(comp):
+    rig = sub("rig")
+    data = bpy.data.grease_pencils.new(comp.name + rig.RIG_SUFFIX)
+    old = bpy.data.objects.new(data.name, data)
+    old[rig.RIG_ROLE] = True
+    bpy.context.scene.collection.objects.link(old)
+    old.parent = comp
+    name = old.name
+    assert not sub("board").has_board(comp)
+    sub("board").rebuild(comp)
+    assert rig.rig_object(comp) is None and bpy.data.objects.get(name) is None
+    assert sub("board").has_board(comp)
+
+
+def test_board_and_playhead_follow_the_theme(comp):
+    theme = sub("theme")
+    t = bpy.context.preferences.themes[0]
+    head = bpy.data.materials["GP2M Testina"].grease_pencil
+    assert np.allclose(tuple(head.color)[:3], theme.to_linear(t.common.anim.playhead), atol=1e-4)
+    back = bpy.data.materials["GP2M Sfondo"].grease_pencil
+    assert np.allclose(tuple(back.fill_color)[:3],
+                       theme.to_linear(t.dopesheet_editor.space.back), atol=1e-4)
+    old = tuple(t.common.anim.playhead)
+    try:
+        t.common.anim.playhead = (0.9, 0.1, 0.5, 1.0)
+        assert theme.apply_to_materials()
+        assert np.allclose(tuple(head.color)[:3], theme.to_linear(t.common.anim.playhead),
+                           atol=1e-4)
+        assert head.color[0] > 0.6 > head.color[1]
+        assert not theme.apply_to_materials()  # nothing changed since
+    finally:
+        t.common.anim.playhead = old
+        theme.apply_to_materials()
 
 
 def test_rig_handles_change_length_playhead_and_octaves(comp):
@@ -2287,30 +2326,26 @@ def test_rig_handles_change_length_playhead_and_octaves(comp):
     assert rig.apply(comp, rig.OCT_TOP, 1) and s.octaves == 4
     # The handles sit outside the board: right edge, above the keys, below the keys.
     rows, width, top = sub("board").dimensions(s)
-    assert rig.handle_point(comp, rig.LENGTH)[0] > width
-    assert rig.handle_point(comp, rig.OCT_TOP)[1] > top
-    assert rig.handle_point(comp, rig.OCT_BOTTOM)[1] < 0
+    assert rig.handle_point(comp, rig.LENGTH)[0] == width
+    assert rig.handle_point(comp, rig.OCT_TOP)[1] == top
+    assert rig.handle_point(comp, rig.OCT_BOTTOM)[1] == 0
+    assert rig.handle_point(comp, rig.HEAD, 1.5) == (1.5, top + rig.HEAD_LIFT)
 
 
-def test_rig_shows_only_in_object_mode_and_goes_with_its_composition(comp):
+def test_rig_gizmos_only_in_object_mode(comp):
     rig = sub("rig")
-    handles = rig.rig_object(comp)
-    rig.sync_visibility()
-    assert not handles.hide_viewport
+    assert rig.GP2M_GGT_rig.poll(bpy.context)
     bpy.context.view_layer.objects.active = comp
     bpy.ops.object.mode_set(mode="PAINT_GREASE_PENCIL")
     try:
-        rig.sync_visibility()
-        assert handles.hide_viewport
+        assert not rig.GP2M_GGT_rig.poll(bpy.context)
     finally:
         bpy.ops.object.mode_set(mode="OBJECT")
-    rig.sync_visibility()
-    assert not handles.hide_viewport
+    # A deleted composition leaves no handles behind (old rigs included).
     other = _fresh(None)
-    name = rig.rig_object(other).name
     bpy.data.objects.remove(other, do_unlink=True)
     sub("engine").cleanup_orphans()
-    assert bpy.data.objects.get(name) is None
+    assert not any(rig.is_rig(obj) for obj in bpy.data.objects)
 
 
 def test_layers_live_in_one_meta_clip(comp):

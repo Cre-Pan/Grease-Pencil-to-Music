@@ -132,10 +132,9 @@ def select_only(context, obj):
 
 
 def _parts(obj, with_rig=True):
-    from . import rig
+    """The composition and its grid (the rig handles are gizmos, not objects)."""
     grid = board.grid_object(obj)
-    handles = rig.rig_object(obj) if with_rig else None
-    return [obj] + [part for part in (grid, handles) if part is not None]
+    return [obj] + ([grid] if grid is not None else [])
 
 
 # --- List ------------------------------------------------------------------------

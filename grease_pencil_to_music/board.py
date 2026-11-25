@@ -22,7 +22,7 @@ import warnings
 
 import bpy
 
-from . import glyphs, music, synth
+from . import glyphs, music, synth, theme
 
 BOARD_GROUP = "Tavola Composizione"
 LEGACY_BOARD_GROUP = "GP2M Tavola"  # name up to 0.0.12, renamed when found
@@ -37,21 +37,7 @@ GRID_SUFFIX = " · Tavola"
 GRID_DEPTH = 0.005  # the grid sits just behind the drawing (+Y, away from the front view)
 HEAD_MATERIALS = ("GP2M Testina",)  # the only board material left in the composition
 
-# name: (stroke RGBA or None, fill RGBA or None)
-BOARD_MATERIALS = {
-    "GP2M Sfondo": (None, (0.06, 0.06, 0.07, 1.0)),
-    "GP2M Banda tasti neri": (None, (0.032, 0.032, 0.04, 1.0)),
-    "GP2M Linea Do": ((1.0, 0.68, 0.2, 1.0), None),
-    "GP2M Linea nota": ((0.2, 0.2, 0.23, 1.0), None),
-    "GP2M Linea secondo": ((0.45, 0.62, 0.95, 1.0), None),
-    "GP2M Linea battito": ((0.12, 0.13, 0.18, 1.0), None),
-    "GP2M Tasto bianco": ((0.55, 0.55, 0.55, 1.0), (0.93, 0.93, 0.9, 1.0)),
-    "GP2M Tasto nero": (None, (0.04, 0.04, 0.05, 1.0)),
-    "GP2M Etichetta tasti": ((0.42, 0.42, 0.45, 1.0), None),
-    "GP2M Etichetta tempo": ((0.45, 0.62, 0.95, 1.0), None),
-    "GP2M Testina": ((1.0, 0.18, 0.15, 1.0), None),
-    "GP2M Fuori anteprima": (None, (0.0, 0.0, 0.0, 0.62)),
-}
+# The board materials take their colors from the Blender theme: see theme.board_palette.
 SHADE_LAYER = "GP2M Fuori anteprima"
 SHADE_KEY = "gp2m_shade"  # ID property on the GP data: spans last drawn
 
@@ -330,12 +316,12 @@ def dimensions(settings):
 
 
 def vertical_extent(settings):
-    """(bottom, top) of the board in local z: labels, playhead and the drawn handles of
-    the rig included (see rig.handle_point)."""
+    """(bottom, top) of the board in local z: labels, playhead and room for the rig
+    handles (drawn at a fixed size on screen, see rig.handle_point)."""
     from . import rig
     _rows, _width, top = dimensions(settings)
-    _hw, hh = rig.handle_size(settings)
-    return -0.12 - 2.0 * hh, top + 0.34 + 2.0 * hh
+    room = rig.handle_room(settings)
+    return -0.12 - room, top + rig.HEAD_LIFT + room
 
 
 MIN_LOW_NOTE, MAX_LOW_NOTE, MAX_OCTAVES = 12, 96, 7
@@ -618,10 +604,11 @@ def _ensure_materials(gp, wanted=None):
     """Append the board materials (or only ``wanted``) after the instruments."""
     index = {}
     names = [m.name if m else "" for m in gp.materials]
-    for name, (stroke, fill) in BOARD_MATERIALS.items():
+    for name, (stroke, fill) in theme.board_palette().items():
         if wanted is not None and name not in wanted:
             continue
         material = gp_material(name, stroke, fill)
+        _set_gp_style(material, stroke, fill)  # the theme may have changed
         material[BOARD_FLAG] = True
         if name not in names:
             gp.materials.append(material)
@@ -758,8 +745,6 @@ def set_playhead_offset(comp, offset_frames, sections=None):
                                       comp.gp2m.length)
     if curve.driver.expression != expression:
         curve.driver.expression = expression
-        from . import rig
-        rig.sync_head_driver(comp)
 
 
 def _set_playhead_driver(gp, scene, seconds_width, offset_frames=0):
@@ -822,8 +807,8 @@ def has_board(comp):
         return False
     grid = grid_object(comp)
     from . import rig
-    if rig.rig_object(comp) is None:
-        return False
+    if rig.rig_object(comp) is not None:
+        return False  # the drawn rig of 0.0.22: rebuild removes it
     return (grid is not None and grid.data is not None
             and grid.data.layer_groups.get(BOARD_GROUP) is not None
             and groups.get(HEAD_GROUP) is not None)
@@ -926,7 +911,7 @@ def rebuild(comp, scene=None):
     head.pass_index = BOARD_PASS
     head_index = _ensure_materials(gp, HEAD_MATERIALS)
     _add_strokes(head.frames.new(frame).drawing,
-                 [([(0.0, -0.12), (0.0, top + 0.04)], 0.012, head_index["GP2M Testina"],
+                 [([(0.0, -0.12), (0.0, top + rig_lift())], 0.012, head_index["GP2M Testina"],
                    "line")])
     head.lock = True
     from . import engine
@@ -934,7 +919,7 @@ def rebuild(comp, scene=None):
     _set_playhead_driver(gp, scene, s.seconds_width, offset)
 
     from . import rig
-    rig.rebuild(comp, scene)
+    rig.remove_legacy(comp)
 
     layer = gp.layers.get(active_name) if active_name else None
     if layer is None or is_board_layer(layer):
@@ -963,6 +948,19 @@ def _rebuild_pending():
             except Exception as error:  # keep Blender responsive
                 print(f"[Doodle Music] rebuild failed: {error!r}")
     return None
+
+
+def rig_lift():
+    """The playhead line reaches up to the playhead handle of the rig."""
+    from . import rig
+    return rig.HEAD_LIFT
+
+
+def tag_redraw_views():
+    for window in getattr(bpy.context.window_manager, "windows", ()):
+        for area in window.screen.areas:
+            if area.type == "VIEW_3D":
+                area.tag_redraw()
 
 
 def request_rebuild(comp):

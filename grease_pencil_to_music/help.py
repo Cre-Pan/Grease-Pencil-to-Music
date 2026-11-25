@@ -43,10 +43,10 @@ video aggiunto dopo la fa salire).
 - **Su / giù** scambiano i canali con la vicina.
 - **Riordina** impila tutte le tavole, la più bassa resta dov'è.
 
-**Maniglie** (solo in Object Mode, si trascinano):
+**Maniglie** (solo in Object Mode, con i Gizmo del viewport accesi; si trascinano):
 
 - a **destra**: la durata (aggancio ai battiti, *Ctrl* libera);
-- la **goccia** sulla testina: sposta il cursore della timeline;
+- il **riquadro** con il fotogramma in cima alla testina: sposta il cursore della timeline;
 - **sopra e sotto la tastiera**: mostrano o nascondono un'ottava.
   Il disegno non si sposta e suona le stesse note.
 """,

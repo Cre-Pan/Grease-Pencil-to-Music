@@ -355,6 +355,29 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.23
+
+Rig in stile Frame by Plane e colori del tema di Blender
+
+- **Maniglie come in Frame by Plane**: non sono più tratti di un terzo Grease Pencil ma
+  gizmo disegnati a **dimensione fissa sullo schermo** (non diventano minuscole allontanando
+  la vista né enormi avvicinandola), chiari con un bordo scuro; sotto il mouse e mentre le
+  trascini prendono il colore dell'*Oggetto attivo* del tema. A destra la durata (◂ ▸),
+  sopra e sotto la tastiera le ottave (▴ ▾). Gli oggetti *· Rig* della 0.0.22 vengono
+  rimossi all'apertura del file.
+- **Testina come nella Timeline**: la linea e il riquadro in cima hanno il colore della
+  testina del tema (*Temi → Comune → Animazione → Playhead*) e il riquadro mostra il numero
+  del fotogramma, come nella Timeline. Si trascina per spostare il cursore.
+- **Tavola nei colori del tema**: sfondo, righe, linee dei secondi e dei battiti ed etichette
+  vengono dal Dope Sheet del tema, i Do dal colore dei keyframe selezionati, l'ombra fuori
+  dall'anteprima dal *Scene Strip Range*. Se cambi tema (o un suo colore) la tavola si
+  aggiorna da sola entro un secondo, senza ricostruirla e senza rigenerare il suono.
+- **Provato in Blender 5.3 con il mouse**: le quattro maniglie sono state trascinate con
+  eventi del mouse veri (durata 8 → 9,5 s, un'ottava sopra, una sotto, testina dal
+  fotogramma 30 al 69).
+- GitHub Pages: il deploy fallito a volte ("No artifacts named github-pages") ora è in due
+  job, come nel modello di GitHub, così l'artefatto è già registrato quando parte il deploy.
+
 ## 0.0.22
 
 Il viewport come un tavolo: composizioni come livelli e maniglie disegnate
