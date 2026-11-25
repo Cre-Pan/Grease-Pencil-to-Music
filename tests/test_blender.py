@@ -108,7 +108,7 @@ def test_add_composition_has_its_grid_apart(comp):
     assert s.is_composition and comp.name.startswith("Composizione Musicale")
     # The grid is its own Grease Pencil object, a child of the composition.
     grid = board.grid_object(comp)
-    assert list(comp.children) == [grid] and grid.name == comp.name + board.GRID_SUFFIX
+    assert set(comp.children) == {grid} and grid.name == comp.name + board.GRID_SUFFIX
     assert board.is_grid(grid) and not grid.gp2m.is_composition
     assert all(grid.lock_location) and all(grid.lock_scale)
     assert comp.show_in_front and not grid.show_in_front
@@ -338,7 +338,10 @@ class MockLayout:
 
     def prop(self, data, attr, **_kwargs):
         target = getattr(data, "_target", data)
-        assert attr in target.bl_rna.properties, f"{type(target).__name__}.{attr}"
+        if attr.startswith('["') and attr.endswith('"]'):  # a custom property
+            assert attr[2:-2] in target, f"{type(target).__name__}{attr}"
+        else:
+            assert attr in target.bl_rna.properties, f"{type(target).__name__}.{attr}"
         self.log.append(("prop", attr))
 
     def template_list(self, list_id, _list_name, data, propname, active_data, active_prop,
@@ -400,6 +403,8 @@ def test_panels_menus_and_preferences_draw(comp):
         setattr(settings, toggle, True)  # the "N attivi" summaries
     for panel in ui.classes:
         is_material = getattr(panel, "bl_context", "") == "material"
+        if panel is ui.GP2M_PT_sequencer_group:
+            continue  # below, with a group active in the Sequencer
         if issubclass(panel, bpy.types.Panel) and not is_material:
             assert panel.poll(bpy.context) if hasattr(panel, "poll") else True, panel
             panel.draw(_Drawer(log), bpy.context)
@@ -407,10 +412,29 @@ def test_panels_menus_and_preferences_draw(comp):
                 panel.draw_header(_Drawer(log), bpy.context)
         if hasattr(panel, "draw_header_preset") and not is_material:
             panel.draw_header_preset(_Drawer(log), bpy.context)
+    # The group panel of the Sequencer: a group of compositions, then of layers.
+    engine, seqsync = sub("engine"), sub("seqsync")
+    editor = bpy.context.scene.sequence_editor
+    meta = engine.meta_strip(bpy.context.scene, comp)
+    group = editor.strips.new_meta("MetaStrip", engine._block_from(
+        1, 1, {s.channel for s in editor.strips}), int(meta.left_handle))
+    seqsync.make_group(group)
+    layer_group = meta.strips.new_meta("MetaStrip", 9, int(meta.left_handle))
+    layer_group[engine.OWNER_KEY] = comp.name
+    layer_group[engine.LAYER_GROUP_KEY] = comp.data.layers.active.name
+    for strip in (group, layer_group):
+        editor.active_strip = strip
+        assert ui.GP2M_PT_sequencer_group.poll(bpy.context)
+        ui.GP2M_PT_sequencer_group.draw(_Drawer(log), bpy.context)
+    for strip in (layer_group, group):
+        engine._remove_strip(editor, strip)
     ui.GP2M_PT_material_fx.draw(_Drawer(log), type("C", (), {
         "material": comp.material_slots[0].material})())
     ui.GP2M_PT_material.draw_header_preset(_Drawer(log), bpy.context)
     ui.GP2M_MT_layer_specials.draw(_Drawer(log), bpy.context)
+    table = sub("table").GP2M_PT_compositions
+    table.draw(_Drawer(log), bpy.context)
+    table.draw_header_preset(_Drawer(log), bpy.context)
     for panel in sub("help").classes:
         panel.draw(_Drawer(log), bpy.context)
     # The Material panel needs context.material (Properties editor only).
@@ -447,7 +471,9 @@ def test_panels_menus_and_preferences_draw(comp):
             "transpose_steps", "fade_direction", "noise_pitch", "use_echo", "delay_mix",
             "use_reverb", "use_lofi", "canon_voices", "use_master", "ambience",
             "gp2m.copy_layer_settings", "gp2m.paste_layer_settings",
-            "GP2M_PT_help_modifiers"} <= drawn
+            "GP2M_PT_help_modifiers", "GP2M_PT_help_table", "GP2M_UL_compositions",
+            "gp2m.composition_move", "gp2m.composition_toggle", "gp2m.table_stack",
+            "gp2m.board_octaves"} <= drawn
     assert sum(1 for entry in log if entry[0] == "markdown") == len(sub("help").classes)
 
 
@@ -475,7 +501,7 @@ def test_duplicate_is_a_new_work_plane(comp):
     handlers._last_change[0] = 0.0
     handlers._tick()
     scene = bpy.context.scene
-    first, second = engine.find_strip(scene, comp), engine.find_strip(scene, copy)
+    first, second = engine.top_strip(scene, comp), engine.top_strip(scene, copy)
     assert first is not None and second is not None and first.channel != second.channel
     assert [n.pitch for n in engine.regenerate(copy).notes] == [60]
 
@@ -504,7 +530,7 @@ def test_mute_and_instrument_volume(comp):
         comp.material_slots[0].material.gp2m_volume = 1.0
     comp.gp2m.mute = True
     engine.regenerate(comp)
-    assert engine.find_strip(bpy.context.scene, comp).mute
+    assert engine.top_strip(bpy.context.scene, comp).mute
 
 
 def test_filled_shape_is_a_cluster(comp):
@@ -723,7 +749,7 @@ def test_play_modes(comp):
     play.mode = "SOLO"
     bpy.context.view_layer.objects.active = other
     engine.arrange(scene)
-    assert engine.find_strip(scene, first).mute and not engine.find_strip(scene, other).mute
+    assert engine.top_strip(scene, first).mute and not engine.top_strip(scene, other).mute
     assert scene.frame_end - scene.frame_start + 1 == round(other.gp2m.length * fps)
     play.mode = "TOGETHER"
     engine.arrange(scene)
@@ -749,7 +775,7 @@ def test_timeline_sources(comp):
     assert settings.source == "EVERYTHING"  # the default
     for source in ("EVERYTHING", "ACTIVE", "ALL", "VSE_MIX", "VSE_CHANNEL"):
         settings.source = source
-        settings.channel = engine.find_strip(bpy.context.scene, comp).channel
+        settings.channel = engine.top_strip(bpy.context.scene, comp).channel
         audio, composed, items = timeline.collect(bpy.context, settings)
         segments = audio + composed
         assert segments, source
@@ -934,14 +960,51 @@ def test_sequencer_channels_auto_and_manual(comp):
     other = _fresh(None)
     assert comp.gp2m.channel > 0 and other.gp2m.channel > 0
     assert comp.gp2m.channel != other.gp2m.channel
-    other.gp2m.channel = 120  # far from the strips (one per layer) of the other tests
+    used = {strip.channel for strip in scene.sequence_editor.strips_all
+            if strip not in engine.composition_strips(scene, other)}
+    free = engine._block_from(1, engine._channel_count(scene, other), used)
+    other.gp2m.channel = free  # a free block chosen by hand is kept
     engine.arrange(scene)
-    assert engine.find_strip(scene, other).channel == 120
+    assert engine.top_strip(scene, other).channel == free
     copy = other.copy()  # Shift+D copies the channel too
     copy.data = other.data.copy()
     bpy.context.collection.objects.link(copy)
     engine.resolve_channels(scene)
     assert copy.gp2m.channel != other.gp2m.channel
+
+
+def test_new_composition_goes_above_clips_and_compositions(comp):
+    """A new composition is a new level of the timeline: above every composition,
+    skipping channels with clips; a clip added later on its channel pushes it up."""
+    engine = sub("engine")
+    scene = bpy.context.scene
+    editor = scene.sequence_editor
+    channel = 1  # the other tests leave compositions all over the channels
+    for obj in engine.scene_compositions(scene):
+        obj.gp2m.channel = channel
+        channel += engine._channel_count(scene, obj)
+    engine.arrange(scene)
+    top = max(o.gp2m.channel + engine._channel_count(scene, o) - 1
+              for o in engine.scene_compositions(scene) if o.gp2m.channel)
+    clip = editor.strips.new_effect("Clip video", "COLOR", top + 1, frame_start=1,
+                                    length=10)
+    try:
+        other = _fresh(None)
+        base = other.gp2m.channel
+        assert base == top + 2
+        assert engine.top_strip(scene, other).channel == base
+        assert clip.channel == top + 1 and clip.channel != base
+        # A clip added later on its channel (after the sound, so Blender lets it
+        # there): the composition moves up, the clip stays.
+        later = editor.strips.new_effect("Clip dopo", "COLOR", base, frame_start=5000,
+                                         length=10)
+        engine.arrange(scene)
+        assert later.channel == base and other.gp2m.channel > base
+        channel = engine.top_strip(scene, other).channel
+        assert channel == other.gp2m.channel and channel not in (later.channel, clip.channel)
+        editor.strips.remove(later)
+    finally:
+        editor.strips.remove(clip)
 
 
 def test_new_compositions_use_the_preferences(addon):
@@ -1809,8 +1872,14 @@ def test_one_strip_per_layer_adds_up_to_the_mix(comp):
     result = engine.regenerate(comp)
     strips = engine.layer_strips(scene, comp)
     assert set(strips) == set(names)
+    # One meta-clip on the composition's channel, the layers inside from channel 1.
+    meta = engine.meta_strip(scene, comp)
+    assert meta is not None and meta.channel == comp.gp2m.channel
+    assert all(strip.parent_meta() == meta for strip in strips.values())
     channels = sorted(strip.channel for strip in strips.values())
-    assert channels == list(range(comp.gp2m.channel, comp.gp2m.channel + len(names)))
+    assert channels == list(range(1, 1 + len(names)))
+    assert meta.left_handle <= min(s.left_handle for s in strips.values())
+    assert meta.right_handle >= max(s.right_handle for s in strips.values())
     order = [strips[name].channel for name in names]
     assert order == sorted(order)  # the layers' order, bottom layer lowest
     total = None
@@ -1848,6 +1917,9 @@ def test_sequencer_volume_of_a_layer_strip_is_kept(comp):
     names = _two_layers(comp)
     engine.regenerate(comp)
     engine.layer_strips(scene, comp)[names[0]].volume = 0.3
+    sub("seqsync").sync_scene(scene)  # what the depsgraph handler does after the change
+    assert sub("props").find_layer_settings(comp.data, names[0]).clip_volume == \
+        pytest.approx(0.3)
     add_stroke(comp, 0, line(comp, 6.0, 7.5, 64))  # longer sound: strips may be recreated
     engine.regenerate(comp)
     assert engine.layer_strips(scene, comp)[names[0]].volume == pytest.approx(0.3)
@@ -1883,7 +1955,9 @@ def test_auto_on_the_active_layer_only(comp):
     sub("props").find_layer_settings(comp.data, names[0]).mute = True
     result = engine.regenerate(comp, only_active=True)
     assert not engine.state(comp)["stats"]["only_active"]
-    assert set(engine.layer_strips(scene, comp)) == set(names[1:])
+    strips = engine.layer_strips(scene, comp)  # the muted layer keeps its clip, muted
+    assert {name for name, strip in strips.items() if not strip.mute} == set(names[1:])
+    assert strips[names[0]].mute
 
 
 def test_layer_modifiers_effects_and_copy_paste(comp):
@@ -2096,3 +2170,818 @@ def test_layers_have_their_own_colors_on_strips(comp):
     props.ensure_layer_settings(comp.data)
     fresh = props.find_layer_settings(comp.data, "Nuovo")
     assert fresh.color not in ("NONE", "COLOR_09")
+
+
+# --- Compositions as layers on the table ------------------------------------------------
+
+def test_new_composition_is_stacked_on_the_table(comp):
+    table = sub("table")
+    board = sub("board")
+    other = _fresh(None)
+    below = max((o for o in table.compositions(bpy.context.scene) if o != other),
+                key=lambda o: table._top_point(o).z)
+    z0, _z1 = board.vertical_extent(other.gp2m)
+    bottom = (other.matrix_world @ __import__("mathutils").Vector((0, 0, z0))).z
+    assert bottom >= table._top_point(below).z - 1e-4
+    assert abs(other.matrix_world.translation.x - below.matrix_world.translation.x) < 1e-4
+
+
+def test_composition_list_follows_the_channels(comp):
+    table = sub("table")
+    engine = sub("engine")
+    scene = bpy.context.scene
+    other = _fresh(None)
+    ordered = table.by_channel(scene)
+    assert ordered[-1] == other  # the newest is the highest level
+    # The list shows the highest channel on top.
+    flags, order = sub("table").GP2M_UL_compositions.filter_items(
+        type("L", (), {"bitflag_filter_item": 1})(), bpy.context, scene, "objects")
+    shown = sorted((order[i], obj) for i, obj in enumerate(scene.objects) if flags[i])
+    assert [obj for _rank, obj in shown][0] == other
+    # Moving it down swaps the channel blocks with the one below.
+    below = ordered[-2]
+    before = (below.gp2m.channel, other.gp2m.channel)
+    bpy.context.view_layer.objects.active = other
+    assert bpy.ops.gp2m.composition_move(direction="DOWN") == {"FINISHED"}
+    assert other.gp2m.channel == before[0] and below.gp2m.channel > other.gp2m.channel
+    assert table.by_channel(scene).index(other) == len(ordered) - 2
+    for obj in (other, below):
+        first, last = table.channel_span(scene, obj)
+        assert first == last == engine.top_strip(scene, obj).channel
+    # Picking a row selects the composition.
+    index = list(scene.objects).index(below)
+    scene.gp2m_composition_index = index
+    assert bpy.context.view_layer.objects.active == below
+
+
+def test_hide_lock_duplicate_remove_and_stack(comp):
+    table = sub("table")
+    board = sub("board")
+    engine = sub("engine")
+    scene = bpy.context.scene
+    grid = board.grid_object(comp)
+    assert bpy.ops.gp2m.composition_toggle(name=comp.name, what="HIDE") == {"FINISHED"}
+    assert comp.hide_get() and grid.hide_get()
+    bpy.ops.gp2m.composition_toggle(name=comp.name, what="HIDE")
+    assert not comp.hide_get() and not grid.hide_get()
+    bpy.ops.gp2m.composition_toggle(name=comp.name, what="LOCK")
+    assert comp.hide_select and grid.hide_select
+    bpy.ops.gp2m.composition_toggle(name=comp.name, what="LOCK")
+    assert not comp.hide_select
+    table.select_only(bpy.context, comp)
+    assert bpy.ops.gp2m.composition_duplicate() == {"FINISHED"}
+    copy = bpy.context.view_layer.objects.active
+    assert copy != comp and copy.gp2m.is_composition and board.has_board(copy)
+    assert board.grid_object(copy) not in (None, grid)
+    assert table.by_channel(scene)[-1] == copy
+    assert bpy.ops.gp2m.table_stack() == {"FINISHED"}
+    ordered = table.by_channel(scene)
+    for low, high in zip(ordered, ordered[1:]):
+        assert high.matrix_world.translation.z > low.matrix_world.translation.z
+    name = copy.name
+    grid_name = board.grid_object(copy).name
+    assert bpy.ops.gp2m.composition_remove() == {"FINISHED"}
+    assert bpy.data.objects.get(name) is None and bpy.data.objects.get(grid_name) is None
+    assert not [s for s in scene.sequence_editor.strips_all if s.get(engine.OWNER_KEY) == name]
+
+
+def test_octaves_below_and_above_keep_the_drawing(comp):
+    board = sub("board")
+    engine = sub("engine")
+    from mathutils import Vector
+    s = comp.gp2m
+    s.low_note, s.octaves = 48, 2
+    board.rebuild(comp)
+    add_stroke(comp, 0, line(comp, 0.5, 2.0, 60))
+    layer = board.user_layers(comp.data)[0]
+    world = lambda: [tuple(comp.matrix_world @ Vector(p.position))
+                     for p in layer.frames[0].drawing.strokes[-1].points]
+    before = world()
+    notes = sorted({round(n.pitch) for n in engine.regenerate(comp).notes})
+    assert bpy.ops.gp2m.board_octaves(edge="BOTTOM", delta=1, name=comp.name) == {"FINISHED"}
+    assert (s.low_note, s.octaves) == (36, 3)
+    assert np.allclose(world(), before, atol=1e-4)  # the drawing has not moved
+    board.rebuild(comp)
+    assert sorted({round(n.pitch) for n in engine.regenerate(comp).notes}) == notes
+    assert bpy.ops.gp2m.board_octaves(edge="TOP", delta=1, name=comp.name) == {"FINISHED"}
+    assert (s.low_note, s.octaves) == (36, 4)
+    assert bpy.ops.gp2m.board_octaves(edge="BOTTOM", delta=-1, name=comp.name) == {"FINISHED"}
+    assert (s.low_note, s.octaves) == (48, 3)
+    assert np.allclose(world(), before, atol=1e-4)
+    s.low_note = 12
+    assert board.octave_steps(s, "BOTTOM", 1) == 0  # no room below C0
+
+
+# --- Rig (Object Mode handles, gizmos) -------------------------------------------------
+
+def test_rig_handles_are_gizmos_with_theme_colors(comp):
+    rig = sub("rig")
+    assert rig.rig_object(comp) is None  # no object: the handles are gizmos
+    assert "bl_rna" in rig.GP2M_GGT_rig.__dict__
+    assert "bl_rna" in rig.GP2M_GT_handle.__dict__
+    for handle in rig.HANDLE_NAMES:
+        body, rim, glyphs = rig.handle_geometry(handle)
+        assert len(body) % 3 == 0 and len(rim) % 3 == 0 and len(glyphs) % 3 == 0
+        # Drawn outside the board, beside the anchor (pixels).
+        xs = [p[0] for p in rim]
+        zs = [p[2] for p in rim]
+        if handle == rig.LENGTH:
+            assert min(xs) > 0
+        elif handle in (rig.OCT_TOP, rig.HEAD):
+            assert min(zs) >= -3.0
+        else:
+            assert max(zs) < 0
+    colors = sub("theme").handle_colors(bpy.context)
+    active = tuple(bpy.context.preferences.themes[0].view_3d.object_active)
+    assert np.allclose(colors["active"], active)
+    playhead = tuple(bpy.context.preferences.themes[0].common.anim.playhead)[:3]
+    assert np.allclose(colors["playhead"], playhead)
+
+
+def test_rig_of_0_0_22_is_removed(comp):
+    rig = sub("rig")
+    data = bpy.data.grease_pencils.new(comp.name + rig.RIG_SUFFIX)
+    old = bpy.data.objects.new(data.name, data)
+    old[rig.RIG_ROLE] = True
+    bpy.context.scene.collection.objects.link(old)
+    old.parent = comp
+    name = old.name
+    assert not sub("board").has_board(comp)
+    sub("board").rebuild(comp)
+    assert rig.rig_object(comp) is None and bpy.data.objects.get(name) is None
+    assert sub("board").has_board(comp)
+
+
+def test_board_and_playhead_follow_the_theme(comp):
+    theme = sub("theme")
+    t = bpy.context.preferences.themes[0]
+    head = bpy.data.materials["GP2M Testina"].grease_pencil
+    assert np.allclose(tuple(head.color)[:3], theme.to_linear(t.common.anim.playhead), atol=1e-4)
+    back = bpy.data.materials["GP2M Sfondo"].grease_pencil
+    assert np.allclose(tuple(back.fill_color)[:3],
+                       theme.to_linear(t.dopesheet_editor.space.back), atol=1e-4)
+    old = tuple(t.common.anim.playhead)
+    try:
+        t.common.anim.playhead = (0.9, 0.1, 0.5, 1.0)
+        assert theme.apply_to_materials()
+        assert np.allclose(tuple(head.color)[:3], theme.to_linear(t.common.anim.playhead),
+                           atol=1e-4)
+        assert head.color[0] > 0.6 > head.color[1]
+        assert not theme.apply_to_materials()  # nothing changed since
+    finally:
+        t.common.anim.playhead = old
+        theme.apply_to_materials()
+
+
+def test_rig_handles_change_length_playhead_and_octaves(comp):
+    rig = sub("rig")
+    s = comp.gp2m
+    s.bpm, s.show_beats = 120.0, True
+    assert rig.length_value(s, 6.21, 24) == round(149 / 24, 4)  # free, to the frame
+    assert rig.length_value(s, 6.2, 24, bars=True) == 6.0  # Ctrl: bars of 2 s at 120 BPM
+    assert rig.length_value(s, 0.1, 24) == 1.0
+    assert rig.apply(comp, rig.LENGTH, 6.0) and s.length == 6.0
+    assert not rig.apply(comp, rig.LENGTH, 6.0)
+    scene = bpy.context.scene
+    fps = scene.render.fps / scene.render.fps_base
+    frame = rig.frame_at(scene, comp, 2.0 * s.seconds_width)
+    assert frame == round(scene.frame_start + sub("engine").state(comp).get(
+        "offset_frames", 0) + 2.0 * fps)
+    s.low_note, s.octaves = 48, 2
+    assert rig.apply(comp, rig.OCT_BOTTOM, 12) and (s.low_note, s.octaves) == (36, 3)
+    assert rig.apply(comp, rig.OCT_TOP, 12) and s.octaves == 4
+    # One key at a time: the lowest note goes down a semitone, the top gains one key.
+    assert rig.apply(comp, rig.OCT_BOTTOM, 1) and s.low_note == 35
+    assert rig.apply(comp, rig.OCT_TOP, 2) and (s.octaves, s.extra_keys) == (4, 3)
+    assert sub("board").dimensions(s)[0] == 4 * 12 + 3 + 1
+    assert rig.apply(comp, rig.OCT_TOP, -3) and (s.octaves, s.extra_keys) == (4, 0)
+    # The handles sit outside the board: right edge, above the keys, below the keys.
+    rows, width, top = sub("board").dimensions(s)
+    assert rig.handle_point(comp, rig.LENGTH)[0] == width
+    assert rig.handle_point(comp, rig.OCT_TOP)[1] == top
+    assert rig.handle_point(comp, rig.OCT_BOTTOM)[1] == 0
+    assert rig.handle_point(comp, rig.HEAD, 1.5) == (1.5, top + rig.HEAD_LIFT)
+
+
+def test_rig_gizmos_only_in_object_mode(comp):
+    rig = sub("rig")
+    assert rig.GP2M_GGT_rig.poll(bpy.context)
+    bpy.context.view_layer.objects.active = comp
+    bpy.ops.object.mode_set(mode="PAINT_GREASE_PENCIL")
+    try:
+        assert not rig.GP2M_GGT_rig.poll(bpy.context)
+    finally:
+        bpy.ops.object.mode_set(mode="OBJECT")
+    # A deleted composition leaves no handles behind (old rigs included).
+    other = _fresh(None)
+    bpy.data.objects.remove(other, do_unlink=True)
+    sub("engine").cleanup_orphans()
+    assert not any(rig.is_rig(obj) for obj in bpy.data.objects)
+
+
+def test_layers_live_in_one_meta_clip(comp):
+    """A composition is one clip in the Sequencer: a meta-clip with a strip per layer
+    inside. Muting the composition mutes the meta; strips of 0.0.21 (one channel per
+    layer at the top) move inside, keeping their volume."""
+    engine = sub("engine")
+    scene = bpy.context.scene
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
+    engine.regenerate(comp)
+    meta = engine.meta_strip(scene, comp)
+    assert meta.type == "META" and engine.top_strip(scene, comp) == meta
+    assert [s for s in scene.sequence_editor.strips if engine._owned(s, comp)] == [meta]
+    # A 0.0.21 file: the layer strip sits at the top, with its own volume.
+    strip = engine.layer_strips(scene, comp)["Livello 1"]
+    path = strip.sound.filepath
+    engine._remove_strip(scene.sequence_editor, meta)
+    legacy = scene.sequence_editor.strips.new_sound(
+        engine.strip_name(comp, "Livello 1"), path, 30, scene.frame_start)
+    legacy[engine.OWNER_KEY], legacy[engine.LAYER_KEY] = comp.name, "Livello 1"
+    legacy.volume = 0.4
+    engine.regenerate(comp, force=True)
+    meta = engine.meta_strip(scene, comp)
+    inside = engine.layer_strips(scene, comp)["Livello 1"]
+    assert inside.parent_meta() == meta and abs(inside.volume - 0.4) < 1e-6
+    assert [s for s in scene.sequence_editor.strips if engine._owned(s, comp)] == [meta]
+    comp.gp2m.mute = True
+    engine.arrange(scene)
+    assert meta.mute and not inside.mute
+    comp.gp2m.mute = False
+    engine.arrange(scene)
+    assert not meta.mute
+    # Back to one mix strip: the meta-clip goes away.
+    comp.gp2m.layer_channels = False
+    engine.regenerate(comp, force=True)
+    assert engine.meta_strip(scene, comp) is None
+    assert engine.top_strip(scene, comp).type == "SOUND"
+    comp.gp2m.layer_channels = True
+
+
+def test_rig_handle_selection_and_g(comp):
+    rig = sub("rig")
+    assert rig.selected() is None
+    rig.select(comp.name, rig.LENGTH)
+    assert rig.selected() == (comp.name, rig.LENGTH)
+    assert "bl_rna" in rig.GP2M_OT_rig_grab.__dict__
+    # G is bound in Object Mode (before Blender's Move), so with no handle it moves objects.
+    items = [item for km, item in rig._keymaps if item.idname == "gp2m.rig_grab"]
+    assert items and items[0].type == "G"
+    # Idle handles are muted, not the full white of a hovered one.
+    colors = sub("theme").handle_colors(bpy.context)
+    assert sum(colors["idle"]) < sum(colors["hover"]) and colors["rim_idle"][3] < colors["rim"][3]
+    rig.select(None, None)
+    assert rig.selected() is None
+
+
+# --- The Sequencer as a view of the layers ------------------------------------------------
+
+def test_layer_mute_and_clip_mute_follow_each_other(comp):
+    engine, seqsync, props = sub("engine"), sub("seqsync"), sub("props")
+    scene = bpy.context.scene
+    names = _two_layers(comp)
+    engine.regenerate(comp)
+    first = props.find_layer_settings(comp.data, names[0])
+    # Muting the layer mutes its clip at once, and the clip stays after the new sound.
+    first.mute = True
+    assert engine.layer_strips(scene, comp)[names[0]].mute
+    engine.regenerate(comp)
+    strips = engine.layer_strips(scene, comp)
+    assert names[0] in strips and strips[names[0]].mute and not strips[names[1]].mute
+    assert not engine.regenerate(comp) is None
+    # Unmuting the clip in the Sequencer unmutes the layer.
+    strips[names[0]].mute = False
+    assert seqsync.sync_scene(scene)
+    assert not first.mute
+    engine.regenerate(comp)
+    assert not engine.layer_strips(scene, comp)[names[0]].mute
+    # Muting the clip in the Sequencer mutes the layer.
+    engine.layer_strips(scene, comp)[names[1]].mute = True
+    seqsync.sync_scene(scene)
+    assert props.find_layer_settings(comp.data, names[1]).mute
+    props.find_layer_settings(comp.data, names[1]).mute = False
+
+
+def test_moving_clips_reorders_layers_and_compositions(comp):
+    engine, seqsync, board = sub("engine"), sub("seqsync"), sub("board")
+    scene = bpy.context.scene
+    names = _two_layers(comp)
+    engine.regenerate(comp)
+    strips = engine.layer_strips(scene, comp)
+    low, high = strips[names[0]], strips[names[1]]
+    assert low.channel < high.channel
+    # Swap the two clips inside the meta-clip (park one on a free channel first).
+    a, b = low.channel, high.channel
+    low.channel = 20
+    high.channel = a
+    low.channel = b
+    assert seqsync.sync_scene(scene)
+    order = [layer.name for layer in board.user_layers(comp.data)]
+    assert order.index(names[1]) < order.index(names[0])
+    assert comp.data.layers[-1].name == board.HEAD_LAYER  # the playhead stays on top
+    strips = engine.layer_strips(scene, comp)
+    assert strips[names[1]].channel < strips[names[0]].channel
+    assert not seqsync.sync_scene(scene)  # nothing more to do
+    # The meta-clip moved to another channel: the composition takes it.
+    meta = engine.meta_strip(scene, comp)
+    used = {s.channel for s in scene.sequence_editor.strips}
+    free = engine._block_from(1, 1, used)
+    meta.channel = free
+    seqsync.sync_scene(scene)
+    assert comp.gp2m.channel == free and meta.channel == free
+
+
+def test_clip_volume_pan_color_and_time_follow_the_sequencer(comp, tmp_path):
+    engine, seqsync, props = sub("engine"), sub("seqsync"), sub("props")
+    scene = bpy.context.scene
+    names = _two_layers(comp)
+    engine.regenerate(comp)
+    item = props.find_layer_settings(comp.data, names[0])
+    strip = engine.layer_strips(scene, comp)[names[0]]
+    # From the layer to the clip, at once.
+    item.clip_volume, item.clip_pan = 0.5, -0.4
+    assert abs(strip.volume - 0.5) < 1e-5 and abs(strip.pan + 0.4) < 1e-5
+    # From the clip (changed in the Sequencer) to the layer.
+    strip.volume, strip.pan, strip.color_tag = 0.8, 0.3, "COLOR_07"
+    assert seqsync.sync_scene(scene)
+    assert abs(item.clip_volume - 0.8) < 1e-5 and abs(item.clip_pan - 0.3) < 1e-5
+    assert item.color == "COLOR_07"
+    # The export plays the layers as the Sequencer does.
+    path = str(tmp_path / "mix.wav")
+    item.clip_volume, item.clip_pan = 0.0, 0.0
+    engine.export(comp, scene, path, "WAV")
+    _rate, quiet = read_wav(path)
+    item.clip_volume = 1.0
+    engine.export(comp, scene, path, "WAV")
+    _rate, loud = read_wav(path)
+    assert np.abs(loud.astype(np.int64)).sum() > np.abs(quiet.astype(np.int64)).sum() > 0
+    # Moving the meta-clip later: the composition starts later.
+    engine.arrange(scene)
+    meta = engine.meta_strip(scene, comp)
+    fps = scene.render.fps / scene.render.fps_base
+    meta.content_start = meta.content_start + round(2 * fps)
+    assert seqsync.sync_scene(scene)
+    assert abs(comp.gp2m.start_delay - 2.0) < 0.05
+    inner = engine.layer_strips(scene, comp)[names[0]]
+    assert inner.content_start == scene.frame_start + engine.state(comp)["offset_frames"]
+    comp.gp2m.start_delay = 0.0
+    assert min(s.content_start for s in engine.layer_strips(scene, comp).values()) \
+        == scene.frame_start + engine.state(comp)["offset_frames"]
+
+
+def test_grid_opacity_and_layer_pan(comp):
+    board = sub("board")
+    s = comp.gp2m
+    s.grid_opacity = 0.4
+    grid = board.grid_object(comp)
+    assert all(abs(layer.opacity - 0.4) < 1e-6 for layer in grid.data.layers)
+    board.rebuild(comp)
+    assert all(abs(layer.opacity - 0.4) < 1e-6 for layer in board.grid_object(comp).data.layers)
+    # The drawing is not touched.
+    assert all(layer.opacity == 1.0 for layer in board.user_layers(comp.data))
+    item = sub("props").find_layer_settings(comp.data, "Livello 1")
+    item.pan_percent = 0.0
+    assert abs(item.clip_pan + 1.0) < 1e-6
+    item.pan_percent = 100.0
+    assert abs(item.clip_pan - 1.0) < 1e-6
+    item.pan_percent = 50.0
+    assert abs(item.clip_pan) < 1e-6
+
+
+def test_meta_clip_end_changes_the_length(comp):
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
+    engine.regenerate(comp)
+    meta = engine.meta_strip(scene, comp)
+    assert meta is not None and engine.state(comp).get("meta_span")
+    fps = scene.render.fps / scene.render.fps_base
+    before = comp.gp2m.length
+    meta.right_handle = meta.right_handle + int(2 * fps)
+    assert seqsync.sync_scene(scene)
+    assert abs(comp.gp2m.length - (before + 2.0)) < 1e-3
+
+
+# --- Cases in the Sequencer (cut, duplicate, rename, delete, trim, move) -------------------
+
+def _meta_ready(comp):
+    engine = sub("engine")
+    names = _two_layers(comp)
+    engine.regenerate(comp)
+    engine.arrange(bpy.context.scene)
+    return names, engine.meta_strip(bpy.context.scene, comp)
+
+
+def test_cutting_a_composition_clip_is_undone(comp):
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    names, meta = _meta_ready(comp)
+    span = (meta.left_handle, meta.right_handle)
+    meta.split(frame=int(meta.left_handle + 48), split_method="SOFT")
+    seqsync.sync_scene(scene)
+    metas = [s for s in scene.sequence_editor.strips if engine._owned(s, comp)]
+    assert len(metas) == 1 and metas[0].type == "META"
+    assert (metas[0].left_handle, metas[0].right_handle) == span
+    assert sorted(engine.layer_strips(scene, comp)) == sorted(
+        n for n in names if n in engine.layer_strips(scene, comp))
+    inner = [s for s in metas[0].strips if s.type == "SOUND"]
+    assert len({s[engine.LAYER_KEY] for s in inner}) == len(inner)
+    assert "non si tagliano" in seqsync.MESSAGES[-1]
+
+
+def test_duplicating_a_composition_clip_makes_a_new_composition(comp):
+    engine, seqsync, table = sub("engine"), sub("seqsync"), sub("table")
+    scene = bpy.context.scene
+    names, meta = _meta_ready(comp)
+    before = set(table.compositions(scene))
+    # What Shift+D leaves in the Sequencer: a copy of the meta-clip, elsewhere.
+    editor = scene.sequence_editor
+    used = {s.channel for s in editor.strips}
+    channel = engine._block_from(meta.channel + 1, 1, used)
+    copy = editor.strips.new_meta(meta.name + ".001", channel, int(meta.content_start))
+    copy[engine.OWNER_KEY] = comp.name
+    seqsync.sync_scene(scene)
+    new = set(table.compositions(scene)) - before
+    assert len(new) == 1
+    twin = new.pop()
+    assert twin.gp2m.channel == channel and engine.top_strip(scene, twin).channel == channel
+    assert [s for s in editor.strips if engine._owned(s, comp)] == [meta]
+    assert len(board_layers := sub("board").user_layers(twin.data)) == len(
+        sub("board").user_layers(comp.data)) and board_layers
+
+
+def test_renaming_the_clip_renames_the_composition(comp):
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    _names, meta = _meta_ready(comp)
+    meta.name = "Melodia del mare"
+    seqsync.sync_scene(scene)
+    assert comp.name == "Melodia del mare"
+    assert meta.name == engine.strip_name(comp) and meta[engine.OWNER_KEY] == comp.name
+    assert all(s[engine.OWNER_KEY] == comp.name for s in engine.layer_strips(scene, comp).values())
+    owned = [s for s in scene.sequence_editor.strips if engine._owned(s, comp)]
+    assert owned == [meta]  # no second clip, no double sound
+    engine.regenerate(comp)
+    assert [s for s in scene.sequence_editor.strips if engine._owned(s, comp)] == [meta]
+
+
+def test_deleting_the_clip_mutes_the_composition(comp):
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    _names, meta = _meta_ready(comp)
+    engine._remove_strip(scene.sequence_editor, meta)
+    seqsync.sync_scene(scene)
+    assert comp.gp2m.mute
+    assert engine.regenerate(comp) is None or engine.meta_strip(scene, comp) is not None
+    comp.gp2m.mute = False
+    engine.regenerate(comp)
+    assert engine.meta_strip(scene, comp) is not None
+
+
+def test_muted_layer_and_composition_are_not_rendered(comp):
+    engine, props = sub("engine"), sub("props")
+    scene = bpy.context.scene
+    names, _meta = _meta_ready(comp)
+    sub("handlers")._dirty.clear()
+    props.find_layer_settings(comp.data, names[0]).mute = True
+    assert comp.name not in sub("handlers")._dirty  # nothing to render again
+    assert engine.layer_strips(scene, comp)[names[0]].mute
+    props.find_layer_settings(comp.data, names[0]).mute = False
+    comp.gp2m.mute = True
+    assert engine.regenerate(comp) is None and engine.meta_strip(scene, comp).mute
+    comp.gp2m.mute = False
+    assert engine.regenerate(comp) is not None
+
+
+def test_trimming_the_clip(comp):
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    _names, meta = _meta_ready(comp)
+    # The start cannot be trimmed.
+    left = meta.left_handle
+    meta.left_handle = left + 24
+    seqsync.sync_scene(scene)
+    assert meta.left_handle == left
+    # Following the scene, the end moves the scene's End.
+    comp.gp2m.follow_scene = True
+    engine.arrange(scene)
+    end = scene.frame_end
+    meta.right_handle = meta.right_handle - 24
+    seqsync.sync_scene(scene)
+    assert scene.frame_end == end - 24
+    comp.gp2m.follow_scene = False
+
+
+def test_moving_a_layer_clip_in_time_moves_its_strokes(comp):
+    engine, seqsync, board = sub("engine"), sub("seqsync"), sub("board")
+    scene = bpy.context.scene
+    names, _meta = _meta_ready(comp)
+    layer = comp.data.layers[names[1]]
+    xs = lambda: [p.position[0] for p in layer.frames[0].drawing.strokes[0].points]  # noqa
+    before = xs()
+    strip = engine.layer_strips(scene, comp)[names[1]]
+    fps = scene.render.fps / scene.render.fps_base
+    strip.content_start = strip.content_start + round(fps)  # one second later
+    assert seqsync.sync_scene(scene)
+    assert np.allclose(np.array(xs()) - np.array(before), comp.gp2m.seconds_width, atol=1e-3)
+    other = engine.layer_strips(scene, comp)[names[0]]
+    assert strip.content_start == other.content_start  # the clip is back in line
+    assert board.user_layers(comp.data)  # still there
+
+
+def test_a_layer_clip_pasted_in_another_composition_moves_the_layer(comp):
+    engine, seqsync, board = sub("engine"), sub("seqsync"), sub("board")
+    scene = bpy.context.scene
+    names, _meta = _meta_ready(comp)
+    other = _fresh(None)
+    add_stroke(other, 0, line(other, 1.0, 2.0, 62))
+    engine.regenerate(other)
+    engine.arrange(scene)
+    strokes = len(comp.data.layers[names[1]].frames[0].drawing.strokes)
+    theirs = {l.name for l in board.user_layers(other.data)}
+    source = engine.layer_strips(scene, comp)[names[1]]
+    target = engine.meta_strip(scene, other)
+    pasted = target.strips.new_sound(source.name + ".001", source.sound.filepath, 5,
+                                     int(source.content_start))
+    pasted[engine.OWNER_KEY], pasted[engine.LAYER_KEY] = comp.name, names[1]
+    seqsync.sync_scene(scene)
+    assert comp.data.layers.get(names[1]) is None
+    moved = [l for l in board.user_layers(other.data) if l.name not in theirs]
+    assert len(moved) == 1 and len(moved[0].frames[0].drawing.strokes) == strokes
+    assert pasted.name not in [s.name for s in target.strips]
+    result = engine.regenerate(other)
+    assert 67 in {round(n.pitch) for n in result.notes}  # it still plays its note
+
+
+def test_a_locked_clip_is_left_alone(comp):
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    _names, meta = _meta_ready(comp)
+    meta.lock = True
+    channel = meta.channel
+    comp.gp2m.start_delay = 1.0
+    engine.arrange(scene)
+    assert meta.channel == channel
+    meta.name = "Bloccata"
+    assert not seqsync.sync_scene(scene)
+    assert comp.name != "Bloccata"
+    meta.lock = False
+    meta.name = engine.strip_name(comp)
+    comp.gp2m.start_delay = 0.0
+
+
+def test_undo_brings_back_clip_and_layer_together(addon):
+    engine, seqsync, props = sub("engine"), sub("seqsync"), sub("props")
+    scene = bpy.context.scene
+    comp = _fresh(None)
+    name = comp.name
+    names, _meta = _meta_ready(comp)
+    bpy.ops.ed.undo_push(message="prima")
+    engine.layer_strips(scene, comp)[names[0]].volume = 0.5
+    seqsync.sync_scene(scene)
+    assert props.find_layer_settings(comp.data, names[0]).clip_volume == pytest.approx(0.5)
+    bpy.ops.ed.undo_push(message="volume nel Sequencer")
+    assert bpy.ops.ed.undo() == {"FINISHED"}
+    scene = bpy.context.scene
+    comp = bpy.data.objects[name]
+    strip = engine.layer_strips(scene, comp)[names[0]]
+    item = props.find_layer_settings(comp.data, names[0])
+    assert strip.volume == pytest.approx(1.0) and item.clip_volume == pytest.approx(1.0)
+    seqsync.sync_scene(scene)
+    assert item.clip_volume == pytest.approx(1.0)
+
+
+def _grouped(comp):
+    """Two compositions with their meta-clips grouped as Ctrl+G does."""
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    _names, meta = _meta_ready(comp)
+    other = _fresh(None)
+    add_stroke(other, 0, line(other, 0.5, 2.0, 64), radius=0.05)
+    engine.regenerate(other)
+    engine.arrange(scene)
+    editor = scene.sequence_editor
+    used = {s.channel for s in editor.strips}
+    group = editor.strips.new_meta("MetaStrip", engine._block_from(1, 1, used),
+                                   int(meta.left_handle))
+    meta.move_to_meta(group)
+    engine.meta_strip(scene, other).move_to_meta(group)
+    seqsync.sync_scene(scene)
+    return other, group
+
+
+def test_grouping_compositions_in_the_sequencer(comp):
+    engine, board = sub("engine"), sub("board")
+    scene = bpy.context.scene
+    other, group = _grouped(comp)
+    assert engine.is_group_meta(group) and group.name.startswith("Gruppo")
+    key = group[engine.GROUP_KEY]
+    assert comp[engine.GROUP_KEY] == key and other[engine.GROUP_KEY] == key
+    # Apart on the table: two compositions with their own layers.
+    assert comp.data != other.data and board.user_layers(comp.data)
+    # A new sound stays in the group, the group spans its clips.
+    engine.regenerate(comp, force=True)
+    engine.regenerate(other, force=True)
+    metas = [engine.meta_strip(scene, comp), engine.meta_strip(scene, other)]
+    assert all(m.parent_meta() == group for m in metas)
+    assert group.left_handle <= min(m.left_handle for m in metas)
+    assert group.right_handle >= max(m.right_handle for m in metas)
+    assert not [s for s in scene.sequence_editor.strips if engine._owned(s, comp)]
+
+
+def test_a_group_is_a_bus(comp):
+    engine, seqsync, props = sub("engine"), sub("seqsync"), sub("props")
+    scene = bpy.context.scene
+    other, group = _grouped(comp)
+    group[engine.BUS_VOLUME] = 0.5
+    group[engine.BUS_PAN] = 0.4
+    seqsync.sync_scene(scene)
+    for obj in (comp, other):
+        for name, strip in engine.layer_strips(scene, obj).items():
+            item = props.find_layer_settings(obj.data, name)
+            assert item.clip_volume == pytest.approx(1.0)  # the layer keeps its own
+            assert strip.volume == pytest.approx(0.5)
+            assert strip.pan == pytest.approx(min(1.0, item.clip_pan + 0.4))
+    # The volume set on the meta-clip itself becomes the group's.
+    group.volume = 0.5
+    seqsync.sync_scene(scene)
+    assert group.volume == 1.0 and group[engine.BUS_VOLUME] == pytest.approx(0.25)
+    strip = next(iter(engine.layer_strips(scene, comp).values()))
+    assert strip.volume == pytest.approx(0.25)
+    # Exports too.
+    result, _reads = engine.render_composition(comp, scene, stems=True)
+    loud = np.abs(engine._clip_mix(comp, result)).max()
+    quiet = np.abs(engine._clip_mix(comp, result, scene)).max()
+    assert quiet < loud * 0.5
+    # A muted group: its compositions are not rendered until it is heard again.
+    group.mute = True
+    assert engine.regenerate(comp) is None and engine.state(comp).get("muted_stale")
+    group.mute = False
+    seqsync.sync_scene(scene)
+    assert not engine.state(comp).get("muted_stale")
+
+
+def test_separating_groups(comp):
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    other, group = _grouped(comp)
+    editor = scene.sequence_editor
+    # A group in a group; Alt+G on the inner one takes its compositions out.
+    used = {s.channel for s in editor.strips}
+    outer = editor.strips.new_meta("MetaStrip", engine._block_from(1, 1, used),
+                                   int(group.left_handle))
+    group.move_to_meta(outer)
+    seqsync.sync_scene(scene)
+    assert engine.is_group_meta(outer)
+    for obj in (comp, other):
+        engine.meta_strip(scene, obj).move_to_meta(outer)
+    outer.strips.remove(group)
+    seqsync.sync_scene(scene)
+    assert comp[engine.GROUP_KEY] == outer[engine.GROUP_KEY] == other[engine.GROUP_KEY]
+    # Alt+G on a composition's own clip is undone: its layers stay inside it.
+    meta = engine.meta_strip(scene, comp)
+    for strip in list(meta.strips):
+        strip.move_to_meta(outer)
+    outer.strips.remove(meta)
+    seqsync.sync_scene(scene)
+    meta = engine.meta_strip(scene, comp)
+    assert meta is not None and meta.parent_meta() == outer
+    assert all(s.parent_meta() == meta for s in engine.layer_strips(scene, comp).values())
+    assert "non si separa" in seqsync.MESSAGES[-1]
+
+
+def _layer_group(comp):
+    """Ctrl+G on the clips of the first two layers, inside the composition's clip."""
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    names, meta = _meta_ready(comp)
+    strips = engine.layer_strips(scene, comp)
+    group_meta = meta.strips.new_meta("MetaStrip", 9, int(meta.left_handle))
+    for name in names[:2]:
+        strips[name].move_to_meta(group_meta)
+    seqsync.sync_scene(scene)
+    return names, meta, group_meta
+
+
+def test_grouping_layer_clips_makes_a_group_of_layers(comp):
+    engine, board = sub("engine"), sub("board")
+    scene = bpy.context.scene
+    names, meta, group_meta = _layer_group(comp)
+    gp = comp.data
+    name = group_meta[engine.LAYER_GROUP_KEY]
+    group = gp.layer_groups.get(name)
+    assert group is not None and not board.is_board_group(group)
+    assert sorted(child.name for child in group.children) == sorted(names[:2])
+    assert engine.meta_strip(scene, comp) == meta  # still one composition
+    strips = engine.layer_strips(scene, comp)
+    assert all(strips[n].parent_meta().name == group_meta.name for n in names[:2])
+    assert group_meta.parent_meta().name == meta.name
+    # A new sound keeps the group's clip, with its layers inside.
+    engine.regenerate(comp, force=True)
+    metas = engine.layer_group_metas(engine.meta_strip(scene, comp))
+    assert list(metas) == [name]
+    strips = engine.layer_strips(scene, comp)
+    assert all(strips[n].parent_meta().name == metas[name].name for n in names[:2])
+    # A group made on the board is a meta-clip too.
+    assert len(engine.meta_sounds(engine.meta_strip(scene, comp))) == len(strips)
+
+
+def test_a_group_of_layers_is_a_bus(comp):
+    engine, seqsync, props = sub("engine"), sub("seqsync"), sub("props")
+    scene = bpy.context.scene
+    names, meta, group_meta = _layer_group(comp)
+    engine.arrange(scene)
+    name = group_meta[engine.LAYER_GROUP_KEY]
+    item = props.find_layer_settings(comp.data, name)
+    item.clip_volume = 0.5
+    strips = engine.layer_strips(scene, comp)
+    for n in names[:2]:
+        own = props.find_layer_settings(comp.data, n).clip_volume
+        assert strips[n].volume == pytest.approx(own * 0.5)
+    seqsync.sync_scene(scene)  # not read back as a change of the layers
+    assert props.find_layer_settings(comp.data, names[0]).clip_volume == pytest.approx(1.0)
+    # The volume set on the group's clip becomes the group's.
+    group_meta = engine.layer_group_metas(engine.meta_strip(scene, comp))[name]
+    group_meta.volume = 0.5
+    seqsync.sync_scene(scene)
+    assert item.clip_volume == pytest.approx(0.25) and group_meta.volume == 1.0
+    # Muting the group's clip mutes the group (and the other way round).
+    group_meta.mute = True
+    seqsync.sync_scene(scene)
+    assert item.mute
+    item.mute = False
+    group_meta = engine.layer_group_metas(engine.meta_strip(scene, comp))[name]
+    assert not group_meta.mute
+
+
+def test_separating_a_group_of_layers(comp):
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    names, meta, group_meta = _layer_group(comp)
+    engine.arrange(scene)
+    name = group_meta[engine.LAYER_GROUP_KEY]
+    meta = engine.meta_strip(scene, comp)
+    group_meta = engine.layer_group_metas(meta)[name]
+    # Alt+G: the layers' clips come out, the group's clip is gone.
+    for strip in list(group_meta.strips):
+        strip.move_to_meta(meta)
+    meta.strips.remove(group_meta)
+    seqsync.sync_scene(scene)
+    gp = comp.data
+    assert gp.layer_groups.get(name) is None
+    assert all(gp.layers[n].parent_group is None for n in names[:2])
+    assert "sciolto" in seqsync.MESSAGES[-1]
+
+
+def test_deleting_a_group_clip_mutes_the_group(comp):
+    engine, seqsync, props = sub("engine"), sub("seqsync"), sub("props")
+    scene = bpy.context.scene
+    names, meta, group_meta = _layer_group(comp)
+    engine.arrange(scene)
+    name = group_meta[engine.LAYER_GROUP_KEY]
+    meta = engine.meta_strip(scene, comp)
+    engine._remove_strip(scene.sequence_editor, engine.layer_group_metas(meta)[name])
+    seqsync.sync_scene(scene)
+    item = props.find_layer_settings(comp.data, name)
+    assert item.mute and comp.data.layer_groups.get(name) is not None
+    item.mute = False
+    engine.regenerate(comp)
+    assert name in engine.layer_group_metas(engine.meta_strip(scene, comp))
+
+
+def test_reordering_clips_inside_a_group_of_layers(comp):
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    names, meta, group_meta = _layer_group(comp)
+    engine.arrange(scene)
+    name = group_meta[engine.LAYER_GROUP_KEY]
+    group = comp.data.layer_groups[name]
+    before = [child.name for child in group.children]
+    strips = engine.layer_strips(scene, comp)
+    low, high = strips[before[0]], strips[before[1]]
+    low.channel, high.channel = 5, 6
+    high.channel = 1
+    low.channel = 2
+    seqsync.sync_scene(scene)
+    assert [child.name for child in group.children] == before[::-1]
+
+
+def test_undo_brings_back_a_group(addon):
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    comp = _fresh(addon)
+    bpy.ops.ed.undo_push(message="before")
+    other, group = _grouped(comp)
+    key = group[engine.GROUP_KEY]
+    name = comp.name
+    bpy.ops.ed.undo_push(message="grouped")
+    bpy.ops.ed.undo()
+    comp = bpy.data.objects[name]
+    scene = bpy.context.scene
+    assert comp.get(engine.GROUP_KEY) is None
+    assert engine.find_group(scene.sequence_editor, key) is None
+    bpy.ops.ed.redo()
+    comp = bpy.data.objects[name]
+    scene = bpy.context.scene
+    seqsync.sync_scene(scene)
+    assert comp.get(engine.GROUP_KEY) == key
+    assert engine.meta_strip(scene, comp).parent_meta()[engine.GROUP_KEY] == key

@@ -394,8 +394,19 @@ def draw_layer_list(layout, comp):
     if settings is not None:
         col.prop(settings, "mode")
     col.prop(layer, "opacity", text="Volume", slider=True)
+    if settings is not None:
+        col.prop(settings, "pan_percent", slider=True)
+    _clip_mix_props(col, settings)
     if settings is not None and settings.solo_saved_opacity >= 0.0:
         col.label(text="Attenuato dal Solo di un altro livello", icon="INFO")
+
+
+def _clip_mix_props(col, settings):
+    """Volume and pan of the layer's clip in the Sequencer (the same values)."""
+    if settings is None:
+        return
+    sub = col.column(align=True)
+    sub.prop(settings, "clip_volume", slider=True)
 
 
 def draw_layer_instruments(layout, comp, layer, settings):
@@ -671,13 +682,28 @@ def draw_board(layout, s):
     col = layout.column(align=True)
     low = s.low_note
     col.prop(s, "low_note", text=f"Nota più bassa ({music.note_name(low, style)})")
-    col.prop(s, "octaves", text=f"Ottave (fino a {music.note_name(low + s.octaves * 12, style)})")
+    col.prop(s, "octaves", text=f"Ottave (fino a {music.note_name(low + board.span(s), style)})")
+    if s.extra_keys:
+        col.prop(s, "extra_keys")
+    _octave_buttons(col)
     col.prop(s, "key_labels")
+    layout.prop(s, "grid_opacity", slider=True)
     col = layout.column(align=True)
     col.prop(s, "row_height")
     col.prop(s, "seconds_width")
     layout.prop(s, "show_beats")
     layout.operator("gp2m.rebuild_board", icon="GRID")
+
+
+def _octave_buttons(layout):
+    """Octaves on top / at the bottom: the drawing stays where it is."""
+    row = layout.row(align=True)
+    for edge, label in (("TOP", "Sopra"), ("BOTTOM", "Sotto")):
+        sub = row.row(align=True)
+        sub.label(text=label)
+        for delta, icon in ((1, "ADD"), (-1, "REMOVE")):
+            op = sub.operator("gp2m.board_octaves", text="", icon=icon)
+            op.edge, op.delta = edge, delta
 
 
 def draw_reading(layout, s):
@@ -731,6 +757,9 @@ def draw_layer_details(layout, gp, layer):
     settings = props.find_layer_settings(gp, layer.name)
     col = _split(layout)
     col.prop(layer, "opacity", text="Volume", slider=True)
+    if settings is not None:
+        col.prop(settings, "pan_percent", slider=True)
+    _clip_mix_props(col, settings)
     if settings is None:
         col.label(text="Impostazioni in preparazione…")
         return
@@ -775,6 +804,7 @@ def draw_play(layout, scene, comp=None):
         col.prop(comp.gp2m, "layer_channels")
         sub = col.column(align=True)
         sub.prop(comp.gp2m, "channel", text="Canale (0 = auto)")
+        sub.prop(comp.gp2m, "start_delay")
         row = sub.row(align=True)
         row.active = play.mode == "SEQUENCE"
         row.prop(comp.gp2m, "order")
@@ -1050,6 +1080,54 @@ def draw_export_menu(self, _context):
         self.layout.operator("gp2m.export", text=label, icon="FILE_SOUND").format = fmt
 
 
+# --- Sequencer sidebar: the groups (Ctrl+G) ------------------------------------------
+
+def _sequencer_group(context):
+    """``(strip, composition, settings)`` of the active strip when it is a group: of
+    compositions (composition and settings None) or of layers."""
+    editor = context.scene.sequence_editor if context.scene else None
+    strip = editor.active_strip if editor is not None else None
+    if strip is None or strip.type != "META":
+        return None
+    if engine.is_group_meta(strip):
+        return strip, None, None
+    name = strip.get(engine.LAYER_GROUP_KEY)
+    comp = bpy.data.objects.get(strip.get(engine.OWNER_KEY) or "")
+    if name is None or comp is None or comp.type != "GREASEPENCIL":
+        return None
+    return strip, comp, props.find_layer_settings(comp.data, name)
+
+
+class GP2M_PT_sequencer_group(bpy.types.Panel):
+    """Volume, pan and mute of a group: they apply to everything in it."""
+
+    bl_space_type = "SEQUENCE_EDITOR"
+    bl_region_type = "UI"
+    bl_category = "Musica"
+    bl_label = "Gruppo"
+
+    @classmethod
+    def poll(cls, context):
+        return _sequencer_group(context) is not None
+
+    def draw(self, context):
+        strip, comp, settings = _sequencer_group(context)
+        col = self.layout.column(align=True)
+        if comp is None:
+            col.label(text="Composizioni: " + str(sum(
+                1 for inner in strip.strips if engine._is_composition_strip(inner))))
+            if engine.BUS_VOLUME in strip:
+                col.prop(strip, f'["{engine.BUS_VOLUME}"]', text="Volume", slider=True)
+            if engine.BUS_PAN in strip:
+                col.prop(strip, f'["{engine.BUS_PAN}"]', text="Pan", slider=True)
+            col.prop(strip, "mute", text="Muto")
+        elif settings is not None:
+            col.label(text=comp.name, icon="OUTLINER_OB_GREASEPENCIL")
+            col.prop(settings, "clip_volume", text="Volume", slider=True)
+            col.prop(settings, "pan_percent", text="Pan", slider=True)
+            col.prop(settings, "mute", text="Muto")
+
+
 classes = ADD_FAMILY_MENUS + CHANGE_FAMILY_MENUS + (
     GP2M_MT_add_instrument,
     GP2M_MT_change_instrument,
@@ -1072,6 +1150,7 @@ classes = ADD_FAMILY_MENUS + CHANGE_FAMILY_MENUS + (
     GP2M_PT_layers,
 ) + VIEW_LAYER_PANELS + (
     VIEW3D_MT_gp2m_add,
+    GP2M_PT_sequencer_group,
 )
 
 

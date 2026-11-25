@@ -29,6 +29,30 @@ Altre impostazioni in *Proprietà → Dati oggetto* (tavola, lettura, livelli) e
 **Con la web app**: *File → Importa / Esporta → Progetto Doodle Music web (.json)*
 porta lo stesso disegno tra l'iPad e Blender.
 """,
+    "TABLE": """\
+## Il tavolo delle composizioni
+
+Le composizioni stanno nella lista come i livelli: **in alto la più alta nel
+Video Sequencer**. Nel Sequencer ogni composizione è **una meta-clip** su un solo
+canale, con dentro una clip per livello: *Tab* per entrarci. Quello che cambi
+sulle clip torna sui livelli: muto, volume, pan, colore e ordine (spostando una clip
+su un altro canale). Spostando la meta più avanti la composizione parte dopo. Una nuova composizione è un nuovo livello: va sopra le altre,
+sul tavolo e nella timeline, e salta i canali dove c'è già una clip (anche un
+video aggiunto dopo la fa salire).
+
+- **Occhio** e **lucchetto** valgono per la composizione e la sua tavola.
+- **Su / giù** scambiano i canali con la vicina.
+- **Riordina** impila tutte le tavole, la più bassa resta dov'è.
+
+**Maniglie** (solo in Object Mode, con i Gizmo del viewport accesi; si trascinano):
+
+- a **destra**: la durata (libera, *Ctrl* sulle battute); tavola e meta-clip la seguono;
+- il **riquadro** con il fotogramma in cima alla testina: sposta il cursore della timeline (*Ctrl*: sulle battute);
+- **sopra e sotto la tastiera**: mostrano o nascondono un tasto alla volta (*Ctrl*: un'ottava).
+
+Un clic seleziona una maniglia, **G** la sposta con il mouse (clic conferma, Esc annulla).
+  Il disegno non si sposta e suona le stesse note.
+""",
     "READING": """\
 ## Le cinque letture
 
@@ -111,6 +135,7 @@ GP2M_PT_help_reading = _help_panel("READING")
 GP2M_PT_help_instrument = _help_panel("INSTRUMENT")
 GP2M_PT_help_export = _help_panel("EXPORT")
 GP2M_PT_help_modifiers = _help_panel("MODIFIERS")
+GP2M_PT_help_table = _help_panel("TABLE")
 
 
 def button(layout, key):
@@ -119,4 +144,4 @@ def button(layout, key):
 
 
 classes = (GP2M_PT_help_main, GP2M_PT_help_reading, GP2M_PT_help_instrument,
-           GP2M_PT_help_export, GP2M_PT_help_modifiers)
+           GP2M_PT_help_export, GP2M_PT_help_modifiers, GP2M_PT_help_table)

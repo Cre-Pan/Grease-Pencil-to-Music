@@ -124,7 +124,7 @@ def record_stroke(comp, scene, pitch, t0, t1, material_index):
     t0, t1 = local, min(local + span, s.length)
     if t1 - t0 < 0.02:
         t1 = min(t0 + 0.08, s.length)
-    if not s.low_note <= pitch <= s.low_note + s.octaves * 12 or t1 <= t0:
+    if not s.low_note <= pitch <= s.low_note + board.span(s) or t1 <= t0:
         return 0
     gp = comp.data
     layer = gp.layers.active

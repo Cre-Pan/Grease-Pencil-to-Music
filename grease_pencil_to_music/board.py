@@ -22,7 +22,7 @@ import warnings
 
 import bpy
 
-from . import glyphs, music, synth
+from . import glyphs, music, synth, theme
 
 BOARD_GROUP = "Tavola Composizione"
 LEGACY_BOARD_GROUP = "GP2M Tavola"  # name up to 0.0.12, renamed when found
@@ -37,21 +37,7 @@ GRID_SUFFIX = " · Tavola"
 GRID_DEPTH = 0.005  # the grid sits just behind the drawing (+Y, away from the front view)
 HEAD_MATERIALS = ("GP2M Testina",)  # the only board material left in the composition
 
-# name: (stroke RGBA or None, fill RGBA or None)
-BOARD_MATERIALS = {
-    "GP2M Sfondo": (None, (0.06, 0.06, 0.07, 1.0)),
-    "GP2M Banda tasti neri": (None, (0.032, 0.032, 0.04, 1.0)),
-    "GP2M Linea Do": ((1.0, 0.68, 0.2, 1.0), None),
-    "GP2M Linea nota": ((0.2, 0.2, 0.23, 1.0), None),
-    "GP2M Linea secondo": ((0.45, 0.62, 0.95, 1.0), None),
-    "GP2M Linea battito": ((0.12, 0.13, 0.18, 1.0), None),
-    "GP2M Tasto bianco": ((0.55, 0.55, 0.55, 1.0), (0.93, 0.93, 0.9, 1.0)),
-    "GP2M Tasto nero": (None, (0.04, 0.04, 0.05, 1.0)),
-    "GP2M Etichetta tasti": ((0.42, 0.42, 0.45, 1.0), None),
-    "GP2M Etichetta tempo": ((0.45, 0.62, 0.95, 1.0), None),
-    "GP2M Testina": ((1.0, 0.18, 0.15, 1.0), None),
-    "GP2M Fuori anteprima": (None, (0.0, 0.0, 0.0, 0.62)),
-}
+# The board materials take their colors from the Blender theme: see theme.board_palette.
 SHADE_LAYER = "GP2M Fuori anteprima"
 SHADE_KEY = "gp2m_shade"  # ID property on the GP data: spans last drawn
 
@@ -324,9 +310,97 @@ def add_strokes_bulk(drawing, strokes):
     drawing.tag_positions_changed()
 
 
+def span(settings):
+    """Semitones from the lowest to the highest row (whole octaves plus extra keys)."""
+    return settings.octaves * 12 + settings.extra_keys
+
+
+def _set_span(settings, semitones):
+    semitones = max(12, min(MAX_OCTAVES * 12, semitones))
+    octaves, extra = divmod(semitones, 12)
+    if settings.octaves != octaves:
+        settings.octaves = octaves
+    if settings.extra_keys != extra:
+        settings.extra_keys = extra
+
+
 def dimensions(settings):
-    rows = settings.octaves * 12 + 1
+    rows = span(settings) + 1
     return rows, settings.length * settings.seconds_width, rows * settings.row_height
+
+
+def vertical_extent(settings):
+    """(bottom, top) of the board in local z: labels, playhead and room for the rig
+    handles (drawn at a fixed size on screen, see rig.handle_point)."""
+    from . import rig
+    _rows, _width, top = dimensions(settings)
+    room = rig.handle_room(settings)
+    return -0.12 - room, top + rig.HEAD_LIFT + room
+
+
+MIN_LOW_NOTE, MAX_LOW_NOTE, MAX_OCTAVES = 12, 96, 7
+
+
+def key_steps(settings, edge, delta):
+    """How many keys (semitones, signed) can really be added (+) or hidden (-) at
+    ``edge``: the board shows from 1 to 7 octaves."""
+    now = span(settings)
+    if edge == "TOP":
+        return max(12, min(MAX_OCTAVES * 12, now + delta)) - now
+    if delta > 0:  # show more below: the lowest note goes down, the board grows
+        room = min(settings.low_note - MIN_LOW_NOTE, MAX_OCTAVES * 12 - now)
+        return max(0, min(delta, room))
+    room = min(MAX_LOW_NOTE - settings.low_note, now - 12)
+    return -max(0, min(-delta, room))
+
+
+def octave_steps(settings, edge, delta):
+    """How many whole octaves (signed) can really be added (+) or hidden (-)."""
+    keys = key_steps(settings, edge, 12 * delta)
+    return int(keys / 12)
+
+
+def shift_octaves(comp, edge, delta):
+    """Show (delta > 0) or hide (delta < 0) octaves at the top or bottom of the board
+    without moving the drawing: every stroke stays where it is in the world and
+    plays the same notes.
+
+    The top only changes "Ottave". At the bottom the lowest note changes, so the
+    board origin (z = 0, the lowest row) moves down or up by whole octaves and the
+    strokes move the opposite way inside the object. Returns the octaves changed."""
+    steps = octave_steps(comp.gp2m, edge, delta)
+    return shift_keys(comp, edge, 12 * steps) // 12 if steps else 0
+
+
+def shift_keys(comp, edge, delta):
+    """Like :func:`shift_octaves`, one key (semitone) at a time. Returns the keys
+    changed (signed)."""
+    import numpy as np
+    s = comp.gp2m
+    steps = key_steps(s, edge, delta)
+    if not steps:
+        return 0
+    if edge == "TOP":
+        _set_span(s, span(s) + steps)
+        return steps
+    dz = steps * s.row_height  # local z the strokes move up (down if negative)
+    for layer in user_layers(comp.data):
+        for frame in layer.frames:
+            attr = frame.drawing.attributes.get("position")
+            if attr is None or not len(attr.data):
+                continue
+            positions = np.empty(len(attr.data) * 3, dtype=np.float32)
+            attr.data.foreach_get("vector", positions)
+            positions[2::3] += dz
+            attr.data.foreach_set("vector", positions)
+            frame.drawing.tag_positions_changed()
+    from mathutils import Vector
+    world = comp.matrix_world.copy()
+    world.translation = world @ Vector((0.0, 0.0, -dz))
+    comp.matrix_world = world
+    _set_span(s, span(s) + steps)  # rebuild and sound are deferred: one for both changes
+    s.low_note -= steps
+    return steps
 
 
 def key_width(settings):
@@ -559,10 +633,11 @@ def _ensure_materials(gp, wanted=None):
     """Append the board materials (or only ``wanted``) after the instruments."""
     index = {}
     names = [m.name if m else "" for m in gp.materials]
-    for name, (stroke, fill) in BOARD_MATERIALS.items():
+    for name, (stroke, fill) in theme.board_palette().items():
         if wanted is not None and name not in wanted:
             continue
         material = gp_material(name, stroke, fill)
+        _set_gp_style(material, stroke, fill)  # the theme may have changed
         material[BOARD_FLAG] = True
         if name not in names:
             gp.materials.append(material)
@@ -760,6 +835,9 @@ def has_board(comp):
     if groups.get(BOARD_GROUP) is not None or groups.get(LEGACY_BOARD_GROUP) is not None:
         return False
     grid = grid_object(comp)
+    from . import rig
+    if rig.rig_object(comp) is not None:
+        return False  # the drawn rig of 0.0.22: rebuild removes it
     return (grid is not None and grid.data is not None
             and grid.data.layer_groups.get(BOARD_GROUP) is not None
             and groups.get(HEAD_GROUP) is not None)
@@ -857,17 +935,21 @@ def rebuild(comp, scene=None):
         _add_strokes(layer.frames.new(frame).drawing, specs)
         layer.lock = True
 
+    apply_grid_opacity(comp)
     head = gp.layers.new(HEAD_LAYER, set_active=False, layer_group=head_group)
     head.use_lights = False
     head.pass_index = BOARD_PASS
     head_index = _ensure_materials(gp, HEAD_MATERIALS)
     _add_strokes(head.frames.new(frame).drawing,
-                 [([(0.0, -0.12), (0.0, top + 0.04)], 0.012, head_index["GP2M Testina"],
+                 [([(0.0, -0.12), (0.0, top + rig_lift())], 0.012, head_index["GP2M Testina"],
                    "line")])
     head.lock = True
     from . import engine
     offset = engine.state(comp).get("offset_frames", 0)
     _set_playhead_driver(gp, scene, s.seconds_width, offset)
+
+    from . import rig
+    rig.remove_legacy(comp)
 
     layer = gp.layers.get(active_name) if active_name else None
     if layer is None or is_board_layer(layer):
@@ -895,7 +977,33 @@ def _rebuild_pending():
                 rebuild(obj)
             except Exception as error:  # keep Blender responsive
                 print(f"[Doodle Music] rebuild failed: {error!r}")
+    if names:
+        tag_redraw_views()  # also while a handle is dragged (no other redraw comes)
     return None
+
+
+def apply_grid_opacity(comp):
+    """Opacity of every layer of the grid (the drawing stays opaque)."""
+    grid = grid_object(comp)
+    if grid is None or grid.data is None:
+        return
+    value = comp.gp2m.grid_opacity
+    for layer in grid.data.layers:
+        if abs(layer.opacity - value) > 1e-6:
+            layer.opacity = value
+
+
+def rig_lift():
+    """The playhead line reaches up to the playhead handle of the rig."""
+    from . import rig
+    return rig.HEAD_LIFT
+
+
+def tag_redraw_views():
+    for window in getattr(bpy.context.window_manager, "windows", ()):
+        for area in window.screen.areas:
+            if area.type == "VIEW_3D":
+                area.tag_redraw()
 
 
 def request_rebuild(comp):

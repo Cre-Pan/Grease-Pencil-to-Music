@@ -75,7 +75,6 @@ class GP2M_OT_add_composition(bpy.types.Operator):
         obj = bpy.data.objects.new(name, gp)
         collection = getattr(context, "collection", None) or scene.collection
         collection.objects.link(obj)
-        obj.location = scene.cursor.location
         obj.show_in_front = True
         obj.gp2m.is_composition = True
 
@@ -97,6 +96,11 @@ class GP2M_OT_add_composition(bpy.types.Operator):
             gp.materials.append(material)
         props.ensure_layer_settings(gp)
         s.follow_scene = p.new_follow_scene  # In/Out of the scene (or the scene takes its length)
+        # A new level of the timeline: above the other compositions and any clip.
+        s.channel = engine.new_composition_channel(
+            scene, len(board.user_layers(gp)) if s.layer_channels else 1)
+        from . import table
+        table.place_new(obj, scene)  # on the table, above the other compositions
 
         board.rebuild(obj, scene)
         for other in context.selected_objects:
@@ -116,6 +120,33 @@ class GP2M_OT_add_composition(bpy.types.Operator):
                 bpy.ops.object.mode_set(mode="PAINT_GREASE_PENCIL")
             except RuntimeError:
                 pass  # e.g. no 3D viewport (background mode)
+        return {"FINISHED"}
+
+
+class GP2M_OT_board_octaves(bpy.types.Operator):
+    """Mostra o nascondi un'ottava in cima o in fondo alla tavola, senza spostare il
+    disegno: i tratti restano dove sono e suonano le stesse note"""
+
+    bl_idname = "gp2m.board_octaves"
+    bl_label = "Ottave della tavola"
+    bl_options = {"REGISTER", "UNDO"}
+
+    edge: EnumProperty(items=(("TOP", "In cima", ""), ("BOTTOM", "In fondo", "")))
+    delta: IntProperty(default=1, min=-6, max=6)
+    name: StringProperty(options={"SKIP_SAVE"})
+
+    @classmethod
+    def description(cls, _context, properties):
+        where = "in cima" if properties.edge == "TOP" else "in fondo"
+        verb = "Mostra" if properties.delta > 0 else "Nascondi"
+        return f"{verb} un'ottava {where} alla tavola (il disegno non si sposta)"
+
+    def execute(self, context):
+        obj = bpy.data.objects.get(self.name) if self.name else context.active_object
+        if obj is None or not obj.gp2m.is_composition:
+            return {"CANCELLED"}
+        if not board.shift_octaves(obj, self.edge, self.delta):
+            return {"CANCELLED"}
         return {"FINISHED"}
 
 
@@ -904,6 +935,7 @@ def _target_group(gp):
 
 classes = (
     GP2M_OT_add_composition,
+    GP2M_OT_board_octaves,
     GP2M_OT_regenerate,
     GP2M_OT_rebuild_board,
     GP2M_OT_export,

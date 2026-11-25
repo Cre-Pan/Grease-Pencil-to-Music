@@ -221,11 +221,18 @@ def _strip_segments(scene, channel=None, skip_compositions=False):
     for strip in editor.strips_all:
         if strip.type != "SOUND" or strip.mute or strip.sound is None:
             continue
-        if channel is not None and strip.channel != channel:
+        # Inside a meta-clip: the meta's channel and mute count (a composition's layers).
+        top, hidden = strip, False
+        while top.parent_meta() is not None:
+            top = top.parent_meta()
+            hidden = hidden or top.mute
+        if hidden:
+            continue
+        if channel is not None and top.channel != channel:
             continue
         if skip_compositions and _is_composition_strip(strip):
             continue
-        channel_data = editor.channels[strip.channel] if strip.channel < len(
+        channel_data = editor.channels[top.channel] if top.channel < len(
             editor.channels) else None
         if channel_data is not None and channel_data.mute:
             continue

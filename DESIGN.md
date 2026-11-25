@@ -24,10 +24,12 @@ colore = voce).
 | Spessore / opacità / vertex color / morbidezza | mappatura scelta nelle Preferences, da menu con opzioni limitate |
 | Strumenti | sintetizzati, più "Campione" (un suono) e "Libreria" (SoundFont .sf2 / .sfz, non incluse) |
 | Effetti | per livello e per strumento: eco (ping-pong), riverbero (convoluzione), lo-fi; canone per livello |
-| Uscite | una strip per livello nel Video Sequencer (o una col mix), export WAV, MP3, MIDI, overlay nella Timeline |
+| Uscite | una meta-clip per composizione nel Video Sequencer con una strip per livello dentro (o una strip col mix), export WAV, MP3, MIDI, overlay nella Timeline |
 | Volume dello spessore | assoluto (0,8 righe = pieno, come la web app), mai relativo agli altri tratti |
 | Suono finito per livello | parte lineare (ambiente, low cut) per livello; dinamica calcolata sul mix e applicata uguale a ogni livello: le strip sommate sono il mix |
-| Oggetto | dalla 0.0.21 due Grease Pencil: la composizione (i tuoi livelli e la testina) e sua figlia *· Tavola* (griglia, tastiera, etichette, bloccata; cliccarla seleziona la composizione) |
+| Oggetto | dalla 0.0.21 due Grease Pencil: la composizione (i tuoi livelli e la testina) e sua figlia *· Tavola* (griglia, tastiera, etichette, bloccata; cliccarla seleziona la composizione); dalla 0.0.23 le maniglie del rig sono gizmo a dimensione fissa sullo schermo, in stile Frame by Plane (l'oggetto *· Rig* della 0.0.22 viene rimosso); tavola e testina prendono i colori dal tema di Blender (theme.py) |
+| Tavolo | le composizioni come livelli (lista in ordine di canale VSE); una nuova va sopra le altre nel Sequencer (saltando i canali con clip) e sul tavolo |
+| Ottave sotto | cambiano la nota più bassa spostando l'origine dell'oggetto e i tratti all'opposto: il disegno resta fermo nel mondo e suona uguale |
 | Indipendenza | ogni composizione ha dati e materiali-strumento propri (anche dopo Shift+D / Alt+D) |
 | Ascolto | per scena: tutte insieme, solo l'attiva, una dopo l'altra (strip spostate, testina con offset) |
 | Scala oggetto | X = durata del loop, Z = ottave; la scala torna a 1 a fine trasformazione |

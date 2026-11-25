@@ -92,6 +92,19 @@ def apply_layer_color(gp_data, item):
                 strip.color_tag = item.color
 
 
+def apply_layer_mix(gp_data, item):
+    """The Sequencer clip of the layer takes its volume and pan right away (of a
+    group: the clips of every layer in it)."""
+    from . import engine
+    for obj in bpy.data.objects:
+        if obj.type != "GREASEPENCIL" or obj.data != gp_data or not obj.gp2m.is_composition:
+            continue
+        for scene in obj.users_scene:
+            for name, strip in engine.layer_strips(scene, obj).items():
+                if name == item.name or item.is_group:
+                    engine.dress_strip(obj, strip, name)
+
+
 def _color_changed(self, _context):
     self.color_assigned = True
     apply_layer_color(self.id_data, self)
@@ -152,8 +165,37 @@ FILL_MODES = (
 SOLO_OPACITY = 0.1  # opacity of the other layers while a layer is in Solo
 
 
+def _sync_clip_mutes(gp_data):
+    """Mute or unmute the layers' clips in the Sequencer right away."""
+    from . import engine
+    for obj in bpy.data.objects:
+        if obj.type == "GREASEPENCIL" and obj.data == gp_data and obj.gp2m.is_composition:
+            scene = engine.scene_of(obj)
+            if scene is None:
+                continue
+            try:
+                engine.sync_layer_mutes(scene, obj)
+            except Exception as error:  # the new sound fixes it anyway
+                print(f"[Doodle Music] clip mute failed: {error!r}")
+
+
+def _mute_changed(self, _context):
+    """Muting a layer only mutes its clip: the others keep their sound, nothing is
+    rendered (with 'Un canale per livello'). Unmuting renders it again, as its strokes
+    may have changed meanwhile."""
+    _sync_clip_mutes(self.id_data)
+    gp_data = self.id_data
+    per_layer = all(obj.gp2m.layer_channels for obj in bpy.data.objects
+                    if obj.type == "GREASEPENCIL" and obj.data == gp_data
+                    and obj.gp2m.is_composition)
+    if self.mute and per_layer:
+        return
+    _sound_changed(self, _context)
+
+
 def _solo_changed(self, _context):
     apply_solo(self.id_data)
+    _sync_clip_mutes(self.id_data)
     _sound_changed(self, _context)
 
 
@@ -272,14 +314,31 @@ def migrate_layer_settings(item):
     item.settings_version = SETTINGS_VERSION
 
 
+def _get_pan_percent(self):
+    return (self.clip_pan + 1.0) * 50.0
+
+
+def _set_pan_percent(self, value):
+    self.clip_pan = max(-1.0, min(1.0, value / 50.0 - 1.0))
+
+
+def _grid_opacity_changed(self, _context):
+    from . import board
+    obj = self.id_data
+    if isinstance(obj, bpy.types.Object) and obj.gp2m.is_composition:
+        board.apply_grid_opacity(obj)
+
+
 class GP2M_LayerSettings(bpy.types.PropertyGroup):
     """Settings of one Grease Pencil layer, matched by layer name."""
 
     name: StringProperty()
     is_group: BoolProperty(default=False, options={"HIDDEN"},
                            description="Impostazioni di un gruppo di livelli")
-    mute: BoolProperty(name="Muto", default=False, update=_sound_changed,
-                       description="Il livello resta visibile ma non suona (anche negli export)")
+    mute: BoolProperty(name="Muto", default=False, update=_mute_changed,
+                       description="Il livello resta visibile ma non suona (anche negli "
+                       "export); anche la sua clip nel Sequencer è muta, e mutando la clip "
+                       "si muta il livello")
     solo: BoolProperty(name="Solo", default=False, update=_solo_changed,
                        description="Ascolta solo questo livello: gli altri tacciono e scendono "
                        "al 10% di opacità (anche negli export)")
@@ -329,6 +388,21 @@ class GP2M_LayerSettings(bpy.types.PropertyGroup):
                                  "(12 = un'ottava sopra, -5 = una quarta sotto…)",
                                  update=_sound_changed)
     settings_version: IntProperty(default=0, options={"HIDDEN"})
+    clip_volume: FloatProperty(
+        name="Volume clip", default=1.0, min=0.0, max=10.0, soft_max=2.0,
+        update=lambda self, context: apply_layer_mix(self.id_data, self),
+        description="Volume della clip del livello nel Video Sequencer (lo stesso valore: "
+        "cambiandolo nel Sequencer cambia qui). Vale anche negli export")
+    clip_pan: FloatProperty(
+        name="Pan", default=0.0, min=-1.0, max=1.0,
+        update=lambda self, context: apply_layer_mix(self.id_data, self),
+        description="Bilanciamento sinistra/destra della clip del livello nel Video "
+        "Sequencer (lo stesso valore). Vale anche negli export")
+    pan_percent: FloatProperty(
+        name="Pan", min=0.0, max=100.0, precision=0, get=_get_pan_percent,
+        set=_set_pan_percent,
+        description="Sinistra / destra: 0 = tutto a sinistra, 50 = al centro, 100 = tutto "
+        "a destra (è il Pan della clip del livello nel Video Sequencer)")
     color: EnumProperty(name="Colore", items=LAYER_COLOR_ITEMS, default="NONE",
                         update=_color_changed,
                         description="Colore del livello: la sua strip nel Video Sequencer "
@@ -465,10 +539,15 @@ ROOM_ITEMS = (
 class GP2M_CompositionSettings(bpy.types.PropertyGroup):
     is_composition: BoolProperty(default=False)
     channel: IntProperty(name="Canale Sequencer", default=0, min=0, max=128,
-                         description="Canale del Video Sequencer della sua strip audio, o "
-                         "del primo livello con 'Un canale per livello' "
+                         description="Canale del Video Sequencer della composizione: la sua "
+                         "strip audio, o la meta-clip con dentro i livelli "
                          "(0 = scegli automaticamente il primo libero)",
                          update=_arrangement_changed)
+    start_delay: FloatProperty(
+        name="Parte dopo (s)", default=0.0, min=0.0, max=3600.0, subtype="TIME_ABSOLUTE",
+        unit="TIME_ABSOLUTE", update=_arrangement_changed,
+        description="La composizione parte dopo questi secondi (anche spostando la sua "
+        "clip nel Video Sequencer): testina e suono la seguono")
     order: IntProperty(name="Ordine", default=0, min=0, max=999,
                        description="Posizione nella riproduzione 'Una dopo l'altra'",
                        update=_arrangement_changed)
@@ -493,6 +572,13 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
                           description="Nota MIDI della riga più bassa (48 = C3)",
                           update=_board_changed)
     octaves: IntProperty(name="Ottave", default=3, min=1, max=7, update=_board_changed)
+    extra_keys: IntProperty(name="Tasti in più", default=0, min=0, max=11,
+                            description="Semitoni sopra le ottave intere (le maniglie delle "
+                            "ottave si fermano su ogni tasto)", update=_board_changed)
+    grid_opacity: FloatProperty(name="Opacità griglia", default=1.0, min=0.0, max=1.0,
+                                subtype="FACTOR", update=_grid_opacity_changed,
+                                description="Opacità della tavola: sfondo, righe, tastiera "
+                                "ed etichette (il disegno resta pieno)")
     row_height: FloatProperty(name="Altezza riga", default=0.12, min=0.02, max=1.0,
                               description="Altezza di un semitono sulla tavola",
                               update=_board_changed)
@@ -552,9 +638,9 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
         "Rigenera aggiorna sempre tutti i livelli. Serve 'Un canale per livello'")
     layer_channels: BoolProperty(
         name="Un canale per livello", default=True,
-        description="Ogni livello suona su una sua strip nel Video Sequencer, su canali "
-        "consecutivi a partire da 'Canale', con i suoi effetti: puoi alzarlo, abbassarlo, "
-        "silenziarlo o spostarlo nel Sequencer. Insieme suonano come il mix",
+        description="Ogni livello suona su una sua strip nel Video Sequencer, dentro la "
+        "meta-clip della composizione (un solo canale, 'Canale'; Tab per entrarci), con i "
+        "suoi effetti: puoi alzarlo, abbassarlo o silenziarlo. Insieme suonano come il mix",
         update=_sound_changed)
     sample_rate: EnumProperty(name="Frequenza", items=SAMPLE_RATES, default="44100",
                               update=_sound_changed)

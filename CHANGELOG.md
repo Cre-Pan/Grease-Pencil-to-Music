@@ -355,6 +355,158 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.27
+
+Gruppi nel Sequencer, come i gruppi di Blender
+
+- **Ctrl+G sulle clip di più composizioni**: diventano un **gruppo**. Sul tavolo restano
+  composizioni separate, ognuna con i suoi livelli; nel Sequencer si muovono insieme, su un
+  solo canale. Un gruppo può stare dentro un altro gruppo.
+- **Alt+G su un gruppo** lo scioglie: le composizioni tornano fuori. **Alt+G sulla clip di una
+  composizione** invece non si fa: la clip torna com'era, con un avviso.
+- **Il gruppo è un bus**: volume, pan e muto del gruppo valgono per tutte le sue composizioni,
+  anche nell'export. Si cambiano nella barra laterale del Sequencer (scheda Musica, pannello
+  Gruppo); anche il Volume della meta-clip diventa il volume del gruppo. Un gruppo muto non
+  viene ricalcolato; togliendo il muto le sue composizioni si aggiornano.
+- **Ctrl+G sulle clip di alcuni livelli** (dentro la clip di una composizione): diventano un
+  **gruppo di livelli** nella stessa composizione. Ogni gruppo di livelli, anche quelli fatti
+  dalla lista dei livelli, è una meta-clip dentro la clip della composizione.
+- **Alt+G sulla clip di un gruppo di livelli** scioglie il gruppo; incollare la clip di un
+  livello dentro quella di un gruppo sposta il livello nel gruppo; eliminare la clip di un
+  gruppo mette il gruppo in muto; spostare le clip su altri canali riordina anche dentro il
+  gruppo.
+- Anche il gruppo di livelli è un bus: il suo "Volume clip" e il suo pan valgono per tutti i
+  suoi livelli (nel Sequencer e nell'export); muto e volume della sua meta-clip sono quelli
+  del gruppo.
+- Ctrl+Z riporta indietro gruppo e composizioni insieme.
+
+## 0.0.26
+
+Le clip delle composizioni nel Sequencer: cosa succede
+
+- **Taglio (K) e scala (S, velocità)**: le clip di una composizione non si tagliano e non
+  si scalano; se succede, la composizione torna intera da sola (con un avviso nella barra
+  di stato). La durata si cambia dalla fine della clip. Anche l'**inizio** non si taglia.
+- **Fine della clip con *Segui In/Out***: allungarla o accorciarla sposta l'End della scena.
+- **Shift+D** sulla clip di una composizione crea una **nuova composizione** (copia del
+  disegno, sul tavolo sopra le altre), sul canale e nel punto dove hai lasciato la copia.
+  Nel viewport Shift+D faceva già così.
+- **Rinominare la clip rinomina la composizione** (prima la composizione perdeva la clip e
+  ne creava un'altra, con il suono doppio).
+- **Eliminare la clip mette in muto la composizione**: togliendo il muto torna.
+- **Muto = nessun calcolo**: una composizione muta non viene ricalcolata; mutare un livello
+  muta solo la sua clip, senza rifare il suono degli altri (togliendo il muto il livello
+  viene ricalcolato, nel caso sia cambiato).
+- **Spostare nel tempo la clip di un livello** (dentro la meta) sposta i suoi tratti sulla
+  tavola di altrettanto: quello che vedi è quello che senti.
+- **Incollare o trascinare la clip di un livello nella meta di un'altra composizione**
+  sposta il livello in quella composizione, con i suoi strumenti e le sue impostazioni;
+  i tratti tengono tempi e note anche se le due tavole sono diverse.
+- **Clip bloccata (lucchetto)**: l'add-on non la sposta e non legge più le sue modifiche.
+- **Annulla (Ctrl+Z)** riporta indietro insieme la clip e il livello.
+
+## 0.0.25
+
+Tutto insieme: rig e colori del tema (0.0.23, 0.0.24) con la meta-clip per composizione e la
+sincronizzazione tra Sequencer e livelli (vedi 0.0.22: muto, ordine, ritardo d'inizio, volume,
+pan e colore tra livelli e clip). Provato insieme in Blender 5.3. In più:
+
+- **Opacità della griglia** (*Tavola e tempo*): sfondo, righe, tastiera ed etichette diventano
+  trasparenti quanto vuoi; il disegno resta pieno.
+- **Maniglie delle ottave un tasto alla volta**: trascinandole aggiungi o togli un semitono
+  per volta (in alto e in basso); con **Ctrl** un'ottava intera. Il disegno non si sposta.
+- **Maniglia della durata senza aggancio**: si ferma su ogni fotogramma e, mentre trascini,
+  la tavola e la meta-clip nel Sequencer cambiano insieme (il suono segue appena ti fermi).
+  Al contrario, allungando o accorciando la fine della meta-clip nel Sequencer la
+  composizione cambia durata e la tavola con il suo rig la segue.
+- **Ctrl nel viewport aggancia alle battute** (4/4 al BPM della composizione): per la
+  durata e per la testina.
+- **Pan da 0 a 100** sotto il volume di ogni livello: 0 tutto a sinistra, 50 al centro,
+  100 tutto a destra (è il Pan della clip del livello).
+
+## 0.0.24
+
+Ritocchi al rig
+
+- Niente più messaggio in alto nel viewport: le maniglie non hanno il tooltip e durante il
+  trascinamento l'header resta com'è. Il valore (durata in secondi, ottave) compare accanto
+  alla maniglia mentre la sposti.
+- Maniglie "spente" quando il mouse non è sopra: grigie e più trasparenti; si accendono
+  al passaggio del mouse e prendono il colore dell'*Oggetto attivo* quando le selezioni
+  o le trascini.
+- **Clic per selezionare, G per spostare**: un clic su una maniglia la seleziona; premendo
+  **G** la sposti con il mouse come un oggetto (clic o Invio conferma, Esc o tasto destro
+  annulla). Un clic altrove o Esc la deseleziona. Senza maniglia selezionata G sposta gli
+  oggetti come sempre.
+- Il riquadro della testina ha sempre il colore esatto della testina della Timeline (prima
+  sotto il mouse diventava più chiaro); hover e selezione si vedono sul bordo.
+
+## 0.0.23
+
+Rig in stile Frame by Plane e colori del tema di Blender
+
+- **Maniglie come in Frame by Plane**: non sono più tratti di un terzo Grease Pencil ma
+  gizmo disegnati a **dimensione fissa sullo schermo** (non diventano minuscole allontanando
+  la vista né enormi avvicinandola), chiari con un bordo scuro; sotto il mouse e mentre le
+  trascini prendono il colore dell'*Oggetto attivo* del tema. A destra la durata (◂ ▸),
+  sopra e sotto la tastiera le ottave (▴ ▾). Gli oggetti *· Rig* della 0.0.22 vengono
+  rimossi all'apertura del file.
+- **Testina come nella Timeline**: la linea e il riquadro in cima hanno il colore della
+  testina del tema (*Temi → Comune → Animazione → Playhead*) e il riquadro mostra il numero
+  del fotogramma, come nella Timeline. Si trascina per spostare il cursore.
+- **Tavola nei colori del tema**: sfondo, righe, linee dei secondi e dei battiti ed etichette
+  vengono dal Dope Sheet del tema, i Do dal colore dei keyframe selezionati, l'ombra fuori
+  dall'anteprima dal *Scene Strip Range*. Se cambi tema (o un suo colore) la tavola si
+  aggiorna da sola entro un secondo, senza ricostruirla e senza rigenerare il suono.
+- **Provato in Blender 5.3 con il mouse**: le quattro maniglie sono state trascinate con
+  eventi del mouse veri (durata 8 → 9,5 s, un'ottava sopra, una sotto, testina dal
+  fotogramma 30 al 69).
+- GitHub Pages: il deploy fallito a volte ("No artifacts named github-pages") ora è in due
+  job, come nel modello di GitHub, così l'artefatto è già registrato quando parte il deploy.
+
+## 0.0.22
+
+Il viewport come un tavolo: composizioni come livelli e maniglie disegnate
+
+- **Composizioni come livelli**: nella sidebar (*Musica → Composizioni*) le composizioni
+  della scena sono in una lista come i livelli, in alto la più alta nel Video Sequencer.
+  Per ognuna canale, muto, occhio e lucchetto (valgono anche per la sua tavola); accanto
+  aggiungi, duplica, elimina, su / giù (scambiano i canali con la vicina), inquadra e
+  **Riordina** (impila le tavole nell'ordine dei canali). Cliccando una riga la
+  composizione viene selezionata.
+- **Una composizione, una clip**: nel Video Sequencer ogni composizione è una meta-clip
+  su un solo canale, con dentro una clip per livello (con il loro colore). *Tab* per
+  entrarci e regolare volume, pan e muto di ogni livello; il muto e il volume della
+  meta valgono per tutta la composizione. Le strip dei livelli dei file salvati prima
+  entrano nella meta da sole, tenendo volume e pan.
+- **Il Sequencer comanda come la lista dei livelli** (nei due sensi):
+  - *muto*: mutare un livello muta subito la sua clip (resta nella meta, muta, senza
+    rifare il suono), e mutare la clip nel Sequencer muta il livello;
+  - *ordine*: spostando la clip di un livello su un altro canale dentro la meta il livello
+    sale o scende anche in Grease Pencil (dentro un gruppo, solo tra i livelli del gruppo);
+    spostando la meta su un altro canale cambia l'ordine nella lista Composizioni;
+  - *tempo*: spostando la meta più avanti la composizione parte dopo (*Parte dopo*, in
+    *Sequencer e ascolto*), con testina e suono;
+  - *volume, pan e colore* della clip sono quelli del livello (*Volume clip* e *Pan* sotto
+    il volume del livello); valgono anche negli export. I valori animati con keyframe
+    restano dei keyframe.
+- **Una nuova composizione è un nuovo livello**: nel Sequencer va sopra tutte le altre e
+  salta i canali che hanno già una clip; sul tavolo nasce sopra la più alta, allineata,
+  invece che sul 3D cursor sopra le altre. Se dopo si aggiunge una clip (un video) su un
+  suo canale, la composizione sale fino al primo canale libero: le clip non vengono
+  mai spostate.
+- **Ottave sopra e sotto senza spostare il disegno** (*Tavola e tempo → Sopra / Sotto*,
+  o con le maniglie): aggiungere un'ottava sotto abbassa la nota più bassa e allarga la
+  tavola verso il basso, ma ogni tratto resta dov'è nel mondo e suona le stesse note.
+- **Maniglie disegnate (rig) in Object Mode**: *<composizione> · Rig* è un terzo
+  Grease Pencil, bloccato e mai renderizzato, con maniglie a tratto: a destra la durata
+  (si aggancia ai battiti, *Ctrl* per un valore libero; con *Segui In/Out* sposta l'End
+  della scena), una goccia sulla testina che sposta il cursore della timeline, e sopra
+  e sotto la tastiera le ottave. Si trascinano direttamente (sono gizmo invisibili sopra
+  i tratti, quindi il click non seleziona la tavola); mentre trascini si muove solo la
+  maniglia, tavola e suono cambiano al rilascio, con un solo passo di Annulla. In Draw,
+  Edit e Sculpt Mode spariscono.
+
 ## 0.0.21
 
 La griglia è un Grease Pencil a parte
