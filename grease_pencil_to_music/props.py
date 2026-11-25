@@ -481,6 +481,8 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
                        update=_board_changed)
     length: FloatProperty(name="Durata (s)", default=8.0, min=1.0, max=300.0,
                           description="Durata del loop in secondi", update=_board_changed)
+    grid: PointerProperty(type=bpy.types.Object, options={"HIDDEN"},
+                          name="Tavola", description="L'oggetto con la griglia della tavola")
     follow_scene: BoolProperty(
         name="Segui In/Out della scena", default=False, update=_follow_changed,
         description="La composizione dura da Start a End della scena: cambiando In e Out "

@@ -415,8 +415,34 @@ def on_load_post(*_args):
     _ensure_timer()
 
 
+def select_composition_of_grid(view_layer=None):
+    """Clicking the grid selects its composition: Draw Mode (and G/R/S, the panels...)
+    always work on the drawing, never on the grid. Returns the composition."""
+    view_layer = view_layer or getattr(bpy.context, "view_layer", None)
+    if view_layer is None:
+        return None
+    active = view_layer.objects.active
+    if not board.is_grid(active):
+        return None
+    owner = board.grid_owner(active)
+    if owner is None:
+        return None
+    try:
+        active.select_set(False, view_layer=view_layer)
+        owner.select_set(True, view_layer=view_layer)
+    except RuntimeError:
+        pass  # not in this view layer
+    view_layer.objects.active = owner
+    return owner
+
+
 def _on_active_object():
-    """Solo mode follows the active composition."""
+    """The grid hands the selection to its composition; Solo mode follows the
+    active composition."""
+    try:
+        select_composition_of_grid()
+    except Exception as error:
+        print(f"[Doodle Music] grid selection failed: {error!r}")
     for scene in bpy.data.scenes:
         if scene.gp2m_play.mode == "SOLO":
             engine.arrange_safe(scene)
