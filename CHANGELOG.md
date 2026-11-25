@@ -355,6 +355,28 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.19
+
+Passata di correzioni (livelli, Solo, file del suono, strumenti registrati)
+
+- **Auto sul livello attivo sente anche gli altri livelli**: in Modalità Modifica e Scultura
+  (e con *Usa modificatori*) si possono cambiare i tratti di tutti i livelli insieme, ma veniva
+  rigenerato solo il livello attivo e gli altri restavano col suono vecchio. Ora un'impronta
+  leggera dei tratti di ogni livello dice se è cambiato: se sì, si rigenera tutto.
+- **Eliminare il livello in Solo riaccende gli altri**: con *Elimina livello*, con *Unisci* o
+  con la lista dei livelli di Blender, gli altri livelli restavano attenuati al 10%.
+- **Annulla/Ripeti con l'aggiornamento automatico spento**: Ctrl+Z riporta le strisce del
+  Sequencer a file del suono già cancellati, e la composizione restava muta finché non si
+  premeva *Rigenera*. Ora il suono viene riscritto. Anche su Windows, dove il file vecchio a
+  volte resta sul disco, la striscia non suona più il suono di prima.
+- **Strumenti registrati che non si leggono al primo colpo** (file bloccato per un attimo,
+  add-on appena aggiornato): restavano muti per tutta la sessione. Ora la nota viene saltata
+  come errore e riletta al render successivo; anche la tastiera non si blocca più.
+- **Più robustezza**: una composizione con un errore nella tavola non ferma più
+  l'aggiornamento delle altre; la tavola non viene mai ricostruita durante un G/R/S;
+  disattivando l'add-on o aprendo un altro file non restano timer o richieste del file
+  precedente.
+
 ## 0.0.18
 
 Icone degli strumenti più semplici
