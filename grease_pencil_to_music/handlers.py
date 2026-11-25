@@ -103,6 +103,7 @@ def transform_running():
 _scale_base = {}  # composition -> (length, octaves) when its scale left 1
 _scale_seen = {}  # composition -> (scale tuple, time) to know when it stops moving
 SCALE_SETTLE = 0.5  # seconds the scale must stay still before it is applied
+TRANSFORM_POLL = 0.1  # seconds between checks while a transform is running
 
 
 def _scale_of(obj):
@@ -162,6 +163,12 @@ def _tick():
     wait = prefs.get_prefs().debounce - (time.monotonic() - _last_change[0])
     if wait > 0.0:
         return wait
+    if transform_running():
+        # Never rebuild while G/R/S, Alt+S... is still dragging: the transform
+        # holds pointers into the Grease Pencil drawings, and regenerating
+        # (board, layers, modifiers, strips) under it crashes Blender.
+        # The edits stay pending and run as soon as the transform ends.
+        return TRANSFORM_POLL
     if _scaled:
         wait = _scale_pending()
         if wait is not None:
