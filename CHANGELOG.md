@@ -355,6 +355,31 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.26
+
+Le clip delle composizioni nel Sequencer: cosa succede
+
+- **Taglio (K) e scala (S, velocità)**: le clip di una composizione non si tagliano e non
+  si scalano; se succede, la composizione torna intera da sola (con un avviso nella barra
+  di stato). La durata si cambia dalla fine della clip. Anche l'**inizio** non si taglia.
+- **Fine della clip con *Segui In/Out***: allungarla o accorciarla sposta l'End della scena.
+- **Shift+D** sulla clip di una composizione crea una **nuova composizione** (copia del
+  disegno, sul tavolo sopra le altre), sul canale e nel punto dove hai lasciato la copia.
+  Nel viewport Shift+D faceva già così.
+- **Rinominare la clip rinomina la composizione** (prima la composizione perdeva la clip e
+  ne creava un'altra, con il suono doppio).
+- **Eliminare la clip mette in muto la composizione**: togliendo il muto torna.
+- **Muto = nessun calcolo**: una composizione muta non viene ricalcolata; mutare un livello
+  muta solo la sua clip, senza rifare il suono degli altri (togliendo il muto il livello
+  viene ricalcolato, nel caso sia cambiato).
+- **Spostare nel tempo la clip di un livello** (dentro la meta) sposta i suoi tratti sulla
+  tavola di altrettanto: quello che vedi è quello che senti.
+- **Incollare o trascinare la clip di un livello nella meta di un'altra composizione**
+  sposta il livello in quella composizione, con i suoi strumenti e le sue impostazioni;
+  i tratti tengono tempi e note anche se le due tavole sono diverse.
+- **Clip bloccata (lucchetto)**: l'add-on non la sposta e non legge più le sue modifiche.
+- **Annulla (Ctrl+Z)** riporta indietro insieme la clip e il livello.
+
 ## 0.0.25
 
 Tutto insieme: rig e colori del tema (0.0.23, 0.0.24) con la meta-clip per composizione e la

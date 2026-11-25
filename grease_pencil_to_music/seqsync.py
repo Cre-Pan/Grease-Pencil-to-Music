@@ -27,6 +27,169 @@ def _settings(gp, name):
     return props.find_layer_settings(gp, name)
 
 
+MESSAGES = []  # the last notices (also for the tests)
+
+
+def notify(text):
+    """A short notice in the Sequencer's status bar (and the console)."""
+    MESSAGES.append(text)
+    del MESSAGES[:-10]
+    print(f"[Doodle Music] {text}")
+    if bpy.app.background:
+        return
+    wm = getattr(bpy.context, "window_manager", None)
+    for window in (wm.windows if wm else ()):
+        try:
+            window.workspace.status_text_set(text)
+        except Exception:
+            pass
+
+    def clear():
+        for window in (wm.windows if wm else ()):
+            try:
+                window.workspace.status_text_set(None)
+            except Exception:
+                pass
+    bpy.app.timers.register(clear, first_interval=4.0)
+
+
+def _owned_metas(scene, obj):
+    return [strip for strip in engine._top_strips(scene.sequence_editor, obj)
+            if strip.type == "META"]
+
+
+def rebuild_clips(scene, obj):
+    """Throw away the composition's clips and make them again (everything they carry,
+    volume, pan, color, mute, is stored on the layers)."""
+    editor = scene.sequence_editor
+    for strip in engine._top_strips(editor, obj):
+        engine._remove_strip(editor, strip)
+    engine.state(obj).pop("key", None)
+    engine.regenerate_safe(obj, scene, force=True)
+
+
+def _check_clips(scene, obj):
+    """Cut (K), duplicated (Shift+D), sped up (retiming) or deleted clips of a
+    composition. Returns True when it acted."""
+    st = engine.state(obj)
+    metas = _owned_metas(scene, obj)
+    if not metas:
+        if st.pop("had_meta", None) and not obj.gp2m.mute:
+            obj.gp2m.mute = True  # the meta-clip was deleted: the composition is muted
+            notify(f"Clip eliminata: {obj.name} ora è muta (togli il muto per riaverla)")
+            return True
+        return False
+    main = next((m for m in metas if m.name == engine.strip_name(obj)), metas[0])
+    others = [m for m in metas if m != main]
+    if others:
+        span = st.get("meta_span")
+        cut = span is not None and int(main.right_handle) < span[1] and any(
+            int(m.left_handle) == int(main.right_handle) for m in others)
+        if cut:
+            rebuild_clips(scene, obj)
+            notify("Le clip di una composizione non si tagliano: la composizione è intera")
+            return True
+        from . import table
+        fps = scene.render.fps / scene.render.fps_base
+        for copy_strip in others:
+            inner = [s for s in copy_strip.strips if s.type == "SOUND"]
+            start = min((s.content_start for s in inner), default=copy_strip.content_start)
+            base = st.get("offset_frames", 0) - st.get("delay_frames", 0)
+            delay = max(0.0, (start - scene.frame_start - base) / fps)
+            channel = copy_strip.channel
+            engine._remove_strip(scene.sequence_editor, copy_strip)
+            table.duplicate(scene, obj, channel=channel, delay=round(delay, 4))
+        notify("Clip duplicata: è una nuova composizione")
+        return True
+    inner = [s for s in main.strips if s.type == "SOUND" and engine._owned(s, obj)]
+    names = [s.get(engine.LAYER_KEY) for s in inner]
+    sped = any(len(s.retiming_keys) for s in inner if hasattr(s, "retiming_keys"))
+    if len(names) != len(set(names)) or sped:
+        rebuild_clips(scene, obj)
+        notify("Le clip di una composizione non si scalano: la durata si cambia "
+               "dalla fine della clip" if sped else
+               "Le clip di una composizione non si tagliano: la composizione è intera")
+        return True
+    return False
+
+
+def _sync_name(scene, obj):
+    """The meta-clip renamed in the Sequencer: the composition takes the name."""
+    meta = engine.meta_strip(scene, obj) or engine.top_strip(scene, obj)
+    if meta is None or meta.name == engine.strip_name(obj):
+        return False
+    name = meta.name
+    if name.startswith(engine.STRIP_PREFIX):
+        name = name[len(engine.STRIP_PREFIX):]
+    name = name.strip()
+    import re
+    if not name or re.sub(r"\.\d{3}$", "", name) == obj.name:  # e.g. "… 1.001"
+        meta.name = engine.strip_name(obj)
+        return False
+    engine.rename_composition(obj, name)
+    return True
+
+
+def _sync_layer_times(scene, obj):
+    """The clip of a layer moved in time inside the meta-clip: the layer's strokes move
+    on the board by as much (what you see is what you hear)."""
+    st = engine.state(obj)
+    if "offset_frames" not in st:
+        return False
+    target = scene.frame_start + st["offset_frames"]
+    strips = engine.layer_strips(scene, obj)
+    shifts = {name: int(round(strip.content_start - target))
+              for name, strip in strips.items() if strip.parent_meta() is not None}
+    moved = {name: shift for name, shift in shifts.items() if shift}
+    if not moved or (len(set(shifts.values())) == 1 and len(shifts) > 1):
+        return False  # nothing, or the whole meta-clip moved (see _sync_time)
+    fps = scene.render.fps / scene.render.fps_base
+    s = obj.gp2m
+    import numpy as np
+    for name, shift in moved.items():
+        layer = obj.data.layers.get(name)
+        if layer is None:
+            continue
+        dx = shift / fps * s.seconds_width
+        for frame in layer.frames:
+            attr = frame.drawing.attributes.get("position")
+            if attr is None or not len(attr.data):
+                continue
+            data = np.empty(len(attr.data) * 3, dtype=np.float32)
+            attr.data.foreach_get("vector", data)
+            data[0::3] += dx
+            attr.data.foreach_set("vector", data)
+            frame.drawing.tag_positions_changed()
+        strips[name].content_start = target
+    from . import handlers
+    handlers.mark_dirty(obj)
+    return True
+
+
+def _sync_foreign_layers(scene, obj):
+    """The clip of another composition's layer pasted or dragged into this meta-clip:
+    the layer moves here (with its instruments and settings)."""
+    meta = engine.meta_strip(scene, obj)
+    if meta is None:
+        return False
+    moved = False
+    for strip in list(meta.strips):
+        owner_name = strip.get(engine.OWNER_KEY)
+        layer = strip.get(engine.LAYER_KEY)
+        if owner_name in (None, obj.name) or layer is None:
+            continue
+        owner = bpy.data.objects.get(owner_name)
+        engine._remove_strip(scene.sequence_editor, strip)
+        if owner is None or not owner.gp2m.is_composition or owner.data.layers.get(layer) is None:
+            continue
+        from . import layer_transfer
+        new = layer_transfer.move_layer(owner, obj, layer)
+        if new:
+            notify(f"Livello {layer} spostato da {owner.name} a {obj.name}")
+            moved = True
+    return moved
+
+
 def _sync_mutes(scene, obj):
     """A clip muted or unmuted by hand in the Sequencer: the layer follows. Returns
     True when a layer changed."""
@@ -113,8 +276,17 @@ def _sync_length(scene, obj):
         return False
     st["meta_span"] = (left, right)
     s = obj.gp2m
-    if left != span[0] or s.use_sections or engine.follows_scene(obj, scene):
-        return False  # moved in time (see _sync_time), or the length is not free
+    moved = (left - span[0]) == (right - span[1])
+    if moved:
+        return False  # moved in time: see _sync_time
+    if left != span[0]:
+        notify("L'inizio della clip di una composizione non si taglia")
+        return True  # the arrangement puts the start back
+    if engine.follows_scene(obj, scene):
+        scene.frame_end = max(scene.frame_start + 1, scene.frame_end + right - span[1])
+        return True  # the composition follows the scene's End
+    if s.use_sections:
+        return True  # the length of a song with sections is not free: back as it was
     fps = scene.render.fps / scene.render.fps_base
     length = round(min(max(s.length + (right - span[1]) / fps, 1.0), 300.0), 4)
     if abs(length - s.length) < 0.5 / fps:
@@ -181,6 +353,15 @@ def sync_scene(scene):
     changed = False
     try:
         for obj in engine.scene_compositions(scene):
+            top = engine.top_strip(scene, obj)
+            if top is not None and top.lock:
+                continue  # locked in the Sequencer: left as it is
+            if obj.gp2m.layer_channels and _check_clips(scene, obj):
+                changed = True
+                continue
+            changed |= _sync_name(scene, obj)
+            if obj.gp2m.layer_channels and _sync_foreign_layers(scene, obj):
+                changed = True
             if not obj.gp2m.layer_channels or engine.meta_strip(scene, obj) is None:
                 if engine.top_strip(scene, obj) is not None:
                     changed |= _sync_channel(scene, obj)
@@ -191,6 +372,7 @@ def sync_scene(scene):
             changed |= _sync_order(scene, obj)
             changed |= _sync_channel(scene, obj)
             changed |= _sync_length(scene, obj)
+            changed |= _sync_layer_times(scene, obj)
             changed |= _sync_time(scene, obj)
     finally:
         _busy[0] = False

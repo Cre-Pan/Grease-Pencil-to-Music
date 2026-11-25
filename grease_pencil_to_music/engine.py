@@ -455,7 +455,7 @@ def cleanup_orphans():
         if editor is None:
             continue
         for strip in list(editor.strips):
-            if not strip.name.startswith(STRIP_PREFIX):
+            if not _is_composition_strip(strip):
                 continue
             owner = bpy.data.objects.get(strip.get(OWNER_KEY)
                                          or strip.name[len(STRIP_PREFIX):])
@@ -503,7 +503,8 @@ def _top_strips(editor, obj):
     if editor is None:
         return []
     return [strip for strip in editor.strips
-            if strip.name.startswith(STRIP_PREFIX) and _owned(strip, obj)]
+            if (strip.get(OWNER_KEY) is not None or strip.name.startswith(STRIP_PREFIX))
+            and _owned(strip, obj)]
 
 
 def meta_strip(scene, obj):
@@ -555,7 +556,7 @@ MAX_CHANNEL = 128
 
 
 def _is_composition_strip(strip):
-    return strip.name.startswith(STRIP_PREFIX)
+    return strip.get(OWNER_KEY) is not None or strip.name.startswith(STRIP_PREFIX)
 
 
 def foreign_channels(editor):
@@ -661,6 +662,7 @@ def _place_strip(scene, obj, path, frames):
         if obj.gp2m.channel == 0:
             obj.gp2m.channel = meta.channel
         _remove_strip(editor, meta)
+    state(obj).pop("had_meta", None)
     old = find_strip(scene, obj)
     if old is not None and old.get(LAYER_KEY) is not None:
         old = None
@@ -737,6 +739,35 @@ def fit_meta(meta):
             meta.left_handle = start
         if meta.right_handle != end:
             meta.right_handle = end
+
+
+def rename_composition(obj, name):
+    """Rename a composition and everything that carries its name (its clips, its
+    state); the grid follows at the next rebuild. Returns the name it got."""
+    old = obj.name
+    obj.name = name
+    new = obj.name
+    if new == old:
+        return new
+    if old in _state:
+        _state[new] = _state.pop(old)
+    for scene in obj.users_scene:
+        editor = scene.sequence_editor
+        if editor is None:
+            continue
+        for strip in list(editor.strips):
+            if strip.get(OWNER_KEY) != old:
+                continue
+            strip[OWNER_KEY] = new
+            strip.name = strip_name(obj)
+            if strip.type == "META":
+                for inner in strip.strips:
+                    if inner.get(OWNER_KEY) == old:
+                        inner[OWNER_KEY] = new
+                        layer = inner.get(LAYER_KEY)
+                        inner.name = strip_name(obj, layer) if layer else strip_name(obj)
+    board.request_rebuild(obj)
+    return new
 
 
 def silent_layers(obj):
@@ -1056,6 +1087,11 @@ def _arrange_layers(scene, obj, strips, target, mute):
     meta = meta_strip(scene, obj)
     if meta is None:
         return  # layer strips of 0.0.21: they move into a meta-clip at the next sound
+    state(obj)["had_meta"] = True
+    if meta.lock:  # locked in the Sequencer: the add-on leaves it where it is
+        if meta.mute != mute:
+            meta.mute = mute
+        return
     if obj.gp2m.channel == 0:
         obj.gp2m.channel = meta.channel  # the automatic choice
     elif meta.channel != obj.gp2m.channel:
@@ -1078,6 +1114,9 @@ def _arrange_layers(scene, obj, strips, target, mute):
         shift = target - min(strip.content_start for strip in inner)
         if shift:
             meta.content_start = meta.content_start + shift  # moves what is inside too
+        for strip in meta.strips:  # every layer starts with the composition
+            if strip.type == "SOUND" and strip.content_start != target:
+                strip.content_start = target
     fit_meta(meta)
     state(obj)["meta_span"] = (int(meta.left_handle), int(meta.right_handle))
     if meta.mute != mute:
@@ -1135,6 +1174,11 @@ def regenerate(obj, scene=None, force=False, only_active=False):
     if not s.is_composition:
         return None
     props.ensure_layer_settings(obj.data)
+    if s.mute and not force and composition_strips(scene, obj):
+        arrange(scene)  # muted: its clips stay, muted, and nothing is rendered
+        state(obj)["muted_stale"] = True
+        return None
+    state(obj).pop("muted_stale", None)
     began = time.perf_counter()
     per_layer = s.layer_channels
     result = reads = None

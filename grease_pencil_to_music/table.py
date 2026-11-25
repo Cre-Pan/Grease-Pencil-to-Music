@@ -320,22 +320,30 @@ class GP2M_OT_composition_duplicate(bpy.types.Operator):
         return _active(context) is not None
 
     def execute(self, context):
-        scene = context.scene
         source = _active(context)
         select_only(context, source)
-        copy = source.copy()
-        copy.data = source.data.copy()
-        copy.gp2m.grid = None  # its own grid is built for it
-        for collection in source.users_collection or (scene.collection,):
-            collection.objects.link(copy)
-        copy.gp2m.channel = engine.new_composition_channel(
-            scene, engine._channel_count(scene, source))
-        place_new(copy, scene)
-        board.make_independent([source, copy])
-        board.rebuild(copy, scene)
-        engine.regenerate_safe(copy, scene, force=True)
+        copy = duplicate(context.scene, source)
         select_only(context, copy)
         return {"FINISHED"}
+
+
+def duplicate(scene, source, channel=0, delay=None):
+    """A copy of the composition: its own data, instruments, grid and clip, placed above
+    the others on the table; on ``channel`` (or above the others) in the Sequencer."""
+    copy = source.copy()
+    copy.data = source.data.copy()
+    copy.gp2m.grid = None  # its own grid is built for it
+    for collection in source.users_collection or (scene.collection,):
+        collection.objects.link(copy)
+    copy.gp2m.channel = channel or engine.new_composition_channel(
+        scene, engine._channel_count(scene, source))
+    if delay is not None:
+        copy.gp2m.start_delay = delay
+    place_new(copy, scene)
+    board.make_independent([source, copy])
+    board.rebuild(copy, scene)
+    engine.regenerate_safe(copy, scene, force=True)
+    return copy
 
 
 class GP2M_OT_composition_remove(bpy.types.Operator):

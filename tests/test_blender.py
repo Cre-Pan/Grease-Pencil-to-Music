@@ -2538,3 +2538,192 @@ def test_meta_clip_end_changes_the_length(comp):
     meta.right_handle = meta.right_handle + int(2 * fps)
     assert seqsync.sync_scene(scene)
     assert abs(comp.gp2m.length - (before + 2.0)) < 1e-3
+
+
+# --- Cases in the Sequencer (cut, duplicate, rename, delete, trim, move) -------------------
+
+def _meta_ready(comp):
+    engine = sub("engine")
+    names = _two_layers(comp)
+    engine.regenerate(comp)
+    engine.arrange(bpy.context.scene)
+    return names, engine.meta_strip(bpy.context.scene, comp)
+
+
+def test_cutting_a_composition_clip_is_undone(comp):
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    names, meta = _meta_ready(comp)
+    span = (meta.left_handle, meta.right_handle)
+    meta.split(frame=int(meta.left_handle + 48), split_method="SOFT")
+    seqsync.sync_scene(scene)
+    metas = [s for s in scene.sequence_editor.strips if engine._owned(s, comp)]
+    assert len(metas) == 1 and metas[0].type == "META"
+    assert (metas[0].left_handle, metas[0].right_handle) == span
+    assert sorted(engine.layer_strips(scene, comp)) == sorted(
+        n for n in names if n in engine.layer_strips(scene, comp))
+    inner = [s for s in metas[0].strips if s.type == "SOUND"]
+    assert len({s[engine.LAYER_KEY] for s in inner}) == len(inner)
+    assert "non si tagliano" in seqsync.MESSAGES[-1]
+
+
+def test_duplicating_a_composition_clip_makes_a_new_composition(comp):
+    engine, seqsync, table = sub("engine"), sub("seqsync"), sub("table")
+    scene = bpy.context.scene
+    names, meta = _meta_ready(comp)
+    before = set(table.compositions(scene))
+    # What Shift+D leaves in the Sequencer: a copy of the meta-clip, elsewhere.
+    editor = scene.sequence_editor
+    used = {s.channel for s in editor.strips}
+    channel = engine._block_from(meta.channel + 1, 1, used)
+    copy = editor.strips.new_meta(meta.name + ".001", channel, int(meta.content_start))
+    copy[engine.OWNER_KEY] = comp.name
+    seqsync.sync_scene(scene)
+    new = set(table.compositions(scene)) - before
+    assert len(new) == 1
+    twin = new.pop()
+    assert twin.gp2m.channel == channel and engine.top_strip(scene, twin).channel == channel
+    assert [s for s in editor.strips if engine._owned(s, comp)] == [meta]
+    assert len(board_layers := sub("board").user_layers(twin.data)) == len(
+        sub("board").user_layers(comp.data)) and board_layers
+
+
+def test_renaming_the_clip_renames_the_composition(comp):
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    _names, meta = _meta_ready(comp)
+    meta.name = "Melodia del mare"
+    seqsync.sync_scene(scene)
+    assert comp.name == "Melodia del mare"
+    assert meta.name == engine.strip_name(comp) and meta[engine.OWNER_KEY] == comp.name
+    assert all(s[engine.OWNER_KEY] == comp.name for s in engine.layer_strips(scene, comp).values())
+    owned = [s for s in scene.sequence_editor.strips if engine._owned(s, comp)]
+    assert owned == [meta]  # no second clip, no double sound
+    engine.regenerate(comp)
+    assert [s for s in scene.sequence_editor.strips if engine._owned(s, comp)] == [meta]
+
+
+def test_deleting_the_clip_mutes_the_composition(comp):
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    _names, meta = _meta_ready(comp)
+    engine._remove_strip(scene.sequence_editor, meta)
+    seqsync.sync_scene(scene)
+    assert comp.gp2m.mute
+    assert engine.regenerate(comp) is None or engine.meta_strip(scene, comp) is not None
+    comp.gp2m.mute = False
+    engine.regenerate(comp)
+    assert engine.meta_strip(scene, comp) is not None
+
+
+def test_muted_layer_and_composition_are_not_rendered(comp):
+    engine, props = sub("engine"), sub("props")
+    scene = bpy.context.scene
+    names, _meta = _meta_ready(comp)
+    sub("handlers")._dirty.clear()
+    props.find_layer_settings(comp.data, names[0]).mute = True
+    assert comp.name not in sub("handlers")._dirty  # nothing to render again
+    assert engine.layer_strips(scene, comp)[names[0]].mute
+    props.find_layer_settings(comp.data, names[0]).mute = False
+    comp.gp2m.mute = True
+    assert engine.regenerate(comp) is None and engine.meta_strip(scene, comp).mute
+    comp.gp2m.mute = False
+    assert engine.regenerate(comp) is not None
+
+
+def test_trimming_the_clip(comp):
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    _names, meta = _meta_ready(comp)
+    # The start cannot be trimmed.
+    left = meta.left_handle
+    meta.left_handle = left + 24
+    seqsync.sync_scene(scene)
+    assert meta.left_handle == left
+    # Following the scene, the end moves the scene's End.
+    comp.gp2m.follow_scene = True
+    engine.arrange(scene)
+    end = scene.frame_end
+    meta.right_handle = meta.right_handle - 24
+    seqsync.sync_scene(scene)
+    assert scene.frame_end == end - 24
+    comp.gp2m.follow_scene = False
+
+
+def test_moving_a_layer_clip_in_time_moves_its_strokes(comp):
+    engine, seqsync, board = sub("engine"), sub("seqsync"), sub("board")
+    scene = bpy.context.scene
+    names, _meta = _meta_ready(comp)
+    layer = comp.data.layers[names[1]]
+    xs = lambda: [p.position[0] for p in layer.frames[0].drawing.strokes[0].points]  # noqa
+    before = xs()
+    strip = engine.layer_strips(scene, comp)[names[1]]
+    fps = scene.render.fps / scene.render.fps_base
+    strip.content_start = strip.content_start + round(fps)  # one second later
+    assert seqsync.sync_scene(scene)
+    assert np.allclose(np.array(xs()) - np.array(before), comp.gp2m.seconds_width, atol=1e-3)
+    other = engine.layer_strips(scene, comp)[names[0]]
+    assert strip.content_start == other.content_start  # the clip is back in line
+    assert board.user_layers(comp.data)  # still there
+
+
+def test_a_layer_clip_pasted_in_another_composition_moves_the_layer(comp):
+    engine, seqsync, board = sub("engine"), sub("seqsync"), sub("board")
+    scene = bpy.context.scene
+    names, _meta = _meta_ready(comp)
+    other = _fresh(None)
+    add_stroke(other, 0, line(other, 1.0, 2.0, 62))
+    engine.regenerate(other)
+    engine.arrange(scene)
+    strokes = len(comp.data.layers[names[1]].frames[0].drawing.strokes)
+    theirs = {l.name for l in board.user_layers(other.data)}
+    source = engine.layer_strips(scene, comp)[names[1]]
+    target = engine.meta_strip(scene, other)
+    pasted = target.strips.new_sound(source.name + ".001", source.sound.filepath, 5,
+                                     int(source.content_start))
+    pasted[engine.OWNER_KEY], pasted[engine.LAYER_KEY] = comp.name, names[1]
+    seqsync.sync_scene(scene)
+    assert comp.data.layers.get(names[1]) is None
+    moved = [l for l in board.user_layers(other.data) if l.name not in theirs]
+    assert len(moved) == 1 and len(moved[0].frames[0].drawing.strokes) == strokes
+    assert pasted.name not in [s.name for s in target.strips]
+    result = engine.regenerate(other)
+    assert 67 in {round(n.pitch) for n in result.notes}  # it still plays its note
+
+
+def test_a_locked_clip_is_left_alone(comp):
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    _names, meta = _meta_ready(comp)
+    meta.lock = True
+    channel = meta.channel
+    comp.gp2m.start_delay = 1.0
+    engine.arrange(scene)
+    assert meta.channel == channel
+    meta.name = "Bloccata"
+    assert not seqsync.sync_scene(scene)
+    assert comp.name != "Bloccata"
+    meta.lock = False
+    meta.name = engine.strip_name(comp)
+    comp.gp2m.start_delay = 0.0
+
+
+def test_undo_brings_back_clip_and_layer_together(addon):
+    engine, seqsync, props = sub("engine"), sub("seqsync"), sub("props")
+    scene = bpy.context.scene
+    comp = _fresh(None)
+    name = comp.name
+    names, _meta = _meta_ready(comp)
+    bpy.ops.ed.undo_push(message="prima")
+    engine.layer_strips(scene, comp)[names[0]].volume = 0.5
+    seqsync.sync_scene(scene)
+    assert props.find_layer_settings(comp.data, names[0]).clip_volume == pytest.approx(0.5)
+    bpy.ops.ed.undo_push(message="volume nel Sequencer")
+    assert bpy.ops.ed.undo() == {"FINISHED"}
+    scene = bpy.context.scene
+    comp = bpy.data.objects[name]
+    strip = engine.layer_strips(scene, comp)[names[0]]
+    item = props.find_layer_settings(comp.data, names[0])
+    assert strip.volume == pytest.approx(1.0) and item.clip_volume == pytest.approx(1.0)
+    seqsync.sync_scene(scene)
+    assert item.clip_volume == pytest.approx(1.0)

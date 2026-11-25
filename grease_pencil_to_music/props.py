@@ -181,7 +181,16 @@ def _sync_clip_mutes(gp_data):
 
 
 def _mute_changed(self, _context):
+    """Muting a layer only mutes its clip: the others keep their sound, nothing is
+    rendered (with 'Un canale per livello'). Unmuting renders it again, as its strokes
+    may have changed meanwhile."""
     _sync_clip_mutes(self.id_data)
+    gp_data = self.id_data
+    per_layer = all(obj.gp2m.layer_channels for obj in bpy.data.objects
+                    if obj.type == "GREASEPENCIL" and obj.data == gp_data
+                    and obj.gp2m.is_composition)
+    if self.mute and per_layer:
+        return
     _sound_changed(self, _context)
 
 
