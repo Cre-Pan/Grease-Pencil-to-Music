@@ -65,6 +65,8 @@ midi_import.py file .mid → tratti Grease Pencil                           [bpy
 web_project.py progetto .json della web app ↔ dati della composizione       [puro]
 web_io.py      apri / salva il progetto della web app                     [bpy]
 help.py        pannelli "?" con l'aiuto in Markdown                      [bpy]
+families.py    strumenti per famiglia (registrati, poi synth) e loro icone [puro]
+icons.py       icone dell'add-on (icons/*.png) via bpy.utils.previews     [bpy]
 props.py prefs.py operators.py ui.py samples.py feedback.py                 [bpy]
 ```
 

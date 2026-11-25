@@ -355,6 +355,23 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.17
+
+Strumenti riordinati, con le loro icone
+
+- **Strumenti per famiglia, registrati e synth insieme**: *+ Strumento* e il menu per cambiare
+  strumento hanno tre colonne, *Melodici*, *Percussioni* e *Suoni tuoi*. Ogni famiglia
+  (Tastiere, Archi, Legni, Ottoni, Batteria, Metalli...) è un sottomenu con prima gli strumenti
+  registrati e poi quelli sintetizzati dello stesso tipo: non c'è più una colonna di synth da
+  una parte e i registrati nascosti in *Registrati (web app)* dall'altra. Il menu *Strumento*
+  della scheda Materiale segue lo stesso ordine. I file salvati tengono i loro strumenti.
+- **Icone degli strumenti nello stile di Blender**: 34 icone monocromatiche e piatte
+  (pianoforte, organo, violino, chitarra, arpa, clarinetto, flauto, sassofono, tromba, corno,
+  coro, tamburo, cassa, piatto, gong, triangolo, maracas...), leggibili a 16 px. Ogni strumento
+  ha la sua o quella della famiglia; si vedono accanto al nome dello strumento sotto i livelli,
+  nei menu e nella scheda Materiale. Le disegna `tools/build_icons.py`
+  (`tools/instrument_icons.py`).
+
 ## 0.0.16
 
 Più veloce e più leggero, con lo stesso suono

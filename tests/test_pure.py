@@ -1185,3 +1185,21 @@ def test_web_modifiers_round_trip():
     back = web_project.settings_to_mods(values)
     assert [m["type"] for m in back] == ["array", "fade"]
     assert back[0]["unit"] == "semi" and back[1]["dir"] == "both"
+
+
+def test_every_instrument_is_in_one_family_with_an_icon():
+    import collections
+    import pathlib
+
+    from grease_pencil_to_music import families
+    listed = [i for f in families.ALL for i in families.idents(f)]
+    assert [i for i, n in collections.Counter(listed).items() if n > 1] == []
+    assert sorted(listed) == sorted(i.ident for i in synth.INSTRUMENTS)
+    folder = pathlib.Path(families.__file__).parent / "icons"
+    for name in families.icon_names():
+        assert (folder / f"inst_{name}.png").is_file(), name
+    for ident in listed:
+        assert families.icon_name(ident) or ident in families.BUILTIN_ICONS, ident
+    # The recorded instrument comes before the synth of the same kind.
+    flutes = families.idents(families.family_of("SINE"))
+    assert flutes.index("S_FLUTE") < flutes.index("SINE")

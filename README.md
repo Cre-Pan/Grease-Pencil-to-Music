@@ -201,9 +201,14 @@ per l'ambiente comune, e si salva nei progetti della web app.
 
 ### Strumenti
 
-L'add-on ha tutti gli 89 strumenti della web app. *+ Strumento* li mostra per famiglia: i synth
-in colonna, i registrati nei sottomenu *Registrati (web app)*; nella scheda Materiale il menu
-*Strumento* ha le stesse famiglie.
+L'add-on ha tutti gli 89 strumenti della web app. *+ Strumento* (e la freccia accanto a uno
+strumento, per cambiarlo) li mostra in tre colonne: *Melodici* (tastiere, percussioni intonate,
+archi, corde pizzicate, legni, ottoni, voci e pad, synth), *Percussioni* (batteria, tamburi,
+metalli, legni e blocchi, fruscii e sfregamenti, oggetti) e *Suoni tuoi* (Campione, Libreria).
+Ogni famiglia è un sottomenu con prima i registrati e poi i sintetizzati dello stesso tipo
+(per esempio *Flauto* e *Flauto (synth)* stanno insieme). Ogni strumento ha un'icona
+monocromatica nello stile di Blender, la stessa nella lista dei livelli, nei menu e nel menu
+*Strumento* della scheda Materiale.
 
 **Registrati** (69, gli stessi file della web app, dentro lo zip dell'add-on): dal VS Chamber
 Orchestra Community Edition e dalla Versilian Community Sample Library (CC0). Tastiere
