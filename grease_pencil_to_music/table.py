@@ -131,9 +131,11 @@ def select_only(context, obj):
     view_layer.objects.active = obj
 
 
-def _parts(obj):
+def _parts(obj, with_rig=True):
+    from . import rig
     grid = board.grid_object(obj)
-    return [obj] + ([grid] if grid is not None else [])
+    handles = rig.rig_object(obj) if with_rig else None
+    return [obj] + [part for part in (grid, handles) if part is not None]
 
 
 # --- List ------------------------------------------------------------------------
@@ -244,7 +246,7 @@ class GP2M_OT_composition_toggle(bpy.types.Operator):
                     pass
         else:
             lock = not obj.hide_select
-            for part in _parts(obj):
+            for part in _parts(obj, with_rig=False):  # the handles are never selectable
                 part.hide_select = lock
             if lock:
                 obj.select_set(False)

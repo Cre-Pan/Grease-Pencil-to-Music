@@ -330,9 +330,12 @@ def dimensions(settings):
 
 
 def vertical_extent(settings):
-    """(bottom, top) of the board in local z, labels and playhead included."""
+    """(bottom, top) of the board in local z: labels, playhead and the drawn handles of
+    the rig included (see rig.handle_point)."""
+    from . import rig
     _rows, _width, top = dimensions(settings)
-    return -0.15, top + 0.25
+    _hw, hh = rig.handle_size(settings)
+    return -0.12 - 2.0 * hh, top + 0.34 + 2.0 * hh
 
 
 MIN_LOW_NOTE, MAX_LOW_NOTE, MAX_OCTAVES = 12, 96, 7
@@ -755,6 +758,8 @@ def set_playhead_offset(comp, offset_frames, sections=None):
                                       comp.gp2m.length)
     if curve.driver.expression != expression:
         curve.driver.expression = expression
+        from . import rig
+        rig.sync_head_driver(comp)
 
 
 def _set_playhead_driver(gp, scene, seconds_width, offset_frames=0):
@@ -816,6 +821,9 @@ def has_board(comp):
     if groups.get(BOARD_GROUP) is not None or groups.get(LEGACY_BOARD_GROUP) is not None:
         return False
     grid = grid_object(comp)
+    from . import rig
+    if rig.rig_object(comp) is None:
+        return False
     return (grid is not None and grid.data is not None
             and grid.data.layer_groups.get(BOARD_GROUP) is not None
             and groups.get(HEAD_GROUP) is not None)
@@ -924,6 +932,9 @@ def rebuild(comp, scene=None):
     from . import engine
     offset = engine.state(comp).get("offset_frames", 0)
     _set_playhead_driver(gp, scene, s.seconds_width, offset)
+
+    from . import rig
+    rig.rebuild(comp, scene)
 
     layer = gp.layers.get(active_name) if active_name else None
     if layer is None or is_board_layer(layer):

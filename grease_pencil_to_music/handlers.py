@@ -278,8 +278,19 @@ def _show_popups():
         pass  # the warning is also shown in the N panel
 
 
+_last_mode = [None]
+
+
 @persistent
 def on_depsgraph_update(_scene, depsgraph):
+    mode = getattr(bpy.context, "mode", None)
+    if mode != _last_mode[0]:  # the drawn handles show only in Object Mode
+        _last_mode[0] = mode
+        try:
+            from . import rig
+            rig.sync_visibility()
+        except Exception as error:
+            print(f"[Doodle Music] rig visibility failed: {error!r}")
     comps = None
     for update in depsgraph.updates:
         original = getattr(update.id, "original", update.id)

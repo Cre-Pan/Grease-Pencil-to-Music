@@ -9,10 +9,10 @@ sound. Inspired by the drawn sound of Norman McLaren and Daphne Oram.
 import bpy
 
 from . import (draw_sound, handlers, help, icons, keyboard, midi_import, midi_input,  # noqa: F401
-               operators, prefs, props, samples, table, timeline, ui, web_io)
+               operators, prefs, props, rig, samples, table, timeline, ui, web_io)
 
 _classes = (props.classes + prefs.classes + help.classes + operators.classes + midi_import.classes
-            + keyboard.classes + timeline.classes + table.classes + ui.classes
+            + keyboard.classes + timeline.classes + rig.classes + table.classes + ui.classes
             + web_io.classes)
 
 

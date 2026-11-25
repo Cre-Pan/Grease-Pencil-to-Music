@@ -108,7 +108,8 @@ def test_add_composition_has_its_grid_apart(comp):
     assert s.is_composition and comp.name.startswith("Composizione Musicale")
     # The grid is its own Grease Pencil object, a child of the composition.
     grid = board.grid_object(comp)
-    assert list(comp.children) == [grid] and grid.name == comp.name + board.GRID_SUFFIX
+    handles = sub("rig").rig_object(comp)
+    assert set(comp.children) == {grid, handles} and grid.name == comp.name + board.GRID_SUFFIX
     assert board.is_grid(grid) and not grid.gp2m.is_composition
     assert all(grid.lock_location) and all(grid.lock_scale)
     assert comp.show_in_front and not grid.show_in_front
@@ -2234,3 +2235,69 @@ def test_octaves_below_and_above_keep_the_drawing(comp):
     assert np.allclose(world(), before, atol=1e-4)
     s.low_note = 12
     assert board.octave_steps(s, "BOTTOM", 1) == 0  # no room below C0
+
+
+# --- Drawn rig (Object Mode handles) ------------------------------------------------------
+
+def test_rig_has_drawn_handles_that_never_render(comp):
+    rig = sub("rig")
+    handles = rig.rig_object(comp)
+    assert handles is not None and handles.name == comp.name + rig.RIG_SUFFIX
+    assert handles.hide_render and handles.hide_select and all(handles.lock_location)
+    names = {layer.name for layer in handles.data.layers}
+    assert names == set(rig.HANDLE_LAYERS.values())
+    for layer in handles.data.layers:
+        assert len(layer.frames[0].drawing.strokes) >= 1
+    # The playhead handle follows the playhead (same driver).
+    curve = handles.data.animation_data.drivers.find(
+        f'layers["{rig.HANDLE_LAYERS[rig.HEAD]}"].translation', index=0)
+    head = comp.data.animation_data.drivers.find(
+        f'layers["{sub("board").HEAD_LAYER}"].translation', index=0)
+    assert curve.driver.expression == head.driver.expression
+    assert "bl_rna" in sub("rig").GP2M_GGT_rig.__dict__
+    assert "bl_rna" in sub("rig").GP2M_GT_handle.__dict__
+
+
+def test_rig_handles_change_length_playhead_and_octaves(comp):
+    rig = sub("rig")
+    s = comp.gp2m
+    s.bpm, s.show_beats = 120.0, True
+    assert rig.snap_length(s, 6.2) == 6.0  # half-second beats
+    assert rig.snap_length(s, 6.2, free=True) == 6.2
+    assert rig.snap_length(s, 0.1) == 1.0
+    assert rig.apply(comp, rig.LENGTH, 6.0) and s.length == 6.0
+    assert not rig.apply(comp, rig.LENGTH, 6.0)
+    scene = bpy.context.scene
+    fps = scene.render.fps / scene.render.fps_base
+    frame = rig.frame_at(scene, comp, 2.0 * s.seconds_width)
+    assert frame == round(scene.frame_start + sub("engine").state(comp).get(
+        "offset_frames", 0) + 2.0 * fps)
+    s.low_note, s.octaves = 48, 2
+    assert rig.apply(comp, rig.OCT_BOTTOM, 1) and (s.low_note, s.octaves) == (36, 3)
+    assert rig.apply(comp, rig.OCT_TOP, 1) and s.octaves == 4
+    # The handles sit outside the board: right edge, above the keys, below the keys.
+    rows, width, top = sub("board").dimensions(s)
+    assert rig.handle_point(comp, rig.LENGTH)[0] > width
+    assert rig.handle_point(comp, rig.OCT_TOP)[1] > top
+    assert rig.handle_point(comp, rig.OCT_BOTTOM)[1] < 0
+
+
+def test_rig_shows_only_in_object_mode_and_goes_with_its_composition(comp):
+    rig = sub("rig")
+    handles = rig.rig_object(comp)
+    rig.sync_visibility()
+    assert not handles.hide_viewport
+    bpy.context.view_layer.objects.active = comp
+    bpy.ops.object.mode_set(mode="PAINT_GREASE_PENCIL")
+    try:
+        rig.sync_visibility()
+        assert handles.hide_viewport
+    finally:
+        bpy.ops.object.mode_set(mode="OBJECT")
+    rig.sync_visibility()
+    assert not handles.hide_viewport
+    other = _fresh(None)
+    name = rig.rig_object(other).name
+    bpy.data.objects.remove(other, do_unlink=True)
+    sub("engine").cleanup_orphans()
+    assert bpy.data.objects.get(name) is None

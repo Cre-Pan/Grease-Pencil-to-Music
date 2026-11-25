@@ -425,6 +425,8 @@ def cleanup_orphans():
     """Remove what deleted compositions left behind: their sound strips and
     their (now unparented) board, labels and playhead of version 0.0.1."""
     from .board import LEGACY_ROLE as ROLE
+    from . import rig
+    rig.remove_orphans()
     for scene in bpy.data.scenes:
         editor = scene.sequence_editor
         if editor is None:
@@ -740,8 +742,13 @@ def _active_composition(scene):
 
 
 def _channel_count(scene, obj):
-    """How many channels the composition uses (one per layer, or its mix)."""
-    return max(1, len(layer_strips(scene, obj)))
+    """How many channels the composition uses or keeps for itself: one per layer with
+    'Un canale per livello' (also before its layers sound), otherwise its mix."""
+    strips = len(layer_strips(scene, obj))
+    if obj.gp2m.layer_channels:
+        from . import board
+        strips = max(strips, len(board.user_layers(obj.data)))
+    return max(1, strips)
 
 
 def resolve_channels(scene):
