@@ -7,8 +7,10 @@ Play in Blender plays the drawing.
 """
 
 import os
+import queue
 import re
 import tempfile
+import threading
 import time
 import traceback
 import wave
@@ -18,7 +20,7 @@ import aud
 import bpy
 import numpy as np
 
-from . import board, interpret, midi, mixer, music, prefs, props, reader, synth
+from . import board, effects, interpret, midi, mixer, music, prefs, props, reader, synth
 
 STRIP_PREFIX = "GP2M · "
 
@@ -131,24 +133,31 @@ def _layer_inputs(obj, reads):
     return layers
 
 
-def render_composition(obj, scene, stems=False):
-    """Render the loop drawn at the scene start, or every keyframe section.
+def plan_composition(obj, scene, stems=False):
+    """Read everything a render needs from Blender: ``(compute, reads)``.
 
-    ``stems``: also render every layer on its own (``result.stems``)."""
+    ``compute()`` returns the :class:`mixer.RenderResult` and touches no Blender
+    data, so it may run in another thread (see :func:`compute`)."""
     s = obj.gp2m
     spec, mapping, rate = board_spec(s), prefs.get_mapping(), int(s.sample_rate)
+    fx = master_fx(s)
+    effects.room_ir(fx.room, rate)  # a recorded room is read here, in Blender's thread
+    loop, master_volume, length = s.loop, s.master_volume, s.length
     frames = section_frames(obj, scene) if s.use_sections else [scene.frame_start]
     # Following the scene, the last section repeats its loop until the scene End.
     until = scene_seconds(scene) if s.use_sections and follows_scene(obj, scene) else None
     if len(frames) == 1 and until is None:
         reads = reader.read_composition(obj, frames[0], use_modifiers=s.use_modifiers)
-        result = mixer.render(_layer_inputs(obj, reads), spec, mapping, rate, loop=s.loop,
-                              master_volume=s.master_volume, master_fx=master_fx(s),
-                              stems=stems)
-        result.duration = s.length
-        return result, reads
+        inputs = _layer_inputs(obj, reads)
+
+        def compute_one():
+            result = mixer.render(inputs, spec, mapping, rate, loop=loop,
+                                  master_volume=master_volume, master_fx=fx, stems=stems)
+            result.duration = length
+            return result
+        return compute_one, reads
     times = [(frame - scene.frame_start) / _fps(scene) for frame in frames]
-    parts, first_reads = [], None
+    plans, first_reads = [], None
     for i, frame in enumerate(frames):
         reads = reader.read_composition(obj, frame, use_modifiers=s.use_modifiers)
         first_reads = reads if first_reads is None else first_reads
@@ -157,12 +166,33 @@ def render_composition(obj, scene, stems=False):
         elif until is not None and until > times[i]:
             end = until
         else:
-            end = times[i] + s.length
-        parts.append((times[i], end, mixer.render(
-            _layer_inputs(obj, reads), spec, mapping, rate, loop=False,
-            master_volume=s.master_volume, stems=stems)))
-    return mixer.sequence(parts, s.length, rate, loop=s.loop,
-                          master_fx=master_fx(s), stems=stems), first_reads
+            end = times[i] + length
+        plans.append((times[i], end, _layer_inputs(obj, reads)))
+
+    def compute_sections():
+        parts = [(start, end, mixer.render(inputs, spec, mapping, rate, loop=False,
+                                           master_volume=master_volume, stems=stems,
+                                           room=fx.room))
+                 for start, end, inputs in plans]
+        return mixer.sequence(parts, length, rate, loop=loop, master_fx=fx, stems=stems)
+    return compute_sections, first_reads
+
+
+_compute_lock = threading.Lock()  # the renderer's caches are not shared between threads
+
+
+def compute(fn):
+    """Run a ``compute`` of :func:`plan_composition` (any thread)."""
+    with _compute_lock:
+        return fn()
+
+
+def render_composition(obj, scene, stems=False):
+    """Render the loop drawn at the scene start, or every keyframe section.
+
+    ``stems``: also render every layer on its own (``result.stems``)."""
+    fn, reads = plan_composition(obj, scene, stems)
+    return compute(fn), reads
 
 
 # --- Scene In / Out ---------------------------------------------------------------
@@ -254,12 +284,23 @@ def _layer_signatures(obj, layers):
     return {item.name: repr(item) for item in _layer_inputs(obj, stubs)}
 
 
-def render_active_layer(obj, scene):
-    """Render only the active layer and mix it with the sound the other layers had.
+def _keep_info(obj, scene):
+    """What :func:`render_active_layer` compares against next time (read now, with the
+    strokes the render reads)."""
+    if obj.gp2m.use_sections:
+        return None
+    return {"context": _context_signature(obj, scene),
+            "signatures": _layer_signatures(obj, reader.audible_layers(obj.data)),
+            "fingerprints": reader.layer_fingerprints(obj, scene.frame_start,
+                                                      obj.gp2m.use_modifiers)}
 
-    Returns ``(result, reads)``, or ``(None, None)`` when everything must be
-    rendered again: keyframe sections, no sound kept yet, a layer added, removed,
-    muted, or with other settings, or a change of the whole composition."""
+
+def plan_active_layer(obj, scene):
+    """Like :func:`plan_composition` for the active layer alone, mixed with the sound
+    the other layers had: ``(compute, reads)``, or ``(None, None)`` when everything
+    must be rendered again: keyframe sections, no sound kept yet, a layer added,
+    removed, muted, or with other settings, or a change of the whole composition.
+    ``compute()`` returns None if the active layer could not be rendered alone."""
     s = obj.gp2m
     st = state(obj)
     kept = st.get("layers")
@@ -270,7 +311,8 @@ def render_active_layer(obj, scene):
     names = [layer.name for layer in layers]
     if active.name not in names or names != list(kept):
         return None, None
-    if st.get("context") != _context_signature(obj, scene):
+    context = _context_signature(obj, scene)
+    if st.get("context") != context:
         return None, None
     signatures = _layer_signatures(obj, layers)
     previous = st.get("signatures") or {}
@@ -287,27 +329,46 @@ def render_active_layer(obj, scene):
                                     only={active.name})
     spec, mapping, rate = board_spec(s), prefs.get_mapping(), int(s.sample_rate)
     fx = master_fx(s)
-    fresh = mixer.render_layers(_layer_inputs(obj, reads), spec, mapping, rate, s.loop,
-                                s.master_volume, fx.room)
-    if len(fresh) != 1:
-        return None, None
-    sounds = [fresh[0] if name == active.name else kept[name] for name in names]
-    result = mixer.mix_layers(sounds, spec, mapping, rate, s.loop, fx, stems=True)
-    result.duration = s.length
-    return result, reads
+    effects.room_ir(fx.room, rate)
+    inputs = _layer_inputs(obj, reads)
+    loop, master_volume, length = s.loop, s.master_volume, s.length
+    others = dict(kept)
+    active_name = active.name
+
+    def compute_active():
+        fresh = mixer.render_layers(inputs, spec, mapping, rate, loop, master_volume, fx.room)
+        if len(fresh) != 1:
+            return None
+        sounds = [fresh[0] if name == active_name else others[name] for name in names]
+        result = mixer.mix_layers(sounds, spec, mapping, rate, loop, fx, stems=True)
+        result.duration = length
+        return result
+    # What _keep_info() would read again after the render.
+    compute_active.keep = {"context": context, "signatures": signatures,
+                           "fingerprints": fingerprints}
+    return compute_active, reads
 
 
-def _keep_layers(obj, scene, result):
+def render_active_layer(obj, scene):
+    """Render only the active layer (see :func:`plan_active_layer`): ``(result, reads)``
+    or ``(None, None)``."""
+    fn, reads = plan_active_layer(obj, scene)
+    result = compute(fn) if fn is not None else None
+    return (result, reads) if result is not None else (None, None)
+
+
+def _keep_layers(obj, scene, result, info=None):
     """Remember each layer's sound, for :func:`render_active_layer`."""
     st = state(obj)
     if obj.gp2m.use_sections or not result.layers:
         st["layers"] = None
         return
+    info = info if info is not None else _keep_info(obj, scene)
+    if info is None:
+        st["layers"] = None
+        return
     st["layers"] = {sound.name: sound for sound in result.layers}
-    st["context"] = _context_signature(obj, scene)
-    st["signatures"] = _layer_signatures(obj, reader.audible_layers(obj.data))
-    st["fingerprints"] = reader.layer_fingerprints(obj, scene.frame_start,
-                                                   obj.gp2m.use_modifiers)
+    st.update(info)
 
 
 def duration(obj):
@@ -1444,33 +1505,88 @@ def timeline_data(result, settings):
             "length": result.duration or settings.length}
 
 
-def regenerate(obj, scene=None, force=False, only_active=False):
-    """Render the composition and update its sound strip(s).
+class Job:
+    """One render: planned in Blender's thread (:func:`prepare`), computed anywhere
+    (:func:`run`), applied to the Sequencer in Blender's thread (:func:`apply`)."""
 
-    Writes nothing when the sound did not change, so it is safe to call from
-    depsgraph handlers without creating update loops. ``only_active``: render
-    only the active layer when the others can keep their sound (with
-    'Un canale per livello'; otherwise, or when not possible, everything).
-    """
+    def __init__(self, obj, scene, force, per_layer):
+        self.name, self.scene_name = obj.name, scene.name
+        self.force, self.per_layer = force, per_layer
+        self.fn = self.reads = self.keep = self.result = self.error = None
+        self.partial = False
+        self.began = time.perf_counter()
+        self.generation = 0
+        self.epoch = _epoch[0]
+        self.done = False
+
+    def current(self):
+        """False when a newer render of the same composition (or a new file) came."""
+        return self.epoch == _epoch[0] and _generation.get(self.name) == self.generation
+
+
+_generation = {}  # composition name -> number of its latest render (older ones are dropped)
+_epoch = [0]  # a new file: renders of the previous one are dropped
+
+
+def invalidate(name):
+    """The composition changed again: a render of it still running is dropped."""
+    if any(job.name == name for job in _pending):
+        _generation[name] = _generation.get(name, 0) + 1
+
+
+def prepare(obj, scene=None, force=False, only_active=False):
+    """Read what the render needs (Blender's thread). None when nothing must be
+    rendered (a muted composition keeps its muted clips)."""
     scene = scene or scene_of(obj)
     s = obj.gp2m
     if not s.is_composition:
         return None
+    # A render still running for this composition is old now.
+    generation = _generation[obj.name] = _generation.get(obj.name, 0) + 1
     props.ensure_layer_settings(obj.data)
     if (s.mute or muted_by_group(scene, obj)) and not force and composition_strips(scene, obj):
         arrange(scene)  # muted: its clips stay, muted, and nothing is rendered
         state(obj)["muted_stale"] = True
         return None
     state(obj).pop("muted_stale", None)
-    began = time.perf_counter()
     per_layer = s.layer_channels
-    result = reads = None
-    partial = False
+    job = Job(obj, scene, force, per_layer)
+    job.generation = generation
     if only_active and per_layer and not force:
-        result, reads = render_active_layer(obj, scene)
-        partial = result is not None
-    if result is None:
-        result, reads = render_composition(obj, scene, stems=per_layer)
+        job.fn, job.reads = plan_active_layer(obj, scene)
+        job.partial = job.fn is not None
+    if job.fn is None:
+        job.fn, job.reads = plan_composition(obj, scene, stems=per_layer)
+    if per_layer:
+        job.keep = getattr(job.fn, "keep", None) or _keep_info(obj, scene)
+    return job
+
+
+def run(job):
+    """Compute the sound of ``job`` (any thread: no Blender data is touched)."""
+    try:
+        job.result = compute(job.fn)
+    except Exception as error:  # noqa: BLE001 - raised again by apply()
+        job.error = (error, traceback.format_exc())
+    job.done = True
+    return job
+
+
+def apply(job):
+    """Write the sound of a computed ``job`` and update its strips (Blender's thread)."""
+    obj = bpy.data.objects.get(job.name)
+    scene = bpy.data.scenes.get(job.scene_name)
+    if obj is None or scene is None or not obj.gp2m.is_composition:
+        return None
+    if job.error is not None:
+        print(job.error[1], end="")
+        raise job.error[0]
+    result = job.result
+    if result is None:  # the active layer could not be rendered alone: all of them
+        full = prepare(obj, scene, job.force, only_active=False)
+        return apply(run(full)) if full is not None else None
+    s = obj.gp2m
+    per_layer = job.per_layer
     st = state(obj)
     key = (result.key, per_layer)
     if per_layer:
@@ -1487,7 +1603,7 @@ def regenerate(obj, scene=None, force=False, only_active=False):
         files_ok = (_strip_file_ok(strip) and strip.get(LAYER_KEY) is None
                     and _same_file(strip, st.get("path"))
                     and len(composition_strips(scene, obj)) == 1)
-    if force or st.get("key") != key or not files_ok:
+    if job.force or st.get("key") != key or not files_ok:
         if per_layer:
             _place_layer_strips(scene, obj, result)
             _forget_file(st.pop("path", None))
@@ -1512,23 +1628,37 @@ def regenerate(obj, scene=None, force=False, only_active=False):
         from . import timeline
         timeline.tag_redraw()
     if per_layer:
-        _keep_layers(obj, scene, result)
+        _keep_layers(obj, scene, result, job.keep)
     else:
         st["layers"] = None
     arrange(scene)
     st["stats"] = {
         "notes": len(result.notes),
         "voices": result.voice_count,
-        "seconds": time.perf_counter() - began,
+        "seconds": time.perf_counter() - job.began,
         "multi_keyframes": [] if s.use_sections else [
             layer.name for layer in reader.audible_layers(obj.data) if len(layer.frames) > 1],
         "sections": len(result.sections),
         "skipped": result.errors,
         "layers": len(result.stems),
-        "only_active": partial,
+        "only_active": job.partial,
     }
     st["error"] = None
     return result
+
+
+def regenerate(obj, scene=None, force=False, only_active=False):
+    """Render the composition and update its sound strip(s).
+
+    Writes nothing when the sound did not change, so it is safe to call from
+    depsgraph handlers without creating update loops. ``only_active``: render
+    only the active layer when the others can keep their sound (with
+    'Un canale per livello'; otherwise, or when not possible, everything).
+    """
+    job = prepare(obj, scene, force, only_active)
+    if job is None:
+        return None
+    return apply(run(job))
 
 
 def regenerate_safe(obj, scene=None, force=False, only_active=False):
@@ -1538,3 +1668,94 @@ def regenerate_safe(obj, scene=None, force=False, only_active=False):
         traceback.print_exc()
         state(obj)["error"] = f"{type(error).__name__}: {error}"
         return None
+
+
+# --- Rendering in the background ------------------------------------------------------
+#
+# Automatic updates compute the sound in a worker thread: Blender's thread only
+# reads the strokes before and writes the files after, so drawing, editing and
+# sculpting are not held up while the mix and the master bus are computed.
+# The sound is exactly the one regenerate() would make.
+
+_queue = queue.Queue()
+_pending = []  # jobs handed to the worker; _apply_tick applies them when computed
+_worker = [None]
+APPLY_POLL = 0.02  # seconds between checks for a finished render
+
+
+def _work():
+    while True:
+        job = _queue.get()
+        if job is None:  # stop_background()
+            return
+        if job.current():
+            run(job)
+        else:
+            job.done = True  # a newer render of the same composition is on its way
+
+
+def _apply_tick():
+    from .handlers import brush_running, transform_running
+    done = [job for job in _pending if job.done]
+    if done and (transform_running() or brush_running()):
+        return 0.1  # strips are not touched while G or a brush stroke is going on
+    for job in done:
+        _pending.remove(job)
+        if not job.current():
+            continue
+        try:
+            apply(job)
+        except Exception as error:
+            obj = bpy.data.objects.get(job.name)
+            if obj is not None:
+                state(obj)["error"] = f"{type(error).__name__}: {error}"
+    return APPLY_POLL if _pending else None
+
+
+def regenerate_background(obj, only_active=False):
+    """Like :func:`regenerate_safe`, with the sound computed in the worker thread."""
+    try:
+        job = prepare(obj, None, False, only_active)
+    except Exception as error:
+        traceback.print_exc()
+        state(obj)["error"] = f"{type(error).__name__}: {error}"
+        return
+    if job is None:
+        return
+    if _worker[0] is None or not _worker[0].is_alive():
+        _worker[0] = threading.Thread(target=_work, name="Doodle Music render", daemon=True)
+        _worker[0].start()
+    _pending.append(job)
+    _queue.put(job)
+    if not bpy.app.timers.is_registered(_apply_tick):
+        bpy.app.timers.register(_apply_tick, first_interval=APPLY_POLL)
+
+
+def wait_background(timeout=30.0):
+    """Wait for the renders in progress and apply them (tests, saving, exporting)."""
+    end = time.monotonic() + timeout
+    while _pending and time.monotonic() < end:
+        if all(job.done for job in _pending):
+            from .handlers import brush_running, transform_running
+            if transform_running() or brush_running():
+                return False
+            _apply_tick()
+        else:
+            time.sleep(0.005)
+    return not _pending
+
+
+def new_file():
+    """A file was loaded: renders of the previous one are dropped."""
+    _epoch[0] += 1
+    _pending.clear()
+    _generation.clear()
+
+
+def stop_background():
+    if bpy.app.timers.is_registered(_apply_tick):
+        bpy.app.timers.unregister(_apply_tick)
+    _pending.clear()
+    if _worker[0] is not None and _worker[0].is_alive():
+        _queue.put(None)
+    _worker[0] = None

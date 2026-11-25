@@ -42,7 +42,9 @@ def finish_stems(stems, sample_rate, settings, loop, want_stems=False, keys=None
 
     The master bus (or the peak guard) is computed on their sum and the same
     processing reaches every stem, so the processed stems add up to the mix.
-    ``keys`` (one per stem, or None) cache the linear part of each stem."""
+    ``keys`` (one per stem, or None) cache the linear part of each stem: a key, or
+    ``(key, scale)`` when the stem is a sound that only its volume ``scale`` tells
+    apart (the linear part of the same sound at another volume is reused, scaled)."""
     length = max((len(stem) for stem in stems), default=0)
     stems = [_pad(stem, length) for stem in stems]
     if settings is not None and settings.enabled:
@@ -53,14 +55,24 @@ def finish_stems(stems, sample_rate, settings, loop, want_stems=False, keys=None
             return effects.master_dynamics([linear], sample_rate, loop)[0], None
         linears = []
         for index, stem in enumerate(stems):
-            key = None if keys is None or keys[index] is None else (
-                keys[index], length, settings.ambience, settings.room, loop, sample_rate)
-            linear = _linear_cache.get(key) if key is not None else None
+            entry = None if keys is None else keys[index]
+            base, scale = entry if isinstance(entry, tuple) else (entry, None)
+            key = None if base is None else (
+                base, length, settings.ambience, settings.room, loop, sample_rate)
+            cached = _linear_cache.get(key) if key is not None else None
+            linear = None
+            if cached is not None:
+                linear, cached_scale = cached
+                if scale is not None and scale != cached_scale:
+                    # Linear: the same sound louder or softer has its room louder
+                    # or softer (volume, opacity, master volume: no room again).
+                    linear = (linear * (scale / cached_scale) if cached_scale
+                              else None)
             if linear is None:
                 linear = effects.master_linear(stem, sample_rate, settings.ambience, loop,
                                                settings.room)
-                if key is not None:
-                    _linear_cache.put(key, linear)
+                if key is not None and (cached is None or scale):
+                    _linear_cache.put(key, (linear, scale))
             linears.append(linear)
         return effects.master_dynamics(linears, sample_rate, loop, want_stems=True)
     total = _total(stems, length)
@@ -146,6 +158,8 @@ class LayerSound:
     curves: list = field(default_factory=list)
     voices: int = 0
     errors: int = 0
+    base_key: str = ""  # like key, without the volume: the same sound at any volume
+    scale: float = 1.0  # the volume of this sound (layer and master volume)
 
 
 def _nbytes(value):
@@ -470,7 +484,8 @@ def render_layers(layers, spec, mapping, sample_rate=44100, loop=True, master_vo
             if errors.count == errors_before:  # incomplete layers are rendered again
                 _layer_cache.put(layer_key, buffer)
 
-        scaled = buffer * np.float32(layer.gain * master_volume)
+        scale = np.float32(layer.gain * master_volume)
+        scaled = buffer * scale
         if loop:
             # Fold echo/reverb/release tails back onto the start of the loop.
             audio = np.zeros((loop_n, 2), dtype=np.float32)
@@ -482,8 +497,10 @@ def render_layers(layers, spec, mapping, sample_rate=44100, loop=True, master_vo
         sound_key = hashlib.blake2b(
             repr((layer_key, round(layer.gain, 4), round(master_volume, 4), loop,
                   layer.name)).encode(), digest_size=16).hexdigest()
+        base_key = hashlib.blake2b(repr((layer_key, loop, layer.name)).encode(),
+                                   digest_size=16).hexdigest()
         sounds.append(LayerSound(layer.name, audio, sound_key, notes, curves, voice_count,
-                                 errors.count - errors_before))
+                                 errors.count - errors_before, base_key, float(scale)))
     return sounds
 
 
@@ -504,7 +521,8 @@ def mix_layers(sounds, spec, mapping, sample_rate=44100, loop=True, master_fx=No
     else:
         buffers = [sound.audio for sound in sounds] or [np.zeros((loop_n, 2), np.float32)]
         buffers = [_pad(buffer, loop_n) for buffer in buffers]
-        keys = [sound.key for sound in sounds] if sounds else None
+        keys = ([(sound.base_key or sound.key, sound.scale if sound.base_key else None)
+                 for sound in sounds] if sounds else None)
         mix, outs = finish_stems(buffers, sample_rate, master_fx, loop, stems, keys)
         mix = mix.astype(np.float32, copy=False)
         if not any(sound.errors for sound in sounds):  # incomplete mixes are rendered again
@@ -522,12 +540,14 @@ def mix_layers(sounds, spec, mapping, sample_rate=44100, loop=True, master_fx=No
 
 
 def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.8,
-           master_fx=None, stems=False):
+           master_fx=None, stems=False, room=None):
     """Render a list of :class:`LayerInput` into a :class:`RenderResult`.
 
     ``master_fx``: :class:`MasterFx` of the finished mix, or None (peak guard only).
-    ``stems``: also return each layer after the master bus (``result.stems``)."""
-    room = master_fx.room if master_fx is not None else "HALL"
+    ``stems``: also return each layer after the master bus (``result.stems``).
+    ``room``: the room of the layer reverbs (default: the master bus's, or the hall)."""
+    if room is None:
+        room = master_fx.room if master_fx is not None else "HALL"
     sounds = render_layers(layers, spec, mapping, sample_rate, loop, master_volume, room)
     return mix_layers(sounds, spec, mapping, sample_rate, loop, master_fx, stems)
 

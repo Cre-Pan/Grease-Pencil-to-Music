@@ -1228,3 +1228,97 @@ def test_every_instrument_is_in_one_family_with_an_icon():
     # The recorded instrument comes before the synth of the same kind.
     flutes = families.idents(families.family_of("SINE"))
     assert flutes.index("S_FLUTE") < flutes.index("SINE")
+
+
+# --- 0.0.28: faster master bus, same sound ---------------------------------------------
+
+def _master_linear_reference(buffer, rate, ambience, room="HALL"):
+    """The linear part of the master bus as it was computed before 0.0.28 (room
+    convolution folded onto the loop, then the low cut)."""
+    out = np.asarray(buffer, dtype=np.float64)
+    n = len(out)
+    if ambience > 0:
+        dry = out
+        wet = effects.reverb(out.astype(np.float32), rate, 1.0, effects.MASTER_ROOM_SIZE,
+                             room=room).astype(np.float64)
+        wet[:n] -= dry
+        wet *= 0.35 * ambience
+        out = dry + effects._fold(wet, n)
+    return effects.low_cut(out, rate)
+
+
+@pytest.mark.parametrize("room", ["HALL", "ROOM"])
+@pytest.mark.parametrize("ambience", [0.0, 0.25, 1.0])
+def test_master_linear_in_one_product_is_the_same_filter(ambience, room):
+    n = SR * 4  # a fast FFT length: the one-product path
+    assert effects._fast_fft_length(n)
+    x = np.random.default_rng(3).normal(0.0, 0.2, (n, 2)).astype(np.float32)
+    fast = effects.master_linear(x, SR, ambience, True, room)
+    reference = _master_linear_reference(x, SR, ambience, room)
+    assert fast.shape == reference.shape
+    # Far below one step of a 16-bit file (3e-5).
+    assert np.max(np.abs(fast - reference)) < 1e-6
+
+
+def test_master_linear_odd_lengths_and_short_loops_keep_the_old_path():
+    rng = np.random.default_rng(4)
+    for n in (SR * 4 + 1, SR // 2):  # large prime factors; shorter than the room
+        x = rng.normal(0.0, 0.2, (n, 2)).astype(np.float32)
+        out = effects.master_linear(x, SR, 0.25, True)
+        assert np.array_equal(out, _master_linear_reference(x, SR, 0.25))
+
+
+def test_block_gain_interpolation_is_np_interp():
+    rng = np.random.default_rng(5)
+    for count, n in ((1, 10), (2, 64), (2, 100), (37, 37 * 64), (37, 37 * 64 - 5), (5, 1000)):
+        gain = rng.uniform(0.2, 1.0, count)
+        centers = (np.arange(count) + 0.5) * effects.MASTER_BLOCK
+        expected = np.interp(np.arange(n), centers, gain)
+        assert np.allclose(effects._block_gain_to_samples(gain, n), expected, rtol=0,
+                           atol=1e-15)
+
+
+def test_volume_changes_reuse_the_room_of_the_master_bus(monkeypatch):
+    """Layer volume and master volume scale the cached room of a layer instead of
+    computing it again; the sound is the one of a fresh render."""
+    spec = free_spec(length=2.0)
+    mapping = interpret.Mapping()
+    fx = mixer.MasterFx(ambience=0.4)
+
+    def layers(gain):
+        return [mixer.LayerInput("A", [stroke((0.1, 0.9), (12, 12))], gain=gain),
+                mixer.LayerInput("B", [stroke((0.5, 1.5), (16, 19), instrument="SAW")])]
+    mixer.clear_cache()
+    mixer.render(layers(1.0), spec, mapping, SR, master_volume=0.8, master_fx=fx, stems=True)
+    calls = []
+    original = effects.master_linear
+    monkeypatch.setattr(effects, "master_linear",
+                        lambda *a, **k: calls.append(1) or original(*a, **k))
+    for gain, volume in ((0.5, 0.8), (0.5, 0.6), (0.9, 0.3)):
+        cached = mixer.render(layers(gain), spec, mapping, SR, master_volume=volume,
+                              master_fx=fx, stems=True)
+        assert not calls  # no room computed again
+        mixer.clear_cache()
+        fresh = mixer.render(layers(gain), spec, mapping, SR, master_volume=volume,
+                             master_fx=fx, stems=True)
+        calls.clear()
+        assert np.max(np.abs(cached.audio - fresh.audio)) < 1e-5
+        for (_n1, a), (_n2, b) in zip(cached.stems, fresh.stems):
+            assert np.max(np.abs(a - b)) < 1e-5
+        mixer.clear_cache()
+        mixer.render(layers(1.0), spec, mapping, SR, master_volume=0.8, master_fx=fx,
+                     stems=True)
+        calls.clear()
+
+
+def test_sections_use_the_room_of_the_composition():
+    """Keyframe sections render the layer reverbs in the composition's room too."""
+    spec = free_spec(length=1.0)
+    mapping = interpret.Mapping()
+    layer = mixer.LayerInput("A", [stroke((0.1, 0.5), (12, 12))],
+                             fx=mixer.LayerFx(reverb_mix=0.6))
+    hall = mixer.render([layer], spec, mapping, SR, loop=False, room="HALL")
+    church = mixer.render([layer], spec, mapping, SR, loop=False, room="CHURCH")
+    count = min(len(hall.audio), len(church.audio))
+    assert len(hall.audio) != len(church.audio) or not np.allclose(
+        hall.audio[:count], church.audio[:count])

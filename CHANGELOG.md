@@ -355,6 +355,34 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.28
+
+Meno lag mentre disegni, modifichi e scolpisci (il suono è identico)
+
+- **Il suono si calcola in sottofondo.** L'aggiornamento automatico calcola mix e bus master
+  in un thread a parte: Blender legge i tratti prima (circa 2 ms) e scrive i file dopo
+  (circa 3 ms), e nel frattempo il disegno, Edit e Sculpt non si fermano. Prima ogni
+  aggiornamento bloccava Blender per 75–150 ms (3 livelli, loop di 8 s). Se nel frattempo
+  cambi ancora qualcosa, il calcolo vecchio si butta e vale quello nuovo. Si può spegnere in
+  *Preferenze → Avanzate → Calcola il suono in sottofondo*.
+- **Niente aggiornamenti con la penna giù.** Mentre tieni premuto in Draw, Sculpt, Vertex o
+  Weight Paint (anche fermo), il suono aspetta che alzi la penna, come già succedeva con G, R, S.
+- **Bus master 3 volte più veloce.** La sala comune e il taglio dei bassi sono un solo prodotto
+  nel dominio della frequenza (2 FFT invece di 4) quando la durata del loop in campioni ha
+  fattori piccoli, cioè quasi sempre (8 s, 4 battute a 90 o 100 BPM...): da 84 a 25 ms per
+  livello. La differenza con prima è sotto 1e-7, cento volte meno di un passo di un file a 16 bit.
+- **Opacità del livello, volume master e muto non ricalcolano il riverbero comune.** La sala
+  del bus master di ogni livello resta in memoria e si scala col volume: cambiare l'opacità
+  passa da 175 a 95 ms, il volume master da 330 a 90 ms (e in sottofondo). Volume e pan della
+  clip, come prima, non ricalcolano nulla.
+- Disegnare o scolpire non ricontrolla più le impostazioni dei livelli a ogni movimento: solo
+  quando aggiungi, rinomini, sposti o elimini livelli e gruppi.
+- Corretto: con le *Sezioni da keyframe* gli effetti di riverbero dei livelli usavano sempre la
+  Sala, anche con un altro ambiente scelto (Stanza, Auditorium, Chiesa).
+- Corretto: se l'ambiente registrato non si legge, non viene riletto a ogni aggiornamento.
+- `tests/bench_lag.py` misura cosa costa ogni aggiornamento (depsgraph, rigenerazione, volume,
+  pan, opacità, muto).
+
 ## 0.0.27
 
 Gruppi nel Sequencer, come i gruppi di Blender
