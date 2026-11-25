@@ -164,6 +164,44 @@ def layer_silent(gp_data, layer_name):
     return True
 
 
+def _switch_on(prop, amount, value):
+    """Update of a checkbox that turns an effect on: an effect switched on with its
+    amount at zero would stay silent, so it starts from ``value``."""
+    def update(self, context):
+        if getattr(self, prop) and getattr(self, amount) <= (1 if amount == "canon_voices" else 0):
+            setattr(self, amount, value)  # its own update marks the sound dirty
+        else:
+            _sound_changed(self, context)
+    return update
+
+
+PITCH_UNITS = (
+    ("SCALE", "Gradi della scala", "Si muove sulle note della scala della composizione"),
+    ("SEMITONES", "Semitoni", "Si muove a semitoni, anche fuori scala"),
+)
+FADE_DIRECTIONS = (
+    ("IN", "Entrata", "Parte sottile e cresce (crescendo)"),
+    ("OUT", "Uscita", "Finisce sottile (diminuendo)"),
+    ("BOTH", "Entrambi", "Cresce e poi cala"),
+)
+FADE_SCOPES = (
+    ("STROKE", "Ogni tratto", "Ogni tratto ha il suo fade"),
+    ("SONG", "Tutto il loop", "Un solo fade lungo tutto il loop"),
+)
+SETTINGS_VERSION = 1  # 1: effects and canon have a checkbox (0.0.15)
+
+
+def migrate_layer_settings(item):
+    """Settings saved before 0.0.15: the effects in use get their checkbox on."""
+    if item.settings_version >= SETTINGS_VERSION:
+        return
+    item["use_echo"] = item.delay_mix > 0
+    item["use_reverb"] = item.reverb_mix > 0
+    item["use_lofi"] = item.lofi > 0
+    item["use_canon"] = item.canon_voices > 1
+    item.settings_version = SETTINGS_VERSION
+
+
 class GP2M_LayerSettings(bpy.types.PropertyGroup):
     """Settings of one Grease Pencil layer, matched by layer name."""
 
@@ -220,6 +258,103 @@ class GP2M_LayerSettings(bpy.types.PropertyGroup):
                                  description="Ogni voce è trasposta rispetto alla precedente "
                                  "(12 = un'ottava sopra, -5 = una quarta sotto…)",
                                  update=_sound_changed)
+    settings_version: IntProperty(default=0, options={"HIDDEN"})
+
+    # Effects switched on and off by the checkbox in their panel header.
+    use_echo: BoolProperty(name="Eco", default=False,
+                           update=_switch_on("use_echo", "delay_mix", 0.3),
+                           description="Ripete il suono del livello a tempo")
+    use_reverb: BoolProperty(name="Riverbero", default=False,
+                             update=_switch_on("use_reverb", "reverb_mix", 0.3),
+                             description="Il livello suona in una stanza (l'ambiente si "
+                             "sceglie nel pannello Mix)")
+    use_lofi: BoolProperty(name="Lo-fi", default=False,
+                           update=_switch_on("use_lofi", "lofi", 0.4),
+                           description="Suono sporco, come un vecchio campionatore")
+    use_canon: BoolProperty(name="Canone", default=False,
+                            update=_switch_on("use_canon", "canon_voices", 2),
+                            description="Il livello si ripete in altre voci che entrano una "
+                            "dopo l'altra")
+
+    # Non-destructive modifiers, as in the web app (layer_mods.py).
+    use_array: BoolProperty(name="Array", default=False, update=_sound_changed,
+                            description="Ripete il tratto ogni tot battiti, anche salendo "
+                            "di grado")
+    array_count: IntProperty(name="Copie", default=4, min=1, max=64, soft_max=16,
+                             update=_sound_changed, description="Quante volte c'è il tratto "
+                             "(1 = solo l'originale)")
+    array_fill: BoolProperty(name="Riempi il loop", default=False, update=_sound_changed,
+                             description="Tante copie quante ne stanno fino alla fine del loop")
+    array_beats: FloatProperty(name="Ogni (battiti)", default=1.0, min=-64.0, max=64.0,
+                               soft_min=0.0, soft_max=16.0, step=25, update=_sound_changed,
+                               description="Battiti tra una copia e la successiva")
+    array_pitch: IntProperty(name="Sali di", default=0, min=-24, max=24,
+                             update=_sound_changed,
+                             description="Ogni copia sale (o scende) di tanto rispetto "
+                             "alla precedente")
+    array_unit: EnumProperty(name="Unità", items=PITCH_UNITS, default="SCALE",
+                             update=_sound_changed)
+    array_decay: FloatProperty(name="Smorza", default=0.0, min=0.0, max=0.95,
+                               subtype="FACTOR", update=_sound_changed,
+                               description="Ogni copia è più piano della precedente (eco "
+                               "disegnato)")
+
+    use_mirror: BoolProperty(name="Simmetria", default=False, update=_sound_changed,
+                             description="Specchia nel tempo (retrogrado) o in altezza "
+                             "(inversione)")
+    mirror_time: BoolProperty(name="Nel tempo", default=True, update=_sound_changed,
+                              description="Retrogrado: il tratto suona al contrario")
+    mirror_pitch: BoolProperty(name="In altezza", default=False, update=_sound_changed,
+                               description="Inversione: le note acute diventano gravi")
+    mirror_keep: BoolProperty(name="Tieni l'originale", default=True, update=_sound_changed,
+                              description="Suona anche il tratto non specchiato")
+    mirror_time_center: FloatProperty(name="Centro nel tempo", default=0.5, min=0.0, max=1.0,
+                                      subtype="FACTOR", update=_sound_changed,
+                                      description="Dove sta lo specchio, dall'inizio "
+                                      "(0) alla fine (1) del loop")
+    mirror_pitch_center: FloatProperty(name="Centro in altezza", default=0.5, min=0.0,
+                                       max=1.0, subtype="FACTOR", update=_sound_changed,
+                                       description="Dove sta lo specchio, dal fondo (0) "
+                                       "alla cima (1) della tavola")
+
+    use_transpose: BoolProperty(name="Trasponi", default=False, update=_sound_changed,
+                                description="Sposta tutto in alto o in basso")
+    transpose_steps: IntProperty(name="Di", default=2, min=-36, max=36, update=_sound_changed)
+    transpose_unit: EnumProperty(name="Unità", items=PITCH_UNITS, default="SCALE",
+                                 update=_sound_changed)
+
+    use_fade: BoolProperty(name="Fade", default=False, update=_sound_changed,
+                           description="Il tratto parte o finisce sottile: il volume "
+                           "cresce o cala")
+    fade_direction: EnumProperty(name="Direzione", items=FADE_DIRECTIONS, default="IN",
+                                 update=_sound_changed)
+    fade_scope: EnumProperty(name="Su", items=FADE_SCOPES, default="STROKE",
+                             update=_sound_changed)
+    fade_length: FloatProperty(name="Lunghezza", default=0.5, min=0.02, max=1.0,
+                               subtype="FACTOR", update=_sound_changed,
+                               description="Quanta parte del tratto (o del loop) dura il fade")
+    fade_minimum: FloatProperty(name="Volume minimo", default=0.05, min=0.0, max=1.0,
+                                subtype="FACTOR", update=_sound_changed)
+
+    use_noise: BoolProperty(name="Noise", default=False, update=_sound_changed,
+                            description="Piccole imperfezioni casuali di altezza, volume e "
+                            "tempo, come il modificatore Noise di Blender")
+    noise_pitch: FloatProperty(name="Altezza (semitoni)", default=0.15, min=0.0, max=12.0,
+                               soft_max=2.0, update=_sound_changed)
+    noise_width: FloatProperty(name="Volume", default=0.25, min=0.0, max=1.0,
+                               subtype="FACTOR", update=_sound_changed,
+                               description="Quanto cambia lo spessore (il volume)")
+    noise_time: FloatProperty(name="Tempo (battiti)", default=0.04, min=0.0, max=1.0,
+                              step=1, update=_sound_changed,
+                              description="Ogni tratto anticipa o ritarda al massimo di tanto")
+    noise_scale: FloatProperty(name="Frequenza", default=6.0, min=0.1, max=32.0,
+                               update=_sound_changed,
+                               description="Oscillazioni per battito: più alta = più fitta")
+    noise_seed: IntProperty(name="Seme", default=1, min=0, max=9999, update=_sound_changed,
+                            description="Un altro seme dà altre imperfezioni")
+
+
+LAYER_MOD_PROPS = ("use_array", "use_mirror", "use_transpose", "use_fade", "use_noise")
 
 
 class GP2M_Effects(bpy.types.PropertyGroup):
@@ -573,6 +708,41 @@ def find_layer_settings(gp_data, layer_name):
 _COPY_SKIP = {"rna_type", "name", "is_group", "solo"}
 
 
+# What "Copia impostazioni" carries from a layer to another: reading, modifiers,
+# effects... but not its name, its audio switches or what the interface shows.
+_PASTE_SKIP = _COPY_SKIP | {"mute", "solo_saved_opacity", "expanded", "show_fx",
+                            "settings_version"}
+
+
+def layer_values(item):
+    """The settings of a layer that can be copied to another, as a dict."""
+    return {prop.identifier: getattr(item, prop.identifier)
+            for prop in item.bl_rna.properties
+            if prop.identifier not in _PASTE_SKIP and not prop.is_readonly}
+
+
+def set_layer_values(item, values):
+    """Write ``layer_values`` into a layer's settings (the sound is rebuilt once)."""
+    for key, value in values.items():
+        if key in _PASTE_SKIP:
+            continue
+        try:
+            item[key] = value if not isinstance(value, str) else _enum_index(item, key, value)
+        except (AttributeError, TypeError, ValueError, KeyError):
+            pass
+    item.settings_version = SETTINGS_VERSION
+    _sound_changed(item, None)
+
+
+def _enum_index(item, key, value):
+    """Enums are stored as their number (ID properties do not take identifiers)."""
+    prop = item.bl_rna.properties[key]
+    for enum in prop.enum_items:
+        if enum.identifier == value:
+            return enum.value
+    raise ValueError(value)
+
+
 def _base_name(name):
     """``"Basso.002"`` -> ``"Basso"`` (Blender's suffix for duplicated names)."""
     head, dot, tail = name.rpartition(".")
@@ -624,6 +794,9 @@ def ensure_layer_settings(gp_data):
     A layer duplicated in Blender's own layer list gets a copy of the settings
     (reading mode, effects...) and of the instruments of the layer it comes from."""
     from .board import user_groups, user_layers
+    for item in gp_data.gp2m_layers:
+        if item.settings_version < SETTINGS_VERSION:
+            migrate_layer_settings(item)
     layers = user_layers(gp_data)
     layer_names = [layer.name for layer in layers]
     group_names = [group.name for group in user_groups(gp_data)]

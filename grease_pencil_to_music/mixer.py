@@ -10,7 +10,7 @@ from dataclasses import astuple, dataclass, field, replace
 
 import numpy as np
 
-from . import effects, interpret, music, synth
+from . import effects, interpret, layer_mods, music, synth
 
 
 @dataclass
@@ -101,6 +101,23 @@ class LayerInput:
     canon_transpose: int = 0  # semitones from one voice to the next
     legato_gap: float = 1.0  # beats: in the legato modes closer strokes become one voice
     harmony: str = "OFF"  # music.HARMONIES: voices added in the scale
+    mods: layer_mods.Stack = field(default_factory=layer_mods.Stack)  # modifiers that are on
+    rows: int = 36  # semitones on the board (the centre of Simmetria in pitch)
+
+
+def mods_board(spec, rows):
+    """The :class:`layer_mods.Board` of a :class:`interpret.BoardSpec`."""
+    return layer_mods.Board(low_note=spec.low_note, row_height=spec.row_height,
+                            seconds_width=spec.seconds_width, length=spec.length,
+                            bpm=spec.bpm, rows=rows, scale=spec.scale, root=spec.root)
+
+
+def with_modifiers(layer, spec):
+    """The layer with its strokes passed through its modifiers."""
+    if not layer.mods:
+        return layer
+    return replace(layer, strokes=layer_mods.apply(layer.strokes, layer.mods,
+                                                   mods_board(spec, layer.rows)))
 
 
 @dataclass
@@ -390,6 +407,7 @@ def render_layers(layers, spec, mapping, sample_rate=44100, loop=True, master_vo
     errors = _Errors()
     sounds = []
     for layer in layers:
+        layer = with_modifiers(layer, spec)
         stroke_keys = []
         stroke_results = []  # (instrument fx, rendered voices)
         notes, curves, voice_count = [], [], 0
