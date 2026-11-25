@@ -317,6 +317,11 @@ def on_depsgraph_update(_scene, depsgraph):
             if isinstance(original, bpy.types.Scene):
                 _check_scene_timing(original)
                 _check_preview(original)
+                try:  # clips muted or moved in the Sequencer: the layers follow
+                    from . import seqsync
+                    seqsync.request(original)
+                except Exception as error:
+                    print(f"[Doodle Music] Sequencer sync failed: {error!r}")
             # Cheap check first: only look for leftovers when objects changed.
             signature = _signature()
             if signature != _object_signature[0]:

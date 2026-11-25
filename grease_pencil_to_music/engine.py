@@ -716,6 +716,45 @@ def fit_meta(meta):
             meta.right_handle = end
 
 
+def silent_layers(obj):
+    """User layers that are not heard (muted, hidden or silenced by a Solo): their
+    strip stays in the meta-clip, muted, so the Sequencer shows every layer."""
+    from .reader import audible_layers
+    audible = {layer.name for layer in audible_layers(obj.data)}
+    return {layer.name for layer in board.user_layers(obj.data) if layer.name not in audible}
+
+
+def layer_channel_order(obj, names):
+    """``names`` in the order of the layers (bottom first): channel 1, 2, ... inside
+    the meta-clip."""
+    order = [layer.name for layer in board.user_layers(obj.data)]
+    return sorted(names, key=lambda name: order.index(name) if name in order else len(order))
+
+
+MUTE_KEY = "gp2m_mute"  # the mute the add-on last gave a layer strip
+
+
+def set_clip_mute(strip, mute):
+    """Mute a layer strip, remembering it was the add-on (a different value later
+    means it was changed in the Sequencer)."""
+    if strip.mute != mute:
+        strip.mute = mute
+    if strip.get(MUTE_KEY) != mute:
+        strip[MUTE_KEY] = mute
+
+
+def clip_mute_changed_by_hand(strip):
+    return strip.get(MUTE_KEY) is not None and bool(strip[MUTE_KEY]) != strip.mute
+
+
+def sync_layer_mutes(scene, obj):
+    """Every layer strip muted exactly when its layer is not heard (instant: no new
+    sound is needed to mute or unmute a layer)."""
+    silent = silent_layers(obj)
+    for name, strip in layer_strips(scene, obj).items():
+        set_clip_mute(strip, name in silent)
+
+
 def _place_layer_strips(scene, obj, result):
     """One strip per layer inside the composition's meta-clip (channel 1 = first
     layer): a file is written only for the layers whose sound changed, a strip is
@@ -728,15 +767,31 @@ def _place_layer_strips(scene, obj, result):
     start = min((strip.content_start for strip in strips.values()),
                 default=scene.frame_start + st.get("offset_frames", 0))
     meta = _ensure_meta(scene, obj, start)
-    for strip in composition_strips(scene, obj):  # layers gone
-        if strip.get(LAYER_KEY) is not None and strip[LAYER_KEY] not in names:
+    silent = silent_layers(obj)
+    for strip in composition_strips(scene, obj):  # layers gone (silent ones stay, muted)
+        layer = strip.get(LAYER_KEY)
+        if layer is not None and layer not in names and layer not in silent:
             _remove_strip(editor, strip)
     strips = layer_strips(scene, obj)
+    kept = [name for name in strips if name not in names]
+    channels = {name: index + 1 for index, name in
+                enumerate(layer_channel_order(obj, names + kept))}
+    for name in kept:
+        strip = strips[name]
+        if strip.channel != channels[name] or strip.parent_meta() is None \
+                or strip.parent_meta().name != meta.name:
+            if strip.sound is None:
+                _remove_strip(editor, strip)
+                continue
+            strip = _new_strip(scene, strip.name, strip.sound.filepath, channels[name],
+                               old=strip, tags={OWNER_KEY: obj.name, LAYER_KEY: name},
+                               meta=meta, frame=strip.content_start)
+        set_clip_mute(strip, True)
     # The audio of each layer file (read-only arrays, shared with the mixer's cache).
     paths, sounds = st.setdefault("layer_paths", {}), st.setdefault("layer_audio", {})
     fps = scene.render.fps / scene.render.fps_base
     for index, (name, audio) in enumerate(result.stems):
-        strip, channel = strips.get(name), index + 1
+        strip, channel = strips.get(name), channels[name]
         inside = strip is not None and strip.parent_meta() is not None \
             and strip.parent_meta().name == meta.name
         frames = max(1, int(round(len(audio) / result.sample_rate * fps)))
@@ -747,6 +802,7 @@ def _place_layer_strips(scene, obj, result):
         placed = inside and strip.channel == channel and strip.duration == frames
         if same_sound and placed:
             _color_strip(obj, strip, name)
+            set_clip_mute(strip, False)
             continue
         path = paths.get(name)
         if not same_sound:
@@ -760,10 +816,11 @@ def _place_layer_strips(scene, obj, result):
                                tags={OWNER_KEY: obj.name, LAYER_KEY: name}, meta=meta,
                                frame=start)
         _color_strip(obj, strip, name)
+        set_clip_mute(strip, False)  # heard (a mute set in the Sequencer is the layer's)
         if paths.get(name) != path:
             _forget_file(paths.get(name))
         paths[name], sounds[name] = path, audio
-    for name in [name for name in paths if name not in names]:
+    for name in [name for name in paths if name not in names and name not in kept]:
         _forget_file(paths.pop(name))
         sounds.pop(name, None)
     fit_meta(meta)
@@ -949,6 +1006,7 @@ def _arrange_layers(scene, obj, strips, target, mute):
             _new_strip(scene, strip.name, strip.sound.filepath, channel, old=strip,
                        tags={OWNER_KEY: obj.name, LAYER_KEY: strip[LAYER_KEY]}, meta=meta,
                        frame=strip.content_start)
+    sync_layer_mutes(scene, obj)
     inner = [strip for strip in meta.strips if strip.type == "SOUND"]
     if inner:
         shift = target - min(strip.content_start for strip in inner)
@@ -1024,7 +1082,9 @@ def regenerate(obj, scene=None, force=False, only_active=False):
     if per_layer:
         strips = layer_strips(scene, obj)
         paths = st.get("layer_paths") or {}
-        files_ok = (set(strips) == {name for name, _audio in result.stems}
+        silent = silent_layers(obj)
+        files_ok = ({name for name in strips if name not in silent}
+                    == {name for name, _audio in result.stems}
                     and all(_strip_file_ok(strip) and _same_file(strip, paths.get(name))
                             for name, strip in strips.items())
                     and len(composition_strips(scene, obj)) == len(strips))

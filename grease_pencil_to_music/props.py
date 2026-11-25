@@ -152,8 +152,28 @@ FILL_MODES = (
 SOLO_OPACITY = 0.1  # opacity of the other layers while a layer is in Solo
 
 
+def _sync_clip_mutes(gp_data):
+    """Mute or unmute the layers' clips in the Sequencer right away."""
+    from . import engine
+    for obj in bpy.data.objects:
+        if obj.type == "GREASEPENCIL" and obj.data == gp_data and obj.gp2m.is_composition:
+            scene = engine.scene_of(obj)
+            if scene is None:
+                continue
+            try:
+                engine.sync_layer_mutes(scene, obj)
+            except Exception as error:  # the new sound fixes it anyway
+                print(f"[Doodle Music] clip mute failed: {error!r}")
+
+
+def _mute_changed(self, _context):
+    _sync_clip_mutes(self.id_data)
+    _sound_changed(self, _context)
+
+
 def _solo_changed(self, _context):
     apply_solo(self.id_data)
+    _sync_clip_mutes(self.id_data)
     _sound_changed(self, _context)
 
 
@@ -278,8 +298,10 @@ class GP2M_LayerSettings(bpy.types.PropertyGroup):
     name: StringProperty()
     is_group: BoolProperty(default=False, options={"HIDDEN"},
                            description="Impostazioni di un gruppo di livelli")
-    mute: BoolProperty(name="Muto", default=False, update=_sound_changed,
-                       description="Il livello resta visibile ma non suona (anche negli export)")
+    mute: BoolProperty(name="Muto", default=False, update=_mute_changed,
+                       description="Il livello resta visibile ma non suona (anche negli "
+                       "export); anche la sua clip nel Sequencer è muta, e mutando la clip "
+                       "si muta il livello")
     solo: BoolProperty(name="Solo", default=False, update=_solo_changed,
                        description="Ascolta solo questo livello: gli altri tacciono e scendono "
                        "al 10% di opacità (anche negli export)")
