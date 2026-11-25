@@ -88,13 +88,17 @@ def flush():
     _full.clear()
     for name in names:
         obj = bpy.data.objects.get(name)
-        if obj is not None and obj.gp2m.is_composition:
+        if obj is None or not obj.gp2m.is_composition:
+            continue
+        try:  # one broken composition must not stop the others (nor the timer)
             if not board.has_board(obj):  # file from 0.0.1, or board removed
                 board.rebuild(obj, engine.scene_of(obj))
             board.ensure_order(obj.data)  # layers added with Blender's own "+"
             feedback.sync(obj)  # also keeps every modifier off the board
-            engine.regenerate_safe(obj, only_active=(
-                name not in full and obj.gp2m.auto_active_layer))
+        except Exception as error:
+            print(f"[Doodle Music] board update failed: {error!r}")
+        engine.regenerate_safe(obj, only_active=(
+            name not in full and obj.gp2m.auto_active_layer))
 
 
 def _signature():
@@ -377,6 +381,9 @@ def on_load_post(*_args):
     engine._state.clear()  # runtime state of the previous file (keyed by object name)
     _scene_timing.clear()
     _scene_preview.clear()
+    _layer_syncs.clear()  # names of the previous file
+    _shade_scenes.clear()
+    board._pending.clear()
     for scene in bpy.data.scenes:
         _scene_timing[scene.name] = _timing(scene)
         _scene_preview[scene.name] = _preview(scene)
@@ -447,6 +454,11 @@ def on_undo_redo(*_args):
         if board.has_board(obj) and not board.board_materials_ok(obj):
             board.request_rebuild(obj)
     mark_all_dirty()
+    for obj in compositions():
+        # With automatic updates off the strips may now point to deleted files.
+        if not obj.gp2m.auto_update and not engine.sound_files_ok(obj, engine.scene_of(obj)):
+            _mark_full(obj.name)
+            _ensure_timer()
     if _was_playing[0] and prefs.get_prefs().resume_after_undo and not bpy.app.background:
         _was_playing[0] = False
         bpy.app.timers.register(_resume_playback, first_interval=0.05)
@@ -475,6 +487,10 @@ def unregister():
         if func in handler_list:
             handler_list.remove(func)
     bpy.msgbus.clear_by_owner(_msgbus_owner)
-    for timer in (_tick, _resume_playback, _shade_tick, _layer_sync_tick):
+    for timer in (_tick, _resume_playback, _shade_tick, _layer_sync_tick,
+                  board._rebuild_pending):
         if bpy.app.timers.is_registered(timer):
             bpy.app.timers.unregister(timer)
+    _layer_syncs.clear()
+    _shade_scenes.clear()
+    board._pending.clear()

@@ -190,6 +190,13 @@ def render_active_layer(obj, scene):
     previous = st.get("signatures") or {}
     if any(signatures[name] != previous.get(name) for name in names if name != active.name):
         return None, None
+    # Edit and Sculpt Mode (and the object's modifiers) can change the strokes of
+    # every layer, not only the active one: those layers must be rendered again.
+    fingerprints = reader.layer_fingerprints(obj, scene.frame_start, s.use_modifiers)
+    kept_prints = st.get("fingerprints") or {}
+    if any(fingerprints.get(name) != kept_prints.get(name)
+           for name in names if name != active.name):
+        return None, None
     reads = reader.read_composition(obj, scene.frame_start, use_modifiers=s.use_modifiers,
                                     only={active.name})
     spec, mapping, rate = board_spec(s), prefs.get_mapping(), int(s.sample_rate)
@@ -213,6 +220,8 @@ def _keep_layers(obj, scene, result):
     st["layers"] = {sound.name: sound for sound in result.layers}
     st["context"] = _context_signature(obj, scene)
     st["signatures"] = _layer_signatures(obj, reader.audible_layers(obj.data))
+    st["fingerprints"] = reader.layer_fingerprints(obj, scene.frame_start,
+                                                   obj.gp2m.use_modifiers)
 
 
 def duration(obj):
@@ -518,7 +527,10 @@ def _place_layer_strips(scene, obj, result):
     for index, (name, audio) in enumerate(result.stems):
         strip, channel = strips.get(name), base + index
         frames = max(1, int(round(len(audio) / result.sample_rate * fps)))
-        same_sound = _same_audio(sounds.get(name), audio) and _strip_file_ok(strip)
+        # The strip must still play the file written for that audio: undo can give
+        # it back an older file (kept on disk when Windows could not delete it).
+        same_sound = (_same_audio(sounds.get(name), audio) and _strip_file_ok(strip)
+                      and _same_file(strip, paths.get(name)))
         if same_sound and strip.channel == channel and strip.duration == frames:
             continue
         path = paths.get(name)
@@ -543,10 +555,37 @@ def _place_layer_strips(scene, obj, result):
         obj.gp2m.channel = base
 
 
+def _same_file(strip, path):
+    if strip is None or strip.sound is None or not path:
+        return False
+    return os.path.normcase(os.path.abspath(bpy.path.abspath(strip.sound.filepath))) == \
+        os.path.normcase(os.path.abspath(path))
+
+
 def _strip_file_ok(strip):
     if strip is None or strip.sound is None:
         return False
     return os.path.exists(bpy.path.abspath(strip.sound.filepath))
+
+
+def sound_files_ok(obj, scene):
+    """True when every strip of the composition plays the file last written for it.
+
+    Undo and redo give the strips back older files, which were deleted when a new
+    sound replaced them: with automatic updates off they would play silence."""
+    if scene is None:
+        return True
+    st = state(obj)
+    strips = composition_strips(scene, obj)
+    if not strips:
+        return False
+    paths = st.get("layer_paths") or {}
+    for strip in strips:
+        layer = strip.get(LAYER_KEY)
+        path = st.get("path") if layer is None else paths.get(layer)
+        if not _strip_file_ok(strip) or not _same_file(strip, path):
+            return False
+    return True
 
 
 def scene_compositions(scene):
@@ -758,12 +797,15 @@ def regenerate(obj, scene=None, force=False, only_active=False):
     key = (result.key, per_layer)
     if per_layer:
         strips = layer_strips(scene, obj)
+        paths = st.get("layer_paths") or {}
         files_ok = (set(strips) == {name for name, _audio in result.stems}
-                    and all(_strip_file_ok(strip) for strip in strips.values())
+                    and all(_strip_file_ok(strip) and _same_file(strip, paths.get(name))
+                            for name, strip in strips.items())
                     and len(composition_strips(scene, obj)) == len(strips))
     else:
         strip = find_strip(scene, obj)
         files_ok = (_strip_file_ok(strip) and strip.get(LAYER_KEY) is None
+                    and _same_file(strip, st.get("path"))
                     and len(composition_strips(scene, obj)) == 1)
     if force or st.get("key") != key or not files_ok:
         if per_layer:

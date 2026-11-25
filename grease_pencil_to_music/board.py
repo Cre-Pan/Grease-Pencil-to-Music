@@ -784,6 +784,9 @@ _pending = set()
 
 
 def _rebuild_pending():
+    from .handlers import TRANSFORM_POLL, transform_running
+    if transform_running():
+        return TRANSFORM_POLL  # never rebuild under a running G/R/S (it crashes Blender)
     names = list(_pending)
     _pending.clear()
     for name in names:

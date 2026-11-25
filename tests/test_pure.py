@@ -981,6 +981,31 @@ def test_recorded_zones_are_the_bundled_files():
     assert len(synth.recorded_zones("S_GONG")) == 1
 
 
+def test_unreadable_recordings_are_not_kept_silent(monkeypatch):
+    """A recording that cannot be read (a file locked for a moment) is skipped as an
+    error, so neither the instrument nor the render caches keep it silent."""
+    loader = synth.SAMPLE_LOADER
+    calls = []
+
+    def broken(ident):
+        calls.append(ident)
+        raise OSError("locked")
+
+    synth.SAMPLES.pop("S_FLUTE", None)
+    mixer.clear_cache()
+    monkeypatch.setattr(synth, "SAMPLE_LOADER", broken)
+    with pytest.raises(OSError):
+        synth.render_voice(voice("S_FLUTE", 69, 0.5), SR)
+    assert "S_FLUTE" not in synth.SAMPLES
+    zone = synth.Zone(None, 44100.0, 69.0, source=lambda: (_ for _ in ()).throw(OSError("x")))
+    with pytest.raises(OSError):
+        synth.zone_ready(zone)
+    assert zone.source is not None  # read again next time
+    monkeypatch.setattr(synth, "SAMPLE_LOADER", loader)
+    _offset, buf = synth.render_voice(voice("S_FLUTE", 69, 0.5), SR)
+    assert float(np.max(np.abs(buf))) > 0.01 and calls == ["S_FLUTE"]
+
+
 @pytest.mark.parametrize("ident,note", [("S_FLUTE", 69), ("S_PIANO", 69), ("S_CELLO", 57),
                                         ("S_TRUMPET", 70)])
 def test_recorded_instruments_play_the_right_pitch(ident, note):

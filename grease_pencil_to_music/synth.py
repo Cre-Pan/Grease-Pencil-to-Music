@@ -166,11 +166,10 @@ def zone_ready(zone):
     """The zone with its audio: a recorded note is decoded the first time it plays, so an
     instrument costs only the notes that are drawn (time and memory)."""
     if zone.source is not None:
-        try:
-            zone.data, zone.rate, zone.offset = zone.source()
-        except Exception as error:  # noqa: BLE001 - a missing file plays silence
-            print(f"[Doodle Music] nota registrata non letta: {error!r}")
-            zone.data, zone.offset = np.zeros(0, np.float32), 0
+        # A note that cannot be read raises: the voice is skipped and counted as an
+        # error, so the silent result is not cached and the note is read again at the
+        # next render (a file locked for a moment does not stay silent for the session).
+        zone.data, zone.rate, zone.offset = zone.source()
         zone.loop_end = len(zone.data)
         zone.source = None
     return zone
@@ -194,12 +193,10 @@ def recorded_zones(ident):
     """Zones of a recorded instrument, read the first time they are asked for."""
     zones = SAMPLES.get(ident)
     if zones is None and SAMPLE_LOADER is not None and ident in RECORDINGS:
-        try:
-            zones = SAMPLE_LOADER(ident)
-        except Exception as error:  # noqa: BLE001 - a missing file plays silence
-            print(f"[Doodle Music] {ident} non letto: {error!r}")
-            zones = None
-        SAMPLES[ident] = zones = list(zones or [])
+        # A missing file raises (see zone_ready): nothing is kept, it is tried again.
+        zones = list(SAMPLE_LOADER(ident) or [])
+        if zones:
+            SAMPLES[ident] = zones
     return zones or []
 
 

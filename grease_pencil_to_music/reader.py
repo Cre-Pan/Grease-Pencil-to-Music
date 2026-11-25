@@ -187,3 +187,57 @@ def has_unsupported_stack(obj):
     """True when user modifiers or shader effects are present (not heard by default)."""
     from .feedback import user_modifiers
     return bool(user_modifiers(obj) or len(getattr(obj, "shader_effects", ())))
+
+
+_FINGERPRINT_ATTRIBUTES = ("position", "radius", "opacity", "vertex_color", "material_index",
+                           "softness", "fill_id", "cyclic", "delta_time")
+
+
+def drawing_fingerprint(drawing, matrix=None):
+    """A short digest of everything :func:`read_drawing` reads from a drawing (points,
+    thickness, colours, materials...), without building the strokes: cheap enough to
+    tell, before a partial render, whether a layer was edited."""
+    import hashlib
+    h = hashlib.blake2b(digest_size=16)
+    if matrix is not None:
+        h.update(np.asarray(matrix, dtype=np.float32).tobytes())
+    if drawing is None:
+        return h.hexdigest()
+    curves = len(drawing.strokes)
+    h.update(str(curves).encode())
+    if curves == 0:
+        return h.hexdigest()
+    offsets = np.empty(curves + 1, dtype=np.int32)
+    drawing.curve_offsets.foreach_get("value", offsets)
+    h.update(offsets.tobytes())
+    points = int(offsets[-1])
+    for name in _FINGERPRINT_ATTRIBUTES:
+        attr = drawing.attributes.get(name)
+        if attr is None:
+            h.update(b"-")
+            continue
+        count = points if attr.domain == "POINT" else curves
+        width = {"FLOAT_VECTOR": 3, "FLOAT_COLOR": 4}.get(attr.data_type, 1)
+        h.update(name.encode())
+        h.update(_attribute(drawing, name, count, width).tobytes())
+    return h.hexdigest()
+
+
+def layer_fingerprints(obj, frame_number, use_modifiers=False, depsgraph=None):
+    """``{layer name: fingerprint}`` of the audible layers, read as
+    :func:`read_composition` would read them."""
+    gp = obj.data
+    if use_modifiers:
+        depsgraph = depsgraph or bpy.context.evaluated_depsgraph_get()
+        gp = obj.evaluated_get(depsgraph).data
+    out = {}
+    for layer in gp.layers:
+        if is_hidden(layer) or is_board_layer(layer) or layer_silent(obj.data, layer.name):
+            continue
+        if use_modifiers:
+            frame = layer.current_frame()
+            drawing = frame.drawing if frame is not None else None
+        else:
+            drawing = drawing_at(layer, frame_number)
+        out[layer.name] = drawing_fingerprint(drawing, layer.matrix_local)
+    return out
