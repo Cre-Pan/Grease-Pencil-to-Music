@@ -481,7 +481,7 @@ def test_duplicate_is_a_new_work_plane(comp):
     handlers._last_change[0] = 0.0
     handlers._tick()
     scene = bpy.context.scene
-    first, second = engine.find_strip(scene, comp), engine.find_strip(scene, copy)
+    first, second = engine.top_strip(scene, comp), engine.top_strip(scene, copy)
     assert first is not None and second is not None and first.channel != second.channel
     assert [n.pitch for n in engine.regenerate(copy).notes] == [60]
 
@@ -510,7 +510,7 @@ def test_mute_and_instrument_volume(comp):
         comp.material_slots[0].material.gp2m_volume = 1.0
     comp.gp2m.mute = True
     engine.regenerate(comp)
-    assert engine.find_strip(bpy.context.scene, comp).mute
+    assert engine.top_strip(bpy.context.scene, comp).mute
 
 
 def test_filled_shape_is_a_cluster(comp):
@@ -729,7 +729,7 @@ def test_play_modes(comp):
     play.mode = "SOLO"
     bpy.context.view_layer.objects.active = other
     engine.arrange(scene)
-    assert engine.find_strip(scene, first).mute and not engine.find_strip(scene, other).mute
+    assert engine.top_strip(scene, first).mute and not engine.top_strip(scene, other).mute
     assert scene.frame_end - scene.frame_start + 1 == round(other.gp2m.length * fps)
     play.mode = "TOGETHER"
     engine.arrange(scene)
@@ -755,7 +755,7 @@ def test_timeline_sources(comp):
     assert settings.source == "EVERYTHING"  # the default
     for source in ("EVERYTHING", "ACTIVE", "ALL", "VSE_MIX", "VSE_CHANNEL"):
         settings.source = source
-        settings.channel = engine.find_strip(bpy.context.scene, comp).channel
+        settings.channel = engine.top_strip(bpy.context.scene, comp).channel
         audio, composed, items = timeline.collect(bpy.context, settings)
         segments = audio + composed
         assert segments, source
@@ -945,7 +945,7 @@ def test_sequencer_channels_auto_and_manual(comp):
     free = engine._block_from(1, engine._channel_count(scene, other), used)
     other.gp2m.channel = free  # a free block chosen by hand is kept
     engine.arrange(scene)
-    assert engine.find_strip(scene, other).channel == free
+    assert engine.top_strip(scene, other).channel == free
     copy = other.copy()  # Shift+D copies the channel too
     copy.data = other.data.copy()
     bpy.context.collection.objects.link(copy)
@@ -972,16 +972,16 @@ def test_new_composition_goes_above_clips_and_compositions(comp):
         other = _fresh(None)
         base = other.gp2m.channel
         assert base == top + 2
-        channels = {strip.channel for strip in engine.composition_strips(scene, other)}
-        assert clip.channel == top + 1 and clip.channel not in channels
-        # A clip added later on one of its channels (after the sound, so Blender
-        # lets it there): the composition moves up, the clip stays.
-        later = editor.strips.new_effect("Clip dopo", "COLOR", base + 1, frame_start=5000,
+        assert engine.top_strip(scene, other).channel == base
+        assert clip.channel == top + 1 and clip.channel != base
+        # A clip added later on its channel (after the sound, so Blender lets it
+        # there): the composition moves up, the clip stays.
+        later = editor.strips.new_effect("Clip dopo", "COLOR", base, frame_start=5000,
                                          length=10)
         engine.arrange(scene)
-        assert later.channel == base + 1 and other.gp2m.channel > base + 1
-        channels = {strip.channel for strip in engine.composition_strips(scene, other)}
-        assert later.channel not in channels and clip.channel not in channels
+        assert later.channel == base and other.gp2m.channel > base
+        channel = engine.top_strip(scene, other).channel
+        assert channel == other.gp2m.channel and channel not in (later.channel, clip.channel)
         editor.strips.remove(later)
     finally:
         editor.strips.remove(clip)
@@ -1852,8 +1852,14 @@ def test_one_strip_per_layer_adds_up_to_the_mix(comp):
     result = engine.regenerate(comp)
     strips = engine.layer_strips(scene, comp)
     assert set(strips) == set(names)
+    # One meta-clip on the composition's channel, the layers inside from channel 1.
+    meta = engine.meta_strip(scene, comp)
+    assert meta is not None and meta.channel == comp.gp2m.channel
+    assert all(strip.parent_meta() == meta for strip in strips.values())
     channels = sorted(strip.channel for strip in strips.values())
-    assert channels == list(range(comp.gp2m.channel, comp.gp2m.channel + len(names)))
+    assert channels == list(range(1, 1 + len(names)))
+    assert meta.left_handle <= min(s.left_handle for s in strips.values())
+    assert meta.right_handle >= max(s.right_handle for s in strips.values())
     order = [strips[name].channel for name in names]
     assert order == sorted(order)  # the layers' order, bottom layer lowest
     total = None
@@ -2176,8 +2182,7 @@ def test_composition_list_follows_the_channels(comp):
     assert table.by_channel(scene).index(other) == len(ordered) - 2
     for obj in (other, below):
         first, last = table.channel_span(scene, obj)
-        channels = {s.channel for s in engine.composition_strips(scene, obj)}
-        assert channels <= set(range(first, last + 1))
+        assert first == last == engine.top_strip(scene, obj).channel
     # Picking a row selects the composition.
     index = list(scene.objects).index(below)
     scene.gp2m_composition_index = index
@@ -2306,3 +2311,41 @@ def test_rig_shows_only_in_object_mode_and_goes_with_its_composition(comp):
     bpy.data.objects.remove(other, do_unlink=True)
     sub("engine").cleanup_orphans()
     assert bpy.data.objects.get(name) is None
+
+
+def test_layers_live_in_one_meta_clip(comp):
+    """A composition is one clip in the Sequencer: a meta-clip with a strip per layer
+    inside. Muting the composition mutes the meta; strips of 0.0.21 (one channel per
+    layer at the top) move inside, keeping their volume."""
+    engine = sub("engine")
+    scene = bpy.context.scene
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
+    engine.regenerate(comp)
+    meta = engine.meta_strip(scene, comp)
+    assert meta.type == "META" and engine.top_strip(scene, comp) == meta
+    assert [s for s in scene.sequence_editor.strips if engine._owned(s, comp)] == [meta]
+    # A 0.0.21 file: the layer strip sits at the top, with its own volume.
+    strip = engine.layer_strips(scene, comp)["Livello 1"]
+    path = strip.sound.filepath
+    engine._remove_strip(scene.sequence_editor, meta)
+    legacy = scene.sequence_editor.strips.new_sound(
+        engine.strip_name(comp, "Livello 1"), path, 30, scene.frame_start)
+    legacy[engine.OWNER_KEY], legacy[engine.LAYER_KEY] = comp.name, "Livello 1"
+    legacy.volume = 0.4
+    engine.regenerate(comp, force=True)
+    meta = engine.meta_strip(scene, comp)
+    inside = engine.layer_strips(scene, comp)["Livello 1"]
+    assert inside.parent_meta() == meta and abs(inside.volume - 0.4) < 1e-6
+    assert [s for s in scene.sequence_editor.strips if engine._owned(s, comp)] == [meta]
+    comp.gp2m.mute = True
+    engine.arrange(scene)
+    assert meta.mute and not inside.mute
+    comp.gp2m.mute = False
+    engine.arrange(scene)
+    assert not meta.mute
+    # Back to one mix strip: the meta-clip goes away.
+    comp.gp2m.layer_channels = False
+    engine.regenerate(comp, force=True)
+    assert engine.meta_strip(scene, comp) is None
+    assert engine.top_strip(scene, comp).type == "SOUND"
+    comp.gp2m.layer_channels = True

@@ -24,7 +24,7 @@ colore = voce).
 | Spessore / opacità / vertex color / morbidezza | mappatura scelta nelle Preferences, da menu con opzioni limitate |
 | Strumenti | sintetizzati, più "Campione" (un suono) e "Libreria" (SoundFont .sf2 / .sfz, non incluse) |
 | Effetti | per livello e per strumento: eco (ping-pong), riverbero (convoluzione), lo-fi; canone per livello |
-| Uscite | una strip per livello nel Video Sequencer (o una col mix), export WAV, MP3, MIDI, overlay nella Timeline |
+| Uscite | una meta-clip per composizione nel Video Sequencer con una strip per livello dentro (o una strip col mix), export WAV, MP3, MIDI, overlay nella Timeline |
 | Volume dello spessore | assoluto (0,8 righe = pieno, come la web app), mai relativo agli altri tratti |
 | Suono finito per livello | parte lineare (ambiente, low cut) per livello; dinamica calcolata sul mix e applicata uguale a ogni livello: le strip sommate sono il mix |
 | Oggetto | dalla 0.0.21 due Grease Pencil: la composizione (i tuoi livelli e la testina) e sua figlia *· Tavola* (griglia, tastiera, etichette, bloccata; cliccarla seleziona la composizione); dalla 0.0.22 anche *· Rig* (maniglie disegnate, solo in Object Mode, mai in render, trascinate tramite gizmo invisibili) |

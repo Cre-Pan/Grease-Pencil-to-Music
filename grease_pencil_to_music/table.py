@@ -296,6 +296,14 @@ def swap_channels(scene, lower, upper):
     try:
         upper.gp2m.channel = low_first
         lower.gp2m.channel = up_last - low_count + 1
+        # Blender pushes a strip away from an occupied channel: park one strip on a
+        # free channel first, then put both in place.
+        lower_strip, upper_strip = engine.top_strip(scene, lower), engine.top_strip(scene, upper)
+        if lower_strip is not None and upper_strip is not None:
+            used = {strip.channel for strip in scene.sequence_editor.strips}
+            lower_strip.channel = engine._block_from(engine.MAX_CHANNEL, 1, used)
+            upper_strip.channel = upper.gp2m.channel
+            lower_strip.channel = lower.gp2m.channel
     finally:
         engine._arranging[0] = False
     engine.arrange_safe(scene)

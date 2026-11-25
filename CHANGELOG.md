@@ -365,11 +365,16 @@ Il viewport come un tavolo: composizioni come livelli e maniglie disegnate
   aggiungi, duplica, elimina, su / giù (scambiano i canali con la vicina), inquadra e
   **Riordina** (impila le tavole nell'ordine dei canali). Cliccando una riga la
   composizione viene selezionata.
+- **Una composizione, una clip**: nel Video Sequencer ogni composizione è una meta-clip
+  su un solo canale, con dentro una clip per livello (con il loro colore). *Tab* per
+  entrarci e regolare volume, pan e muto di ogni livello; il muto e il volume della
+  meta valgono per tutta la composizione. Le strip dei livelli dei file salvati prima
+  entrano nella meta da sole, tenendo volume e pan.
 - **Una nuova composizione è un nuovo livello**: nel Sequencer va sopra tutte le altre e
   salta i canali che hanno già una clip; sul tavolo nasce sopra la più alta, allineata,
   invece che sul 3D cursor sopra le altre. Se dopo si aggiunge una clip (un video) su un
-  suo canale, o un livello in più trova il canale occupato, la composizione sale fino
-  ai primi canali liberi: le clip non vengono mai spostate.
+  suo canale, la composizione sale fino al primo canale libero: le clip non vengono
+  mai spostate.
 - **Ottave sopra e sotto senza spostare il disegno** (*Tavola e tempo → Sopra / Sotto*,
   o con le maniglie): aggiungere un'ottava sotto abbassa la nota più bassa e allarga la
   tavola verso il basso, ma ogni tratto resta dov'è nel mondo e suona le stesse note.
