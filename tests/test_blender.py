@@ -37,6 +37,8 @@ def addon(tmp_path_factory):
     preferences.new_layers = 3
     preferences.new_instruments = "ALL"
     preferences.new_scale = "CHROMATIC"  # the tests read every semitone
+    # Each composition keeps its own length (test_follow_scene_* switch it on).
+    preferences.new_follow_scene = False
     package = sys.modules[MODULE]
     yield package
     bpy.ops.preferences.addon_disable(module=MODULE)
@@ -1946,3 +1948,94 @@ def test_strips_given_back_an_older_file_are_written_again(comp, tmp_path, per_l
     assert engine.sound_files_ok(comp, scene)
     assert bpy.path.abspath(engine.find_strip(scene, comp).sound.filepath) != stale
     comp.gp2m.auto_update = True
+
+
+def _only(comp):
+    engine = sub("engine")
+    for obj in engine.scene_compositions(bpy.context.scene):
+        if obj != comp:
+            bpy.data.objects.remove(obj, do_unlink=True)
+    engine.cleanup_orphans()
+
+
+def test_follow_scene_in_and_out(comp):
+    """The composition lasts from the scene Start to its End, both ways."""
+    engine = sub("engine")
+    _only(comp)
+    scene = bpy.context.scene
+    scene.gp2m_play.mode = "TOGETHER"
+    fps = scene.render.fps / scene.render.fps_base
+    comp.gp2m.length = 8.0
+    scene.frame_end = scene.frame_start + 400
+    comp.gp2m.follow_scene = True  # the only one: the scene takes its length
+    assert scene.frame_end - scene.frame_start + 1 == round(8 * fps)
+    assert comp.gp2m.length == pytest.approx(8.0)
+
+    scene.frame_end = scene.frame_start + round(10 * fps) - 1  # new Out
+    engine.arrange(scene)
+    assert comp.gp2m.length == pytest.approx(10.0)
+    engine.regenerate(comp)
+    assert engine.find_strip(scene, comp).duration == round(10 * fps)
+
+    comp.gp2m.length = 6.0  # Durata (or scaling the board) moves the Out
+    engine.arrange(scene)
+    assert scene.frame_end - scene.frame_start + 1 == round(6 * fps)
+
+    other = _fresh(None)  # a second composition follows the scene
+    other.gp2m.follow_scene = True
+    engine.arrange(scene)
+    assert other.gp2m.length == pytest.approx(6.0)
+    assert scene.frame_end - scene.frame_start + 1 == round(6 * fps)
+
+    scene.frame_start += 24  # new In: the strips move, the length stays
+    engine.arrange(scene)
+    assert engine.find_strip(scene, comp).frame_final_start == scene.frame_start
+    scene.frame_start -= 24
+    comp.gp2m.follow_scene = other.gp2m.follow_scene = False
+    bpy.data.objects.remove(other, do_unlink=True)
+
+
+def test_follow_scene_with_sections(comp):
+    """With keyframe sections the loop keeps its length and the last one reaches Out."""
+    engine = sub("engine")
+    _only(comp)
+    scene = bpy.context.scene
+    fps = scene.render.fps / scene.render.fps_base
+    start = scene.frame_start
+    comp.gp2m.length = 2.0
+    add_stroke(comp, 0, line(comp, 0.5, 1.0, 60))
+    add_stroke(comp, 0, line(comp, 0.5, 1.0, 64), frame=start + round(4 * fps))
+    comp.gp2m.use_sections = True
+    comp.gp2m.follow_scene = True
+    scene.frame_end = start + round(9 * fps) - 1
+    engine.arrange(scene)
+    result = engine.regenerate(comp)
+    assert comp.gp2m.length == pytest.approx(2.0)
+    assert result.sections == (0.0, 4.0) and result.duration == pytest.approx(9.0)
+    scene.frame_end = start + round(3 * fps) - 1  # the second section is after Out
+    result = engine.regenerate(comp)
+    assert {n.pitch for n in result.notes} == {60}
+    assert result.duration == pytest.approx(3.0)
+    comp.gp2m.follow_scene = False
+    comp.gp2m.use_sections = False
+
+
+def test_layers_have_their_own_colors_on_strips(comp):
+    engine, props = sub("engine"), sub("props")
+    scene = bpy.context.scene
+    comp.gp2m.layer_channels = True
+    for index in range(3):
+        add_stroke(comp, index, line(comp, 0.5, 1.0, 60 + index))
+    engine.regenerate(comp, force=True)
+    items = [props.find_layer_settings(comp.data, layer.name)
+             for layer in sub("board").user_layers(comp.data)]
+    colors = [item.color for item in items]
+    assert "NONE" not in colors and len(set(colors)) == len(colors)
+    strips = engine.layer_strips(scene, comp)
+    assert all(strips[item.name].color_tag == item.color for item in items)
+    items[0].color = "COLOR_09"  # by hand: the strip follows at once
+    assert strips[items[0].name].color_tag == "COLOR_09"
+    comp.data.layers.new("Nuovo")
+    props.ensure_layer_settings(comp.data)
+    fresh = props.find_layer_settings(comp.data, "Nuovo")
+    assert fresh.color not in ("NONE", "COLOR_09")

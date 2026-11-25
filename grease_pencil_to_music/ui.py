@@ -280,6 +280,7 @@ class GP2M_UL_layers(bpy.types.UIList):
         name.active = not board.is_hidden(layer) and not props.layer_silent(gp, item.name)
         name.prop(layer, "name", text="", emboss=False)
         right = row.row(align=True)
+        right.prop(item, "color", text="", icon_only=True, emboss=False)
         _audio_prop(right, gp, item)
         _solo_prop(right, item)
 
@@ -656,6 +657,14 @@ def draw_board(layout, s):
     col = layout.column(align=True)
     col.prop(s, "bpm")
     col.prop(s, "length")
+    col = layout.column(align=True)
+    col.prop(s, "follow_scene")
+    scene = bpy.context.scene
+    if s.follow_scene and scene is not None:
+        sub = col.column(align=True)
+        sub.active = scene.gp2m_play.mode != "SEQUENCE"
+        sub.prop(scene, "frame_start", text="In (Start)")
+        sub.prop(scene, "frame_end", text="Out (End)")
     col = layout.column(heading="Ripeti", align=True)
     col.prop(s, "loop")
     col.prop(s, "use_sections")
@@ -759,7 +768,9 @@ def draw_play(layout, scene, comp=None):
     col = layout.column()
     col.use_property_split = True
     col.use_property_decorate = False
-    col.prop(play, "fit_range")
+    row = col.row()
+    row.active = not (comp is not None and engine.follows_scene(comp, scene))
+    row.prop(play, "fit_range")
     if comp is not None:
         col.prop(comp.gp2m, "layer_channels")
         sub = col.column(align=True)

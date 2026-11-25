@@ -355,6 +355,24 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.20
+
+La composizione segue In e Out della scena; un colore per livello
+
+- **Segui In/Out della scena** (*Tavola e tempo*, attivo per le nuove composizioni): la
+  composizione dura da Start a End della scena. Cambiando In o Out la tavola e il suono si
+  adattano subito; cambiando la *Durata* (o scalando la tavola) si sposta l'End della scena e le
+  altre composizioni che la seguono si adeguano. La prima composizione che la segue porta la
+  scena alla sua durata, quindi il suono non cambia. Con le *Sezioni da keyframe* il loop tiene
+  la sua durata e l'ultima sezione arriva fino all'End; i keyframe dopo l'End non suonano.
+  Ascoltando *Una dopo l'altra* ogni composizione tiene la sua durata. I file salvati prima
+  restano com'erano: l'opzione si accende a mano. Il Preview Range continua a scurire la tavola
+  fuori dall'intervallo, senza cambiare il suono. Nelle Preferenze: *Nuove composizioni → Segui
+  In/Out della scena*.
+- **Un colore per livello**: ogni livello ha un suo colore (scelto in automatico, il meno usato,
+  o a mano dal pallino nella lista dei livelli) e la sua strip nel Video Sequencer, con *Un
+  canale per livello*, ha lo stesso colore. Un livello duplicato prende un colore nuovo.
+
 ## 0.0.19
 
 Passata di correzioni (livelli, Solo, file del suono, strumenti registrati)

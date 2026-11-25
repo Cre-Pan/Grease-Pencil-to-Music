@@ -164,6 +164,10 @@ fusione di Procreate):
 - **Sezioni da keyframe** (*Tavola e tempo*): ogni keyframe Grease Pencil apre una sezione
   (strofa, ritornello…) che ripete il suo disegno fino al keyframe successivo; l'ultima
   suona un loop. La testina riparte a ogni sezione e la scena dura quanto il brano.
+- **Segui In/Out della scena** (*Tavola e tempo*): la composizione dura da Start a End della
+  scena; spostando In o Out tavola e suono si adattano, cambiando la *Durata* si sposta l'End.
+- **Colore del livello**: il pallino nella lista dei livelli; la strip del livello nel
+  Sequencer ha lo stesso colore.
 - **Forma piena** (tratto riempito): *Cluster tonale* suona tutte le note della scala che
   copre; *Banda di rumore* è rumore filtrato tra il bordo inferiore e superiore della forma
   (come il sintetizzatore ANS).
