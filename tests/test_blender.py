@@ -398,6 +398,8 @@ def test_panels_menus_and_preferences_draw(comp):
     menu = _Drawer(log)
     ui.GP2M_MT_add_instrument.draw(menu, bpy.context)
     ui.GP2M_MT_change_instrument.draw(_Drawer(log), bpy.context)
+    for recorded in ui.CHANGE_RECORDED_MENUS:  # the web app's families, in submenus
+        recorded.draw(_Drawer(log), bpy.context)
     ui.VIEW3D_MT_gp2m_add.draw(_Drawer(log), bpy.context)
     ui.draw_export_menu(_Drawer(log), bpy.context)
     ui.draw_add_menu(_Drawer(log), bpy.context)
@@ -412,6 +414,7 @@ def test_panels_menus_and_preferences_draw(comp):
             "channel", "new_bpm", "volume_feedback", "gp2m.import_midi", "gp2m.export_web",
             "GP2M_PT_help_main", "GP2M_PT_help_reading", "GP2M_PT_help_instrument",
             "GP2M_PT_help_export", "GP2M_UL_layers", "GP2M_MT_change_instrument",
+            "gp2m.set_instrument", ui.CHANGE_RECORDED_MENUS[0].bl_idname,
             "solo", "mute", "use_onion_skinning", "lock"} <= drawn
     assert sum(1 for entry in log if entry[0] == "markdown") == len(sub("help").classes)
 

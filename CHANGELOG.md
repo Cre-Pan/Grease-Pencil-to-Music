@@ -378,6 +378,8 @@ Livelli, Solo e Preview Range
   che nascosto, e viceversa all'export.
 - Corretto un crash: con Auto attivo, la rigenerazione aspetta la fine di G/R/S/Alt+S in Edit
   Mode.
+- Il menu **♪ Cambia strumento** ha anche i 69 strumenti registrati della 0.0.11, per famiglia
+  in *Registrati (web app)* (la famiglia dello strumento attuale ha la spunta).
 
 ## 0.0.11
 

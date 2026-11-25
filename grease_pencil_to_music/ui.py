@@ -116,6 +116,58 @@ def layer_instrument_slot(comp, layer_name):
     return own[0][0]
 
 
+def _change_target(context):
+    """(composition, slot index, material, layer) the change-instrument menus act on."""
+    comp = active_composition(context)
+    if comp is None:
+        return None, None, None, None
+    chosen = getattr(context, "gp2m_material", None)
+    layer = getattr(context, "gp2m_layer", None)
+    if chosen is not None:
+        index = next((i for i, slot in enumerate(comp.material_slots)
+                      if slot.material == chosen), None)
+    elif layer is not None:
+        index = layer_instrument_slot(comp, layer.name)
+    else:
+        index = comp.active_material_index
+    material = (comp.material_slots[index].material
+                if index is not None and 0 <= index < len(comp.material_slots) else None)
+    return comp, index, material, layer
+
+
+def _change_instrument_buttons(layout, context, idents):
+    from . import synth
+    comp, index, material, layer = _change_target(context)
+    if comp is None:
+        return
+    current = material.gp2m_instrument if material is not None else None
+    for ident in idents:
+        inst = synth.INSTRUMENT_BY_ID.get(ident)
+        if inst is None:
+            continue
+        icon_name = "CHECKMARK" if ident == current else INSTRUMENT_ICONS.get(ident, "DOT")
+        if material is None:  # a layer without instruments: add one
+            op = layout.operator("gp2m.add_instrument", text=inst.label, icon=icon_name)
+            op.instrument = ident
+            op.layer = layer.name if layer is not None else ""
+        else:
+            op = layout.operator("gp2m.set_instrument", text=inst.label, icon=icon_name)
+            op.instrument = ident
+            op.index = index
+
+
+def _change_recorded_menu(menu_id, title, idents):
+    def draw(self, context):
+        _change_instrument_buttons(self.layout.column(), context, idents)
+    return type(menu_id, (bpy.types.Menu,), {"bl_idname": menu_id, "bl_label": title,
+                                             "draw": draw})
+
+
+CHANGE_RECORDED_MENUS = tuple(
+    _change_recorded_menu(menu_id.replace("_add_recorded_", "_change_recorded_"), title, idents)
+    for menu_id, title, idents in _recorded_families())
+
+
 class GP2M_MT_change_instrument(bpy.types.Menu):
     """Instruments for the layer (or the instrument slot) taken from the context."""
 
@@ -123,40 +175,22 @@ class GP2M_MT_change_instrument(bpy.types.Menu):
     bl_label = "Cambia strumento"
 
     def draw(self, context):
-        from . import synth
-        comp = active_composition(context)
+        comp, _index, material, _layer = _change_target(context)
         if comp is None:
             return
-        chosen = getattr(context, "gp2m_material", None)
-        layer = getattr(context, "gp2m_layer", None)
-        if chosen is not None:
-            index = next((i for i, slot in enumerate(comp.material_slots)
-                          if slot.material == chosen), None)
-        elif layer is not None:
-            index = layer_instrument_slot(comp, layer.name)
-        else:
-            index = comp.active_material_index
-        material = (comp.material_slots[index].material
-                    if index is not None and 0 <= index < len(comp.material_slots) else None)
         current = material.gp2m_instrument if material is not None else None
         row = self.layout.row()
-        for title, idents in INSTRUMENT_GROUPS:
+        for title, idents in props.INSTRUMENT_FAMILIES:
+            if idents and idents[0].startswith("S_"):
+                continue
             col = row.column()
             col.label(text=title)
-            for ident in idents:
-                if ident not in synth.INSTRUMENT_BY_ID:
-                    continue
-                inst = synth.INSTRUMENT_BY_ID[ident]
-                icon_name = "CHECKMARK" if ident == current else INSTRUMENT_ICONS.get(ident,
-                                                                                       "DOT")
-                if material is None:  # a layer without instruments: add one
-                    op = col.operator("gp2m.add_instrument", text=inst.label, icon=icon_name)
-                    op.instrument = ident
-                    op.layer = layer.name if layer is not None else ""
-                else:
-                    op = col.operator("gp2m.set_instrument", text=inst.label, icon=icon_name)
-                    op.instrument = ident
-                    op.index = index
+            _change_instrument_buttons(col, context, idents)
+        col = row.column()
+        col.label(text="Registrati (web app)")
+        for menu, (_menu_id, title, idents) in zip(CHANGE_RECORDED_MENUS, _recorded_families()):
+            col.menu(menu.bl_idname, text=title,
+                     icon="CHECKMARK" if current in idents else "SOUND")
 
 
 class GP2M_UL_layers(bpy.types.UIList):
@@ -675,7 +709,7 @@ def draw_export_menu(self, _context):
         self.layout.operator("gp2m.export", text=label, icon="FILE_SOUND").format = fmt
 
 
-classes = RECORDED_MENUS + (
+classes = RECORDED_MENUS + CHANGE_RECORDED_MENUS + (
     GP2M_MT_add_instrument,
     GP2M_MT_change_instrument,
     GP2M_UL_layers,
