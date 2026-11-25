@@ -329,6 +329,12 @@ def dimensions(settings):
     return rows, settings.length * settings.seconds_width, rows * settings.row_height
 
 
+def vertical_extent(settings):
+    """(bottom, top) of the board in local z, labels and playhead included."""
+    _rows, _width, top = dimensions(settings)
+    return -0.15, top + 0.25
+
+
 def key_width(settings):
     return max(0.6, 6.0 * settings.row_height)
 

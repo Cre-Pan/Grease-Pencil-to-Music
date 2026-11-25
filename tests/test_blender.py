@@ -2133,3 +2133,77 @@ def test_layers_have_their_own_colors_on_strips(comp):
     props.ensure_layer_settings(comp.data)
     fresh = props.find_layer_settings(comp.data, "Nuovo")
     assert fresh.color not in ("NONE", "COLOR_09")
+
+
+# --- Compositions as layers on the table ------------------------------------------------
+
+def test_new_composition_is_stacked_on_the_table(comp):
+    table = sub("table")
+    board = sub("board")
+    other = _fresh(None)
+    below = max((o for o in table.compositions(bpy.context.scene) if o != other),
+                key=lambda o: table._top_point(o).z)
+    z0, _z1 = board.vertical_extent(other.gp2m)
+    bottom = (other.matrix_world @ __import__("mathutils").Vector((0, 0, z0))).z
+    assert bottom >= table._top_point(below).z - 1e-4
+    assert abs(other.matrix_world.translation.x - below.matrix_world.translation.x) < 1e-4
+
+
+def test_composition_list_follows_the_channels(comp):
+    table = sub("table")
+    engine = sub("engine")
+    scene = bpy.context.scene
+    other = _fresh(None)
+    ordered = table.by_channel(scene)
+    assert ordered[-1] == other  # the newest is the highest level
+    # The list shows the highest channel on top.
+    flags, order = sub("table").GP2M_UL_compositions.filter_items(
+        type("L", (), {"bitflag_filter_item": 1})(), bpy.context, scene, "objects")
+    shown = sorted((order[i], obj) for i, obj in enumerate(scene.objects) if flags[i])
+    assert [obj for _rank, obj in shown][0] == other
+    # Moving it down swaps the channel blocks with the one below.
+    below = ordered[-2]
+    before = (below.gp2m.channel, other.gp2m.channel)
+    bpy.context.view_layer.objects.active = other
+    assert bpy.ops.gp2m.composition_move(direction="DOWN") == {"FINISHED"}
+    assert other.gp2m.channel == before[0] and below.gp2m.channel > other.gp2m.channel
+    assert table.by_channel(scene).index(other) == len(ordered) - 2
+    for obj in (other, below):
+        first, last = table.channel_span(scene, obj)
+        channels = {s.channel for s in engine.composition_strips(scene, obj)}
+        assert channels <= set(range(first, last + 1))
+    # Picking a row selects the composition.
+    index = list(scene.objects).index(below)
+    scene.gp2m_composition_index = index
+    assert bpy.context.view_layer.objects.active == below
+
+
+def test_hide_lock_duplicate_remove_and_stack(comp):
+    table = sub("table")
+    board = sub("board")
+    engine = sub("engine")
+    scene = bpy.context.scene
+    grid = board.grid_object(comp)
+    assert bpy.ops.gp2m.composition_toggle(name=comp.name, what="HIDE") == {"FINISHED"}
+    assert comp.hide_get() and grid.hide_get()
+    bpy.ops.gp2m.composition_toggle(name=comp.name, what="HIDE")
+    assert not comp.hide_get() and not grid.hide_get()
+    bpy.ops.gp2m.composition_toggle(name=comp.name, what="LOCK")
+    assert comp.hide_select and grid.hide_select
+    bpy.ops.gp2m.composition_toggle(name=comp.name, what="LOCK")
+    assert not comp.hide_select
+    table.select_only(bpy.context, comp)
+    assert bpy.ops.gp2m.composition_duplicate() == {"FINISHED"}
+    copy = bpy.context.view_layer.objects.active
+    assert copy != comp and copy.gp2m.is_composition and board.has_board(copy)
+    assert board.grid_object(copy) not in (None, grid)
+    assert table.by_channel(scene)[-1] == copy
+    assert bpy.ops.gp2m.table_stack() == {"FINISHED"}
+    ordered = table.by_channel(scene)
+    for low, high in zip(ordered, ordered[1:]):
+        assert high.matrix_world.translation.z > low.matrix_world.translation.z
+    name = copy.name
+    grid_name = board.grid_object(copy).name
+    assert bpy.ops.gp2m.composition_remove() == {"FINISHED"}
+    assert bpy.data.objects.get(name) is None and bpy.data.objects.get(grid_name) is None
+    assert not [s for s in scene.sequence_editor.strips_all if s.get(engine.OWNER_KEY) == name]

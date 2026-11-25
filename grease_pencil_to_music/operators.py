@@ -75,7 +75,6 @@ class GP2M_OT_add_composition(bpy.types.Operator):
         obj = bpy.data.objects.new(name, gp)
         collection = getattr(context, "collection", None) or scene.collection
         collection.objects.link(obj)
-        obj.location = scene.cursor.location
         obj.show_in_front = True
         obj.gp2m.is_composition = True
 
@@ -100,6 +99,8 @@ class GP2M_OT_add_composition(bpy.types.Operator):
         # A new level of the timeline: above the other compositions and any clip.
         s.channel = engine.new_composition_channel(
             scene, len(board.user_layers(gp)) if s.layer_channels else 1)
+        from . import table
+        table.place_new(obj, scene)  # on the table, above the other compositions
 
         board.rebuild(obj, scene)
         for other in context.selected_objects:
