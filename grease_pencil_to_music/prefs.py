@@ -136,6 +136,10 @@ class GP2M_Preferences(bpy.types.AddonPreferences):
     # Defaults for new compositions (each composition keeps its own copy).
     new_bpm: FloatProperty(name="BPM", default=120.0, min=20.0, max=300.0)
     new_length: FloatProperty(name="Durata (s)", default=8.0, min=1.0, max=300.0)
+    new_follow_scene: BoolProperty(
+        name="Segui In/Out della scena", default=True,
+        description="Le nuove composizioni durano da Start a End della scena (la prima "
+        "porta la scena alla sua Durata)")
     new_low_note: IntProperty(name="Nota più bassa", default=48, min=12, max=96)
     new_octaves: IntProperty(name="Ottave", default=3, min=1, max=7)
     new_row_height: FloatProperty(name="Altezza riga", default=0.12, min=0.02, max=1.0)
@@ -197,7 +201,8 @@ class GP2M_Preferences(bpy.types.AddonPreferences):
         grid = box.grid_flow(row_major=True, columns=2, even_columns=True, align=False)
         for attr in ("new_bpm", "new_length", "new_low_note", "new_octaves", "new_row_height",
                      "new_seconds_width", "new_scale", "new_time_grid", "new_key_labels",
-                     "new_layers", "new_instruments", "new_sample_rate", "enter_draw_mode"):
+                     "new_layers", "new_instruments", "new_sample_rate", "new_follow_scene",
+                     "enter_draw_mode"):
             grid.prop(self, attr)
         box = layout.box()
         box.label(text="Avanzate", icon="PREFERENCES")
@@ -234,6 +239,7 @@ class _Defaults:
     mp3_bitrate = 192
     new_bpm = 120.0
     new_length = 8.0
+    new_follow_scene = True
     new_low_note = 48
     new_octaves = 3
     new_row_height = 0.12

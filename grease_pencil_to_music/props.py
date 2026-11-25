@@ -41,9 +41,79 @@ def _arrangement_changed(self, context):
         engine.arrange_safe(scene)
 
 
+def _follow_changed(self, _context):
+    from . import engine
+    obj = self.id_data
+    if not isinstance(obj, bpy.types.Object) or not obj.gp2m.is_composition:
+        return
+    scene = engine.scene_of(obj)
+    if scene is None:
+        return
+    if self.follow_scene:
+        engine.link_composition(obj, scene)
+    if obj.gp2m.use_sections:
+        from . import handlers
+        handlers.mark_dirty(obj)  # the last section ends at the scene End, or not
+    engine.arrange_safe(scene)
+
+
 def _timeline_changed(_self, _context):
     from . import timeline
     timeline.tag_redraw()
+
+
+# The nine colors of the Sequencer strips: a layer and its strip share one of them.
+LAYER_COLOR_ITEMS = (
+    ("NONE", "Nessuno", "Nessun colore", "RADIOBUT_OFF", 0),
+    ("COLOR_01", "Rosso", "", "STRIP_COLOR_01", 1),
+    ("COLOR_02", "Arancione", "", "STRIP_COLOR_02", 2),
+    ("COLOR_03", "Giallo", "", "STRIP_COLOR_03", 3),
+    ("COLOR_04", "Verde", "", "STRIP_COLOR_04", 4),
+    ("COLOR_05", "Blu", "", "STRIP_COLOR_05", 5),
+    ("COLOR_06", "Viola", "", "STRIP_COLOR_06", 6),
+    ("COLOR_07", "Rosa", "", "STRIP_COLOR_07", 7),
+    ("COLOR_08", "Marrone", "", "STRIP_COLOR_08", 8),
+    ("COLOR_09", "Grigio", "", "STRIP_COLOR_09", 9),
+)
+AUTO_COLORS = ("COLOR_05", "COLOR_01", "COLOR_04", "COLOR_03", "COLOR_06", "COLOR_02",
+               "COLOR_07", "COLOR_08")  # gray only by hand
+def apply_layer_color(gp_data, item):
+    """The Sequencer strips of the layer take its color (Grease Pencil layers have no
+    writable channel color in Blender 5: the color is shown in the layer list)."""
+    if item.is_group:
+        return
+    from . import engine
+    for obj in bpy.data.objects:
+        if obj.type != "GREASEPENCIL" or obj.data != gp_data or not obj.gp2m.is_composition:
+            continue
+        for scene in obj.users_scene:
+            strip = engine.layer_strips(scene, obj).get(item.name)
+            if strip is not None and strip.color_tag != item.color:
+                strip.color_tag = item.color
+
+
+def _color_changed(self, _context):
+    self.color_assigned = True
+    apply_layer_color(self.id_data, self)
+
+
+def assign_layer_colors(gp_data):
+    """Layers without a color yet (new, or from files before 0.0.20) get the least
+    used one, so that every layer has its own color."""
+    pending = [item for item in gp_data.gp2m_layers
+               if not item.is_group and not item.color_assigned]
+    if not pending:
+        return
+    order = {layer.name: index for index, layer in enumerate(gp_data.layers)}
+    pending.sort(key=lambda item: order.get(item.name, len(order)))
+    used = [item.color for item in gp_data.gp2m_layers
+            if not item.is_group and item.color_assigned]
+    for item in pending:
+        color = min(AUTO_COLORS, key=lambda tag: (used.count(tag), AUTO_COLORS.index(tag)))
+        item["color"] = int(color[-2:])
+        item.color_assigned = True
+        used.append(color)
+        apply_layer_color(gp_data, item)
 
 
 def _composition_poll(_self, obj):
@@ -259,6 +329,13 @@ class GP2M_LayerSettings(bpy.types.PropertyGroup):
                                  "(12 = un'ottava sopra, -5 = una quarta sotto…)",
                                  update=_sound_changed)
     settings_version: IntProperty(default=0, options={"HIDDEN"})
+    color: EnumProperty(name="Colore", items=LAYER_COLOR_ITEMS, default="NONE",
+                        update=_color_changed,
+                        description="Colore del livello: la sua strip nel Video Sequencer "
+                        "prende lo stesso colore")
+    color_assigned: BoolProperty(default=False, options={"HIDDEN"},
+                                 description="Il colore è già stato scelto (a mano o in "
+                                 "automatico)")
 
     # Effects switched on and off by the checkbox in their panel header.
     use_echo: BoolProperty(name="Eco", default=False,
@@ -404,6 +481,12 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
                        update=_board_changed)
     length: FloatProperty(name="Durata (s)", default=8.0, min=1.0, max=300.0,
                           description="Durata del loop in secondi", update=_board_changed)
+    follow_scene: BoolProperty(
+        name="Segui In/Out della scena", default=False, update=_follow_changed,
+        description="La composizione dura da Start a End della scena: cambiando In e Out "
+        "la tavola e il suono si adattano, e cambiando la Durata si sposta l'End della "
+        "scena. Con le sezioni da keyframe l'ultima sezione arriva fino all'End. "
+        "Ascoltando 'Una dopo l'altra' ogni composizione tiene la sua durata")
     low_note: IntProperty(name="Nota più bassa", default=48, min=12, max=96,
                           description="Nota MIDI della riga più bassa (48 = C3)",
                           update=_board_changed)
@@ -542,8 +625,9 @@ class GP2M_PlaySettings(bpy.types.PropertyGroup):
     mode: EnumProperty(name="Ascolto", items=PLAY_MODES, default="TOGETHER",
                        update=_arrangement_changed)
     fit_range: BoolProperty(name="Adatta l'intervallo della scena", default=True,
-                            description="Inizio e fine della scena seguono le composizioni "
-                            "(così il play va in loop)", update=_arrangement_changed)
+                            description="La fine della scena segue le composizioni (così il "
+                            "play va in loop). Non serve quando le composizioni seguono "
+                            "In/Out della scena", update=_arrangement_changed)
 
 
 TIMELINE_SOURCES = (
@@ -699,7 +783,7 @@ def find_layer_settings(gp_data, layer_name):
     return None
 
 
-_COPY_SKIP = {"rna_type", "name", "is_group", "solo"}
+_COPY_SKIP = {"rna_type", "name", "is_group", "solo", "color", "color_assigned"}
 
 
 # What "Copia impostazioni" carries from a layer to another: reading, modifiers,
@@ -807,6 +891,7 @@ def ensure_layer_settings(gp_data):
         if (any(item.solo_saved_opacity >= 0.0 for item in live_items)
                 and not any(item.solo for item in live_items)):
             apply_solo(gp_data)
+        assign_layer_colors(gp_data)
         return
     live = set(layer_names) | set(group_names)
     # Duplicates first: read the source settings now, before the collection grows
@@ -856,3 +941,4 @@ def ensure_layer_settings(gp_data):
         item.is_group = True
     if any(item.solo for item in gp_data.gp2m_layers):
         apply_solo(gp_data)  # a new layer joins the dimmed ones
+    assign_layer_colors(gp_data)

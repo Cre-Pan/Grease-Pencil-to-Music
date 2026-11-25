@@ -23,7 +23,7 @@ _cleanup_needed = [False]
 _object_signature = [None]
 _was_playing = [False]
 _scaled = set()  # compositions whose object scale changed
-_scene_timing = {}  # scene name -> (frame_start, fps, fps_base)
+_scene_timing = {}  # scene name -> (frame_start, fps, fps_base, frame_end)
 _msgbus_owner = object()
 
 
@@ -315,7 +315,8 @@ def on_depsgraph_update(_scene, depsgraph):
 
 
 def _timing(scene):
-    return (scene.frame_start, scene.render.fps, round(scene.render.fps_base, 6))
+    return (scene.frame_start, scene.render.fps, round(scene.render.fps_base, 6),
+            scene.frame_end)
 
 
 def _preview(scene):
@@ -357,17 +358,29 @@ def _check_preview(scene):
 
 
 def _check_scene_timing(scene):
-    """A new scene start or frame rate moves strips, playheads and keyframe sections."""
+    """A new scene start or frame rate moves strips, playheads and keyframe sections;
+    a new Start or End changes the compositions that follow the scene's In/Out."""
     timing = _timing(scene)
     previous = _scene_timing.get(scene.name)
     _scene_timing[scene.name] = timing
-    if previous is not None and previous != timing:
-        for obj in compositions():
-            if engine.scene_of(obj) == scene:
-                if previous[0] != timing[0] or obj.gp2m.use_sections:
-                    mark_dirty(obj)
-        _cleanup_needed[0] = True  # arranges every scene
-        _ensure_timer()
+    if previous is None or previous == timing:
+        return
+    only_end = previous[:3] == timing[:3]
+    following = False
+    for obj in compositions():
+        if engine.scene_of(obj) != scene:
+            continue
+        follows = engine.follows_scene(obj, scene)
+        following = following or follows
+        if only_end:
+            if follows and obj.gp2m.use_sections:
+                mark_dirty(obj)  # the last section ends at the new End
+        elif previous[0] != timing[0] or obj.gp2m.use_sections:
+            mark_dirty(obj)
+    if only_end and not following:
+        return  # e.g. the End written by 'Adatta l'intervallo della scena'
+    _cleanup_needed[0] = True  # arranges every scene
+    _ensure_timer()
 
 
 @persistent
@@ -381,6 +394,7 @@ def on_load_post(*_args):
     engine._state.clear()  # runtime state of the previous file (keyed by object name)
     _scene_timing.clear()
     _scene_preview.clear()
+    engine._linked_range.clear()
     _layer_syncs.clear()  # names of the previous file
     _shade_scenes.clear()
     board._pending.clear()

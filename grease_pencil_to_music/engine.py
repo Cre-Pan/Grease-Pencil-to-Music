@@ -93,12 +93,17 @@ MAX_SECTIONS = 24
 
 
 def section_frames(obj, scene):
-    """Scene frames where a keyframe section starts (the first is the scene start)."""
+    """Scene frames where a keyframe section starts (the first is the scene start).
+
+    Following the scene's In/Out, keyframes after the scene End are not heard."""
     start = scene.frame_start
+    last = scene.frame_end if follows_scene(obj, scene) else None
     frames = {start}
     for layer in board.user_layers(obj.data):
         for frame in layer.frames:
-            frames.add(max(int(frame.frame_number), start))
+            number = max(int(frame.frame_number), start)
+            if last is None or number <= last:
+                frames.add(number)
     return sorted(frames)[:MAX_SECTIONS]
 
 
@@ -133,7 +138,9 @@ def render_composition(obj, scene, stems=False):
     s = obj.gp2m
     spec, mapping, rate = board_spec(s), prefs.get_mapping(), int(s.sample_rate)
     frames = section_frames(obj, scene) if s.use_sections else [scene.frame_start]
-    if len(frames) == 1:
+    # Following the scene, the last section repeats its loop until the scene End.
+    until = scene_seconds(scene) if s.use_sections and follows_scene(obj, scene) else None
+    if len(frames) == 1 and until is None:
         reads = reader.read_composition(obj, frames[0], use_modifiers=s.use_modifiers)
         result = mixer.render(_layer_inputs(obj, reads), spec, mapping, rate, loop=s.loop,
                               master_volume=s.master_volume, master_fx=master_fx(s),
@@ -145,12 +152,91 @@ def render_composition(obj, scene, stems=False):
     for i, frame in enumerate(frames):
         reads = reader.read_composition(obj, frame, use_modifiers=s.use_modifiers)
         first_reads = reads if first_reads is None else first_reads
-        end = times[i + 1] if i + 1 < len(times) else times[i] + s.length
+        if i + 1 < len(times):
+            end = times[i + 1]
+        elif until is not None and until > times[i]:
+            end = until
+        else:
+            end = times[i] + s.length
         parts.append((times[i], end, mixer.render(
             _layer_inputs(obj, reads), spec, mapping, rate, loop=False,
             master_volume=s.master_volume, stems=stems)))
     return mixer.sequence(parts, s.length, rate, loop=s.loop,
                           master_fx=master_fx(s), stems=stems), first_reads
+
+
+# --- Scene In / Out ---------------------------------------------------------------
+
+def follows_scene(obj, scene):
+    """True when the composition takes its length from the scene Start and End (In and
+    Out). Playing 'Una dopo l'altra' the compositions keep their own length."""
+    return (bool(obj.gp2m.follow_scene) and scene is not None
+            and scene.gp2m_play.mode != "SEQUENCE")
+
+
+def scene_seconds(scene):
+    """Seconds from the scene Start to the end of its End frame."""
+    return (scene.frame_end - scene.frame_start + 1) / _fps(scene)
+
+
+def _loop_frames(obj, fps):
+    return max(1, int(round(obj.gp2m.length * fps)))
+
+
+def _range_key(scene):
+    return (scene.frame_start, scene.frame_end, round(_fps(scene), 6))
+
+
+_linked_range = {}  # scene name -> Start, End and fps the compositions were matched to
+
+
+def link_composition(obj, scene):
+    """'Segui In/Out della scena' switched on (or a new composition).
+
+    When no other composition of the scene follows it yet, the scene End moves to
+    the end of this composition, so its sound does not change (as before 0.0.20);
+    otherwise the composition takes the length of the scene, like the others."""
+    if scene is None or not follows_scene(obj, scene):
+        return
+    fps = _fps(scene)
+    others = [o for o in scene_compositions(scene) if o != obj and follows_scene(o, scene)]
+    if not others:
+        if obj.gp2m.use_sections:
+            frames = max(1, int(round(duration(obj) * fps)))
+        else:
+            frames = _loop_frames(obj, fps)
+        end = scene.frame_start + frames - 1
+        if scene.frame_end != end:
+            scene.frame_end = end
+        state(obj)["linked_frames"] = _loop_frames(obj, fps)
+        _linked_range[scene.name] = _range_key(scene)
+
+
+def _follow_scene(scene, linked):
+    """The compositions that follow the scene last from its Start to its End.
+
+    It works both ways: a new Start or End (or frame rate) changes their length,
+    and a composition made longer or shorter (Durata, scaling the board, a MIDI
+    import...) moves the scene End, then the others follow. With keyframe sections
+    the loop keeps its length and the last section lasts until the End."""
+    fps = _fps(scene)
+    loops = [obj for obj in linked if not obj.gp2m.use_sections]
+    if _linked_range.get(scene.name) == _range_key(scene):  # the scene did not change
+        moved = [obj for obj in loops
+                 if state(obj).get("linked_frames") not in (None, _loop_frames(obj, fps))]
+        if moved:
+            active = _active_composition(scene)
+            source = active if active in moved else moved[0]
+            end = scene.frame_start + _loop_frames(source, fps) - 1
+            if scene.frame_end != end:
+                scene.frame_end = end
+    seconds = min(max(scene_seconds(scene), 1.0), 300.0)
+    target = max(1, int(round(seconds * fps)))
+    for obj in loops:
+        if _loop_frames(obj, fps) != target:
+            obj.gp2m.length = target / fps
+        state(obj)["linked_frames"] = target
+    _linked_range[scene.name] = _range_key(scene)
 
 
 def _context_signature(obj, scene):
@@ -443,7 +529,7 @@ def _new_strip(scene, name, path, channel, old=None, tags=None):
     editor = scene.sequence_editor or scene.sequence_editor_create()
     keep = {}
     if old is not None:
-        for attr in ("volume", "pan", "mute"):
+        for attr in ("volume", "pan", "mute", "color_tag"):
             if hasattr(old, attr):
                 keep[attr] = getattr(old, attr)
         _remove_strip(editor, old)
@@ -532,6 +618,7 @@ def _place_layer_strips(scene, obj, result):
         same_sound = (_same_audio(sounds.get(name), audio) and _strip_file_ok(strip)
                       and _same_file(strip, paths.get(name)))
         if same_sound and strip.channel == channel and strip.duration == frames:
+            _color_strip(obj, strip, name)
             continue
         path = paths.get(name)
         if not same_sound:
@@ -545,6 +632,7 @@ def _place_layer_strips(scene, obj, result):
             strip = _new_strip(scene, strip_name(obj, name), path, channel, old=strip,
                                tags={OWNER_KEY: obj.name, LAYER_KEY: name})
             strip.mute = strip.mute or bool(st.get("muted"))
+        _color_strip(obj, strip, name)
         if paths.get(name) != path:
             _forget_file(paths.get(name))
         paths[name], sounds[name] = path, audio
@@ -553,6 +641,14 @@ def _place_layer_strips(scene, obj, result):
         sounds.pop(name, None)
     if obj.gp2m.channel != base:
         obj.gp2m.channel = base
+
+
+def _color_strip(obj, strip, layer_name):
+    """The strip of a layer has the layer's color."""
+    item = props.find_layer_settings(obj.data, layer_name)
+    color = item.color if item is not None else "NONE"
+    if strip.color_tag != color:
+        strip.color_tag = color
 
 
 def _same_file(strip, path):
@@ -644,7 +740,8 @@ def arrange(scene):
 def _arrange(scene):
     """Place, mute and time every composition of the scene for the play mode.
 
-    TOGETHER: all start at the scene start. SOLO: only the active composition
+    Compositions with 'Segui In/Out della scena' last from the scene Start to its
+    End (see :func:`_follow_scene`). TOGETHER: all start at the scene start. SOLO: only the active composition
     is heard. SEQUENCE: one after another, by "order" then name. The scene
     range follows (so playback loops on what you hear). Writes only changes.
     """
@@ -653,6 +750,9 @@ def _arrange(scene):
         return
     play = scene.gp2m_play
     fps = _fps(scene)
+    linked = [obj for obj in comps if follows_scene(obj, scene)]
+    if linked:
+        _follow_scene(scene, linked)
     lengths = {obj.name: max(1, int(round(duration(obj) * fps))) for obj in comps}
     solo = _active_composition(scene) if play.mode == "SOLO" else None
     if play.mode == "SOLO" and solo is None:
@@ -689,7 +789,7 @@ def _arrange(scene):
         if strip.mute != mute:
             strip.mute = mute
 
-    if play.fit_range:
+    if play.fit_range and not linked:  # following the scene, the scene leads
         if play.mode == "SEQUENCE":
             total = offset
         elif solo is not None:

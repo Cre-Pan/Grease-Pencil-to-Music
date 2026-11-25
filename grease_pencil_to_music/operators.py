@@ -96,6 +96,7 @@ class GP2M_OT_add_composition(bpy.types.Operator):
             material.gp2m_layer = gp.layers[0].name
             gp.materials.append(material)
         props.ensure_layer_settings(gp)
+        s.follow_scene = p.new_follow_scene  # In/Out of the scene (or the scene takes its length)
 
         board.rebuild(obj, scene)
         for other in context.selected_objects:
