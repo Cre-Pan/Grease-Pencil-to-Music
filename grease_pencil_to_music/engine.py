@@ -47,15 +47,41 @@ def board_spec(settings):
 
 
 def _layer_fx(settings):
+    """The layer effects whose checkbox is on."""
     if settings is None:
         return mixer.LayerFx()
     return mixer.LayerFx(
-        delay_mix=settings.delay_mix,
+        delay_mix=settings.delay_mix if settings.use_echo else 0.0,
         delay_beats=settings.delay_beats,
         delay_feedback=settings.delay_feedback,
-        reverb_mix=settings.reverb_mix,
+        reverb_mix=settings.reverb_mix if settings.use_reverb else 0.0,
         reverb_size=settings.reverb_size,
-        lofi=settings.lofi,
+        lofi=settings.lofi if settings.use_lofi else 0.0,
+    )
+
+
+def layer_mods(settings):
+    """The :class:`layer_mods.Stack` of the modifiers that are on."""
+    from . import layer_mods as lm
+    if settings is None:
+        return lm.Stack()
+    s = settings
+    return lm.Stack(
+        array=lm.Array(count=s.array_count, fill=s.array_fill, beats=round(s.array_beats, 4),
+                       pitch=s.array_pitch, unit=s.array_unit,
+                       decay=round(s.array_decay, 4)) if s.use_array else None,
+        mirror=lm.Mirror(time=s.mirror_time, pitch=s.mirror_pitch, keep=s.mirror_keep,
+                         time_center=round(s.mirror_time_center, 4),
+                         pitch_center=round(s.mirror_pitch_center, 4))
+        if s.use_mirror else None,
+        transpose=lm.Transpose(steps=s.transpose_steps, unit=s.transpose_unit)
+        if s.use_transpose else None,
+        fade=lm.Fade(direction=s.fade_direction, scope=s.fade_scope,
+                     length=round(s.fade_length, 4), minimum=round(s.fade_minimum, 4))
+        if s.use_fade else None,
+        noise=lm.Noise(pitch=round(s.noise_pitch, 4), width=round(s.noise_width, 4),
+                       time=round(s.noise_time, 4), scale=round(s.noise_scale, 4),
+                       seed=s.noise_seed) if s.use_noise else None,
     )
 
 
@@ -91,10 +117,12 @@ def _layer_inputs(obj, reads):
             legato_gap=settings.legato_gap if settings else 1.0,
             gain=read.opacity,
             fx=_layer_fx(settings),
-            canon_voices=settings.canon_voices if settings else 1,
+            canon_voices=settings.canon_voices if settings and settings.use_canon else 1,
             canon_delay=settings.canon_delay * beat if settings else 0.0,
             canon_transpose=settings.canon_transpose if settings else 0,
             harmony=settings.harmony if settings else "OFF",
+            mods=layer_mods(settings),
+            rows=board.dimensions(obj.gp2m)[0],
         ))
     return layers
 

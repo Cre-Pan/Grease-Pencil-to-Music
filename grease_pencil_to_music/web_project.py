@@ -201,6 +201,7 @@ class Layer:
     reverb: float = 0.0
     harmony: str = "OFF"
     strokes: list = field(default_factory=list)
+    mods: dict = field(default_factory=dict)  # layer settings of the modifiers (mods_to_settings)
 
 
 @dataclass
@@ -394,6 +395,9 @@ def parse(text, available, row_height=0.12, seconds_width=1.0, beat_layer_name="
             volume=_clamp(_num(raw.get("volume"), 0.85), 0.0, 1.0),
             reverb=_clamp(_num(raw.get("reverb"), 0.0), 0.0, 1.0),
             harmony=harmony if harmony in HARMONIES else "OFF",
+            mods=mods_to_settings((raw.get("mods") if isinstance(raw.get("mods"), list) else [])
+                                  + (state.get("mods") if isinstance(state.get("mods"), list)
+                                     else []), board.low_note, board.octaves),
         )
         project.layers.append(layer)
         by_id[raw.get("id")] = layer
@@ -419,6 +423,95 @@ def parse(text, available, row_height=0.12, seconds_width=1.0, beat_layer_name="
 
 
 # --- Add-on → web -----------------------------------------------------------------------
+
+# --- Modifiers (the web app's stack ↔ the add-on's fixed panels) ------------------------
+
+_UNITS = {"scale": "SCALE", "semi": "SEMITONES"}
+_FADE_DIRS = {"in": "IN", "out": "OUT", "both": "BOTH"}
+_FADE_SCOPES = {"stroke": "STROKE", "song": "SONG"}
+
+
+def _key(table, value, default):
+    return table.get(value, default)
+
+
+def mods_to_settings(mods, low_note=48, octaves=3):
+    """Layer settings (``use_array``, ``array_count``...) of a list of web modifiers.
+
+    The add-on has one modifier of each kind, in a fixed order: the first of each
+    kind in the list wins."""
+    out = {}
+    rows = max(octaves * 12, 1)
+    for m in mods if isinstance(mods, list) else ():
+        if not isinstance(m, dict):
+            continue
+        kind, on = m.get("type"), m.get("on", True) is not False
+        if kind == "fade" and "use_fade" not in out:
+            out.update(use_fade=on, fade_direction=_key(_FADE_DIRS, m.get("dir"), "IN"),
+                       fade_scope=_key(_FADE_SCOPES, m.get("scope"), "STROKE"),
+                       fade_length=_clamp(_num(m.get("len"), 0.5), 0.02, 1.0),
+                       fade_minimum=_clamp(_num(m.get("min"), 0.05), 0.0, 1.0))
+        elif kind == "array" and "use_array" not in out:
+            out.update(use_array=on, array_count=int(_clamp(round(_num(m.get("count"), 4)), 1, 64)),
+                       array_fill=bool(m.get("fill")),
+                       array_beats=_clamp(_num(m.get("beats"), 1.0), -64.0, 64.0),
+                       array_pitch=int(_clamp(round(_num(m.get("pitch"), 0)), -24, 24)),
+                       array_unit=_key(_UNITS, m.get("unit"), "SCALE"),
+                       array_decay=_clamp(_num(m.get("decay"), 0.0), 0.0, 0.95))
+        elif kind == "mirror" and "use_mirror" not in out:
+            p_at = m.get("pAt")
+            center = 0.5 if p_at is None else _clamp((_num(p_at, 0) - low_note) / rows, 0, 1)
+            out.update(use_mirror=on, mirror_time=m.get("time", True) is not False,
+                       mirror_pitch=bool(m.get("pitch")), mirror_keep=m.get("keep", True) is not False,
+                       mirror_time_center=_clamp(_num(m.get("tAt"), 0.5), 0.0, 1.0),
+                       mirror_pitch_center=center)
+        elif kind == "transpose" and "use_transpose" not in out:
+            out.update(use_transpose=on,
+                       transpose_steps=int(_clamp(round(_num(m.get("steps"), 2)), -36, 36)),
+                       transpose_unit=_key(_UNITS, m.get("unit"), "SCALE"))
+        elif kind == "jitter" and "use_noise" not in out:
+            out.update(use_noise=on, noise_time=_clamp(_num(m.get("time"), 0.04), 0.0, 1.0),
+                       noise_pitch=_clamp(_num(m.get("pitch"), 0.15), 0.0, 12.0),
+                       noise_width=_clamp(_num(m.get("width"), 0.25), 0.0, 1.0),
+                       noise_seed=int(_clamp(round(_num(m.get("seed"), 1)), 0, 9999)))
+    return out
+
+
+def settings_to_mods(values, low_note=48, octaves=3):
+    """Web modifiers (in the add-on's order) of layer settings, the ones that are on
+    and the ones that are off but changed from their defaults alike."""
+    v = values
+    get = v.get
+    rows = max(octaves * 12, 1)
+    unit = {"SCALE": "scale", "SEMITONES": "semi"}
+    mods = []
+
+    def add(kind, on, **fields):
+        mods.append({"id": f"m{len(mods):x}gp2m", "type": kind, "on": bool(on), "open": False,
+                     **fields})
+
+    if get("use_array"):
+        add("array", True, count=int(get("array_count", 4)), fill=bool(get("array_fill")),
+            beats=round(float(get("array_beats", 1.0)), 4), pitch=int(get("array_pitch", 0)),
+            unit=unit.get(get("array_unit"), "scale"), decay=round(float(get("array_decay", 0)), 3))
+    if get("use_mirror"):
+        add("mirror", True, time=bool(get("mirror_time", True)), pitch=bool(get("mirror_pitch")),
+            keep=bool(get("mirror_keep", True)),
+            tAt=round(float(get("mirror_time_center", 0.5)), 4),
+            pAt=round(low_note + float(get("mirror_pitch_center", 0.5)) * rows, 3))
+    if get("use_transpose"):
+        add("transpose", True, steps=int(get("transpose_steps", 2)),
+            unit=unit.get(get("transpose_unit"), "scale"))
+    if get("use_fade"):
+        add("fade", True, dir=str(get("fade_direction", "IN")).lower(),
+            scope=str(get("fade_scope", "STROKE")).lower(),
+            len=round(float(get("fade_length", 0.5)), 3), min=round(float(get("fade_minimum", 0.05)), 3))
+    if get("use_noise"):
+        add("jitter", True, time=round(float(get("noise_time", 0.04)), 3),
+            pitch=round(float(get("noise_pitch", 0.15)), 3),
+            width=round(float(get("noise_width", 0.25)), 3), seed=int(get("noise_seed", 1)))
+    return mods
+
 
 def _new_id(prefix, index):
     return f"{prefix}{index:x}gp2m"
@@ -467,6 +560,9 @@ def dump(project):
                  "reverb": round(_clamp(layer.reverb, 0, 1), 3)}
         if layer.harmony in HARMONIES and layer.harmony != "OFF":
             entry["harmony"] = layer.harmony
+        mods = settings_to_mods(layer.mods, board.low_note, board.octaves)
+        if mods:
+            entry["mods"] = mods
         layers.append(entry)
         for stroke in layer.strokes:
             if len(stroke.x) == 0:

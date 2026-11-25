@@ -48,6 +48,8 @@ synth.py       Voice          →  buffer stereo                 [puro]
 effects.py     buffer livello →  eco / riverbero / lo-fi       [puro]
 mixer.py       livelli        →  loop stereo (+ cache per tratto e per livello),
                canone, sezioni da keyframe affiancate             [puro]
+layer_mods.py  StrokeData     →  StrokeData: Array, Simmetria, Trasponi, Fade, Noise
+               del livello, solo nel suono (come la web app)  [puro]
 midi.py        MidiNote       ↔  file .mid (scrittura e lettura) [puro]
 libraries.py   .sf2 / .sfz    →  zone campionate (Zone)        [puro]
 midi_input.py  tastiera MIDI  →  eventi nota (rtmidi2, letto dal thread principale)

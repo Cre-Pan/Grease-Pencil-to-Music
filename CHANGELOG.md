@@ -355,6 +355,33 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.15
+
+Pannelli più compatti, modificatori ed effetti per livello
+
+- **Pannelli riordinati** come quelli di Blender (*Proprietà → Dati oggetto → Musica*):
+  *Livelli* subito sotto i pulsanti, poi *Tavola e tempo*, *Scala e ritmo*, *Mix* e
+  *Sequencer e ascolto*, chiusi di base. Etichette a sinistra e valori a destra, niente
+  riquadri: lo stato (note, tempo di calcolo, sezioni) è una riga sola sotto *Auto / Rigenera*.
+- **Sotto la lista dei livelli**, per il livello attivo: *Lettura* e *Volume*, poi le tendine
+  *Strumenti*, *Lettura e armonia*, *Modificatori* ed *Effetti*. Le stesse tendine ci sono
+  anche nella barra laterale della Vista 3D.
+- **Modificatori non distruttivi per livello**, come nella web app: *Array*, *Simmetria*,
+  *Trasponi*, *Fade* (entrata, uscita o entrambi, su ogni tratto o su tutto il loop) e *Noise*.
+  Ognuno ha la sua tendina con la spunta nell'intestazione per accenderlo e spegnerlo; i
+  tratti disegnati non cambiano, cambia solo il suono (anche negli export e nel MIDI).
+  Lavorano nell'ordine delle tendine. Il "?" del pannello spiega cosa fa ciascuno.
+- **Effetti per livello con la spunta**: *Eco*, *Riverbero*, *Lo-fi* e *Canone*. Accesi con
+  la quantità a zero partono da un valore che si sente. I file salvati prima tengono accesi
+  gli effetti che usavano.
+- **Copia e incolla le impostazioni di un livello** (le icone nell'intestazione *Livelli* o il
+  menu ▾ della lista): lettura, armonia, modificatori ed effetti; *Incolla in tutti i livelli*
+  li dà a tutta la composizione.
+- **Web app**: i modificatori dei livelli (e quelli globali) arrivano dal file .json e tornano
+  nell'export; il riverbero spento non viene esportato.
+- *Suono finito* è una sotto-tendina di *Mix* con la spunta; gli effetti di uno strumento sono
+  una tendina chiusa nel pannello *Materiale*.
+
 ## 0.0.14
 
 Un canale per livello e volumi giusti

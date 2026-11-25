@@ -377,12 +377,23 @@ def test_panels_menus_and_preferences_draw(comp):
     add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
     sub("engine").regenerate(comp)
     log = []
+    settings = sub("props").find_layer_settings(comp.data, comp.data.layers.active.name)
+    for toggle in ("use_array", "use_mirror", "use_transpose", "use_fade", "use_noise",
+                   "use_echo", "use_reverb", "use_lofi", "use_canon"):
+        setattr(settings, toggle, True)  # the "N attivi" summaries
     for panel in ui.classes:
-        if issubclass(panel, bpy.types.Panel) and panel is not ui.GP2M_PT_material:
-            assert panel.poll(bpy.context) if hasattr(panel, "poll") else True
+        is_material = getattr(panel, "bl_context", "") == "material"
+        if issubclass(panel, bpy.types.Panel) and not is_material:
+            assert panel.poll(bpy.context) if hasattr(panel, "poll") else True, panel
             panel.draw(_Drawer(log), bpy.context)
-        if hasattr(panel, "draw_header_preset"):
+            if hasattr(panel, "draw_header"):
+                panel.draw_header(_Drawer(log), bpy.context)
+        if hasattr(panel, "draw_header_preset") and not is_material:
             panel.draw_header_preset(_Drawer(log), bpy.context)
+    ui.GP2M_PT_material_fx.draw(_Drawer(log), type("C", (), {
+        "material": comp.material_slots[0].material})())
+    ui.GP2M_PT_material.draw_header_preset(_Drawer(log), bpy.context)
+    ui.GP2M_MT_layer_specials.draw(_Drawer(log), bpy.context)
     for panel in sub("help").classes:
         panel.draw(_Drawer(log), bpy.context)
     # The Material panel needs context.material (Properties editor only).
@@ -415,7 +426,11 @@ def test_panels_menus_and_preferences_draw(comp):
             "GP2M_PT_help_main", "GP2M_PT_help_reading", "GP2M_PT_help_instrument",
             "GP2M_PT_help_export", "GP2M_UL_layers", "GP2M_MT_change_instrument",
             "gp2m.set_instrument", ui.CHANGE_RECORDED_MENUS[0].bl_idname,
-            "solo", "mute", "lock"} <= drawn
+            "solo", "mute", "lock", "use_array", "array_count", "mirror_time",
+            "transpose_steps", "fade_direction", "noise_pitch", "use_echo", "delay_mix",
+            "use_reverb", "use_lofi", "canon_voices", "use_master", "ambience",
+            "gp2m.copy_layer_settings", "gp2m.paste_layer_settings",
+            "GP2M_PT_help_modifiers"} <= drawn
     assert sum(1 for entry in log if entry[0] == "markdown") == len(sub("help").classes)
 
 
@@ -1802,3 +1817,46 @@ def test_auto_on_the_active_layer_only(comp):
     result = engine.regenerate(comp, only_active=True)
     assert not engine.state(comp)["stats"]["only_active"]
     assert set(engine.layer_strips(scene, comp)) == set(names[1:])
+
+
+def test_layer_modifiers_effects_and_copy_paste(comp):
+    """0.0.15: modifiers and effects per layer with their checkbox, copy and paste."""
+    props, engine = sub("props"), sub("engine")
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
+    notes = lambda: engine.render_composition(comp, bpy.context.scene)[0].notes  # noqa: E731
+    plain = len(notes())
+    assert plain > 0
+    first = sub("board").user_layers(comp.data)[0].name
+    settings = props.find_layer_settings(comp.data, first)
+    settings.use_array = True
+    settings.array_count = 3
+    assert len(notes()) == 3 * plain
+    settings.use_array = False
+    assert len(notes()) == plain
+
+    # Effects are off until their checkbox is on; switching on gives an audible amount.
+    assert engine._layer_fx(settings).reverb_mix == 0
+    settings.use_reverb = True
+    assert settings.reverb_mix > 0 and engine._layer_fx(settings).reverb_mix > 0
+    settings.use_canon = True
+    assert settings.canon_voices == 2
+    assert len(notes()) == 2 * plain
+
+    # Files saved before 0.0.15: an effect in use keeps sounding.
+    old = props.find_layer_settings(comp.data, sub("board").user_layers(comp.data)[1].name)
+    old.delay_mix = 0.4
+    old.settings_version = 0
+    props.migrate_layer_settings(old)
+    assert old.use_echo and not old.use_reverb and old.settings_version == 1
+
+    # Copy and paste to every layer.
+    settings.use_fade = True
+    settings.fade_direction = "BOTH"
+    settings.mode = "OPTICAL"
+    comp.data.layers.active = comp.data.layers[first]
+    assert bpy.ops.gp2m.copy_layer_settings() == {"FINISHED"}
+    assert bpy.ops.gp2m.paste_layer_settings(every=True) == {"FINISHED"}
+    for layer in sub("board").user_layers(comp.data):
+        item = props.find_layer_settings(comp.data, layer.name)
+        assert item.use_fade and item.fade_direction == "BOTH" and item.mode == "OPTICAL"
+        assert item.use_canon and item.name == layer.name

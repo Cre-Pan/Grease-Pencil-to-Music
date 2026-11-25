@@ -30,7 +30,7 @@ disegna su una tavola, e la tavola suona.
    La composizione parte **vuota**: un livello con un solo strumento (Flauto). La vista
    passa a frontale, *Solid → Texture*; si resta in Object Mode (passa a **Draw Mode** per
    disegnare).
-2. In *Proprietà → Dati oggetto → Livelli e strumenti* c'è la lista dei livelli e dei gruppi,
+2. In *Proprietà → Dati oggetto → Musica → Livelli* c'è la lista dei livelli e dei gruppi,
    come quella dei livelli Grease Pencil (**+**, **nuovo gruppo**, **−**, **▾**, ↑ / ↓, doppio
    clic per rinominare). Ogni riga: icona, lucchetto, occhio, nome, **audio** (acceso/spento;
    si spegne e diventa grigio quando un altro livello è in *Solo*) e **cuffie** per il *Solo*
@@ -127,10 +127,12 @@ Tutto si controlla dalla barra laterale **N → Musica**:
 
 | Pannello | Cosa contiene |
 |---|---|
-| Doodle Music | stato, muto, avvisi, *Auto* (aggiornamento automatico) con **solo livello attivo**, *Genera suono*, **Ascolto** (insieme / solo l'attiva / una dopo l'altra), **un canale per livello** nel Sequencer |
-| Tavola e tempo | BPM, durata del loop, nota più bassa, ottave, **etichette dei tasti** (solo Do, tasti bianchi, tutte, nessuna), griglia |
-| Lettura | scala e tonica, quantizzazione ritmica, **swing**, nota minima, volume, **Suono finito** con *Ambiente*, **Usa modificatori** |
-| Livelli e strumenti | lista dei livelli e dei **gruppi** come in Grease Pencil (+, nuovo gruppo, −, ▾, ↑ / ↓): lucchetto, occhio, nome, **audio** on/off, **Solo** (cuffie: gli altri al 10%); sotto, lettura, volume e **strumenti** del livello attivo (colore, nome, ♪, **volume**, occhio); **+ Strumento**; forme piene, canone ed effetti del livello |
+| Doodle Music | *Auto* (aggiornamento automatico) con **solo livello attivo**, *Genera suono*, muto, tastiera, suona mentre disegni; stato e avvisi in una riga; **Ascolto** (insieme / solo l'attiva / una dopo l'altra) |
+| Livelli | lista dei livelli e dei **gruppi** come in Grease Pencil (+, nuovo gruppo, −, ▾, ↑ / ↓): lucchetto, occhio, nome, **audio** on/off, **Solo** (cuffie: gli altri al 10%); sotto, *Lettura* e *Volume* del livello attivo; **copia / incolla** le impostazioni del livello nell'intestazione |
+| ↳ Strumenti | gli strumenti del livello attivo (colore, nome, ▾ cambia, **volume**, occhio, ×) e *Aggiungi strumento* |
+| ↳ Lettura e armonia | glissando e unione dei tratti (letture legate), forme piene, **armonia** |
+| ↳ Modificatori | **Array**, **Simmetria**, **Trasponi**, **Fade**, **Noise**: ognuno con la spunta nell'intestazione, come i modificatori di Blender |
+| ↳ Effetti | **Eco**, **Riverbero**, **Lo-fi**, **Canone**, con la spunta |
 | Esporta | **WAV**, **MP3**, **MIDI** |
 
 ### Come viene letto un tratto
@@ -169,9 +171,22 @@ fusione di Procreate):
 - Un tratto che torna indietro nel tempo (semicerchio, cerchio, zig-zag) suona in ogni sua
   parte, come sotto un lettore ottico: un semicerchio sono due voci.
 
+### Modificatori ed effetti del livello
+
+Sotto la lista dei livelli, la tendina **Modificatori** ha gli stessi modificatori non
+distruttivi della web app, uno per tipo e per livello: *Array* (ripete il tratto ogni tot
+battiti, anche salendo di grado o di semitoni, e può riempire il loop), *Simmetria*
+(retrogrado nel tempo, inversione in altezza), *Trasponi*, *Fade* (entrata, uscita o entrambi,
+su ogni tratto o su tutto il loop) e *Noise* (piccole imperfezioni di altezza, volume e tempo).
+I tratti disegnati non cambiano: cambia solo quello che si sente, export e MIDI compresi.
+Lavorano dall'alto in basso, nell'ordine delle tendine. La tendina **Effetti** ha *Eco*,
+*Riverbero*, *Lo-fi* e *Canone* del livello. Ogni tendina ha la spunta nell'intestazione.
+**Copia / Incolla** (icone nell'intestazione *Livelli*, o nel menu ▾) portano lettura,
+armonia, modificatori ed effetti su un altro livello o su tutti.
+
 ### Suono finito
 
-Attivo di default (*Lettura → Suono finito*). Sul mix della composizione passano, come nella
+Attivo di default (*Mix → Suono finito*, la spunta nell'intestazione). Sul mix della composizione passano, come nella
 web app: una sala comune (*Ambiente*, regolabile), un taglio dei bassi inudibili, un
 compressore morbido che lega i livelli, una saturazione dolce e un limiter a −1 dB. Così il
 disegno suona pieno e rotondo e non distorce mai, anche con tanti tratti spessi insieme; le

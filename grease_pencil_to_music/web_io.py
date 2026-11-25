@@ -163,6 +163,12 @@ def import_project(context, path):
         if settings is not None:
             settings.mode = layer.mode
             settings.reverb_mix = layer.reverb
+            settings.use_reverb = layer.reverb > 0
+            for key, value in layer.mods.items():
+                try:
+                    setattr(settings, key, value)
+                except (AttributeError, TypeError, ValueError):
+                    pass
             if layer.harmony != "OFF" and hasattr(settings, "harmony"):
                 try:
                     settings.harmony = layer.harmony
@@ -218,8 +224,9 @@ def collect_project(comp, scene):
             visible=not layer.hide,
             muted=layer.hide or bool(settings is not None and settings.mute),
             volume=props.layer_volume(gp, layer),
-            reverb=float(settings.reverb_mix) if settings else 0.0,
-            harmony=getattr(settings, "harmony", "OFF") if settings else "OFF")
+            reverb=float(settings.reverb_mix) if settings and settings.use_reverb else 0.0,
+            harmony=getattr(settings, "harmony", "OFF") if settings else "OFF",
+            mods=props.layer_values(settings) if settings else {})
         project.layers.append(out)
         drawing = reader.drawing_at(layer, scene.frame_start)
         curves = len(drawing.strokes) if drawing is not None else 0

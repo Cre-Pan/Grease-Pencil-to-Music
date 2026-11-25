@@ -62,6 +62,22 @@ Lo strumento è il **materiale** del tratto: ogni livello ha i suoi.
 Gli **effetti dello strumento** (eco, riverbero, lo-fi) si sommano a quelli del
 livello.
 """,
+    "MODIFIERS": """\
+## Modificatori del livello
+
+Come nella web app: cambiano i tratti **solo nel suono**, quelli disegnati
+restano come sono. La spunta nell'intestazione li accende e li spegne.
+Lavorano sempre in quest'ordine, dall'alto in basso:
+
+- **Array**: ripete il tratto ogni tot battiti, anche salendo di grado.
+- **Simmetria**: specchia nel tempo (retrogrado) o in altezza (inversione).
+- **Trasponi**: sposta tutto, nella scala o a semitoni.
+- **Fade**: il tratto (o tutto il loop) parte o finisce sottile, cioè piano.
+- **Noise**: piccole imperfezioni di altezza, volume e tempo.
+
+**Copia / Incolla** (nell'intestazione *Livelli* o nel menu ▾ della lista)
+portano lettura, armonia, modificatori ed effetti da un livello agli altri.
+""",
     "EXPORT": """\
 ## Esporta
 
@@ -94,6 +110,7 @@ GP2M_PT_help_main = _help_panel("MAIN")
 GP2M_PT_help_reading = _help_panel("READING")
 GP2M_PT_help_instrument = _help_panel("INSTRUMENT")
 GP2M_PT_help_export = _help_panel("EXPORT")
+GP2M_PT_help_modifiers = _help_panel("MODIFIERS")
 
 
 def button(layout, key):
@@ -102,4 +119,4 @@ def button(layout, key):
 
 
 classes = (GP2M_PT_help_main, GP2M_PT_help_reading, GP2M_PT_help_instrument,
-           GP2M_PT_help_export)
+           GP2M_PT_help_export, GP2M_PT_help_modifiers)

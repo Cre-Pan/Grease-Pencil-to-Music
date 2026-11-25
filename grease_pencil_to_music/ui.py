@@ -202,6 +202,11 @@ class GP2M_MT_layer_specials(bpy.types.Menu):
     def draw(self, context):
         layout = self.layout
         comp = active_composition(context)
+        layout.operator("gp2m.copy_layer_settings", icon="COPYDOWN")
+        layout.operator("gp2m.paste_layer_settings", icon="PASTEDOWN")
+        layout.operator("gp2m.paste_layer_settings", text="Incolla in tutti i livelli",
+                        icon="PASTEDOWN").every = True
+        layout.separator()
         layout.operator("gp2m.duplicate_layer", icon="DUPLICATE")
         layout.operator("gp2m.duplicate_layer",
                         text="Duplica con keyframe vuoti").empty_keyframes = True
@@ -372,23 +377,34 @@ def _instrument_row(layout, comp, layer_name, index, material, active):
     swatch = row.row()
     swatch.ui_units_x = 1.0
     swatch.prop(material.grease_pencil, "color", text="")
-    op = row.operator("gp2m.use_instrument", text=board.material_label(material),
+    sub = row.row(align=True)
+    op = sub.operator("gp2m.use_instrument", text=board.material_label(material),
                       depress=active, emboss=active)
     op.layer = layer_name
     op.index = index
-    change = row.row(align=True)
-    change.context_pointer_set("gp2m_material", material)
-    change.menu("GP2M_MT_change_instrument", text="", icon="FILE_SOUND")
-    change.menu("GP2M_MT_change_instrument", text="", icon="DOWNARROW_HLT")
+    sub.context_pointer_set("gp2m_material", material)
+    sub.menu("GP2M_MT_change_instrument", text="", icon="DOWNARROW_HLT")
     volume = row.row(align=True)
-    volume.ui_units_x = 4
+    volume.ui_units_x = 3.5
     volume.prop(material, "gp2m_volume", text="", slider=True)
-    row.prop(material.grease_pencil, "hide", text="", emboss=False)
-    row.operator("gp2m.remove_instrument", text="", icon="X", emboss=False).index = index
+    icons = row.row(align=True)
+    icons.prop(material.grease_pencil, "hide", text="", emboss=False)
+    icons.operator("gp2m.remove_instrument", text="", icon="X", emboss=False).index = index
 
 
-def draw_layers_and_instruments(layout, comp, details=True):
-    """Layer list like Blender's (top first), then the active layer's instruments."""
+def active_layer(context):
+    """``(composition, active user layer, its settings)``; None for what is missing."""
+    comp = active_composition(context)
+    if comp is None:
+        return None, None, None
+    layer = comp.data.layers.active
+    if layer is None or board.is_board_layer(layer):
+        return comp, None, None
+    return comp, layer, props.find_layer_settings(comp.data, layer.name)
+
+
+def draw_layer_list(layout, comp):
+    """Layer list like Blender's (top first), then reading and volume of the active layer."""
     gp = comp.data
     rows = max(4, min(10, len(gp.gp2m_layers)))
     row = layout.row()
@@ -405,43 +421,220 @@ def draw_layers_and_instruments(layout, comp, details=True):
     col.operator("gp2m.move_layer", text="", icon="TRIA_DOWN").direction = "DOWN"
 
     layer = gp.layers.active
-    if layer is not None and not board.is_board_layer(layer):
-        settings = props.find_layer_settings(gp, layer.name)
-        col = layout.column()
-        col.use_property_split = True
-        col.use_property_decorate = False
-        if settings is not None:
-            col.prop(settings, "mode")
-        col.prop(layer, "opacity", text="Volume (opacità)", slider=True)
-        if settings is not None and settings.solo_saved_opacity >= 0.0:
-            col.label(text="Attenuato dal Solo di un altro livello", icon="INFO")
+    if layer is None or board.is_board_layer(layer):
+        return
+    settings = props.find_layer_settings(gp, layer.name)
+    col = layout.column()
+    col.use_property_split = True
+    col.use_property_decorate = False
+    if settings is not None:
+        col.prop(settings, "mode")
+    col.prop(layer, "opacity", text="Volume", slider=True)
+    if settings is not None and settings.solo_saved_opacity >= 0.0:
+        col.label(text="Attenuato dal Solo di un altro livello", icon="INFO")
 
-        box = layout.box()
-        header = box.row()
-        header.label(text=f"Strumenti di {layer.name}", icon="FILE_SOUND")
-        inner = box.column(align=True)
-        own = board.layer_instruments(comp, layer.name)
-        active_slot = comp.active_material_index
-        for index, material in own:
-            _instrument_row(inner, comp, layer.name, index, material, index == active_slot)
-        if not own:
-            inner.label(text="Nessuno strumento: aggiungine uno", icon="INFO")
-        add = box.row()
-        if settings is not None:
-            add.context_pointer_set("gp2m_layer", settings)
-        add.menu("GP2M_MT_add_instrument", text="Strumento", icon="ADD")
-        if details and settings is not None:
-            add.prop(settings, "show_fx", text="", icon="MODIFIER", toggle=True)
-            if settings.show_fx:
-                draw_layer_details(box, gp, layer)
+
+def draw_layer_instruments(layout, comp, layer, settings):
+    col = layout.column(align=True)
+    own = board.layer_instruments(comp, layer.name)
+    for index, material in own:
+        _instrument_row(col, comp, layer.name, index, material,
+                        index == comp.active_material_index)
+    if not own:
+        col.label(text="Nessuno strumento", icon="INFO")
+    add = layout.row()
+    if settings is not None:
+        add.context_pointer_set("gp2m_layer", settings)
+    add.menu("GP2M_MT_add_instrument", text="Aggiungi strumento", icon="ADD")
     loose = board.loose_instruments(comp)
     if loose:
-        box = layout.box()
-        box.label(text="Strumenti senza livello", icon="MATERIAL")
-        col = box.column(align=True)
+        layout.label(text="Senza livello", icon="MATERIAL")
+        col = layout.column(align=True)
         for index, material in loose:
             _instrument_row(col, comp, "", index, material,
                             index == comp.active_material_index)
+
+
+def draw_layers_and_instruments(layout, comp, details=True):
+    """The layer list and the active layer's instruments in one column (kept for
+    callers outside the panels)."""
+    draw_layer_list(layout, comp)
+    layer = comp.data.layers.active
+    if layer is not None and not board.is_board_layer(layer):
+        settings = props.find_layer_settings(comp.data, layer.name)
+        draw_layer_instruments(layout, comp, layer, settings)
+        if details:
+            draw_layer_details(layout, comp.data, layer)
+
+
+# --- Settings of the active layer (sub-panels under the list) --------------------------------
+
+def _split(layout):
+    col = layout.column()
+    col.use_property_split = True
+    col.use_property_decorate = False
+    return col
+
+
+def draw_layer_reading(layout, s):
+    col = _split(layout)
+    sub = col.column(align=True)
+    if s.mode == "LEGATO":
+        sub.prop(s, "glide")
+    if s.mode in ("LEGATO", "OPTICAL_LEGATO"):
+        sub.prop(s, "legato_gap", text="Unisci entro (battiti)")
+    col.prop(s, "fill_mode")
+    col.prop(s, "harmony")
+
+
+def _unit_row(col, s, amount, unit, text):
+    row = col.row(align=True)
+    row.prop(s, amount, text=text)
+    row.prop(s, unit, text="")
+
+
+def draw_mod_array(layout, s):
+    col = _split(layout)
+    sub = col.column(align=True)
+    count = sub.row(align=True)
+    count.active = not s.array_fill
+    count.prop(s, "array_count")
+    sub.prop(s, "array_beats")
+    col.prop(s, "array_fill")
+    _unit_row(col, s, "array_pitch", "array_unit", "Sali di")
+    col.prop(s, "array_decay", slider=True)
+
+
+def draw_mod_mirror(layout, s):
+    col = _split(layout)
+    sub = col.column(heading="Specchia", align=True)
+    sub.prop(s, "mirror_time")
+    sub.prop(s, "mirror_pitch")
+    sub.prop(s, "mirror_keep")
+    sub = col.column(align=True)
+    row = sub.row(align=True)
+    row.active = s.mirror_time
+    row.prop(s, "mirror_time_center", text="Centro tempo", slider=True)
+    row = sub.row(align=True)
+    row.active = s.mirror_pitch
+    row.prop(s, "mirror_pitch_center", text="Centro altezza", slider=True)
+
+
+def draw_mod_transpose(layout, s):
+    col = _split(layout)
+    _unit_row(col, s, "transpose_steps", "transpose_unit", "Di")
+
+
+def draw_mod_fade(layout, s):
+    col = _split(layout)
+    col.row().prop(s, "fade_direction", expand=True)
+    col.prop(s, "fade_scope")
+    sub = col.column(align=True)
+    sub.prop(s, "fade_length", slider=True)
+    sub.prop(s, "fade_minimum", slider=True)
+
+
+def draw_mod_noise(layout, s):
+    col = _split(layout)
+    sub = col.column(align=True)
+    sub.prop(s, "noise_pitch", text="Altezza")
+    sub.prop(s, "noise_width", slider=True)
+    sub.prop(s, "noise_time", text="Tempo")
+    sub = col.column(align=True)
+    sub.prop(s, "noise_scale")
+    sub.prop(s, "noise_seed")
+
+
+def draw_fx_echo(layout, s):
+    col = _split(layout).column(align=True)
+    col.prop(s, "delay_mix", text="Quantità", slider=True)
+    col.prop(s, "delay_beats", text="Tempo (battiti)")
+    col.prop(s, "delay_feedback", slider=True)
+
+
+def draw_fx_reverb(layout, s):
+    col = _split(layout).column(align=True)
+    col.prop(s, "reverb_mix", text="Quantità", slider=True)
+    col.prop(s, "reverb_size", slider=True)
+
+
+def draw_fx_lofi(layout, s):
+    _split(layout).prop(s, "lofi", text="Quantità", slider=True)
+
+
+def draw_fx_canon(layout, s):
+    col = _split(layout).column(align=True)
+    col.prop(s, "canon_voices", text="Voci")
+    col.prop(s, "canon_delay")
+    col.prop(s, "canon_transpose", text="Trasposizione")
+
+
+# (key, label, parent key, draw, checkbox, help) of the sub-panels under the layer list,
+# in the order they are shown. The modifiers are applied in this same order.
+LAYER_PANELS = (
+    ("instruments", "Strumenti", None, None, None, None),
+    ("reading", "Lettura e armonia", None, draw_layer_reading, None, "READING"),
+    ("mods", "Modificatori", None, None, None, "MODIFIERS"),
+    ("mod_array", "Array", "mods", draw_mod_array, "use_array", None),
+    ("mod_mirror", "Simmetria", "mods", draw_mod_mirror, "use_mirror", None),
+    ("mod_transpose", "Trasponi", "mods", draw_mod_transpose, "use_transpose", None),
+    ("mod_fade", "Fade", "mods", draw_mod_fade, "use_fade", None),
+    ("mod_noise", "Noise", "mods", draw_mod_noise, "use_noise", None),
+    ("fx", "Effetti", None, None, None, None),
+    ("fx_echo", "Eco", "fx", draw_fx_echo, "use_echo", None),
+    ("fx_reverb", "Riverbero", "fx", draw_fx_reverb, "use_reverb", None),
+    ("fx_lofi", "Lo-fi", "fx", draw_fx_lofi, "use_lofi", None),
+    ("fx_canon", "Canone", "fx", draw_fx_canon, "use_canon", None),
+)
+
+
+def _group_summary(layout, settings, keys):
+    """The body of "Modificatori" / "Effetti": how many are on, or a hint."""
+    on = [label for key, label, _p, _d, toggle, _h in LAYER_PANELS
+          if key in keys and toggle and getattr(settings, toggle)]
+    row = layout.row()
+    row.active = bool(on)
+    row.label(text=", ".join(on) if on else "Nessuno attivo")
+
+
+def _layer_panel(base, prefix, layer_parent, key, label, parent, draw, toggle, help_key):
+    idname = f"GP2M_PT_{prefix}_layer_{key}"
+    parent_id = f"GP2M_PT_{prefix}_layer_{parent}" if parent else layer_parent
+    children = tuple(k for k, _l, p, _d, _t, _h in LAYER_PANELS if p == key)
+
+    def poll(cls, context):
+        _comp, layer, settings = active_layer(context)
+        return layer is not None and (key == "instruments" or settings is not None)
+
+    def draw_header(self, context):
+        _comp, _layer, settings = active_layer(context)
+        self.layout.prop(settings, toggle, text="")
+
+    def draw_header_preset(self, _context):
+        help.button(self.layout, help_key)
+
+    def draw_panel(self, context):
+        comp, layer, settings = active_layer(context)
+        if key == "instruments":
+            draw_layer_instruments(self.layout, comp, layer, settings)
+        elif children:
+            _group_summary(self.layout, settings, children)
+        else:
+            self.layout.active = getattr(settings, toggle) if toggle else True
+            draw(self.layout, settings)
+
+    attrs = {"bl_idname": idname, "bl_label": label, "bl_parent_id": parent_id,
+             "bl_options": set() if key == "instruments" else {"DEFAULT_CLOSED"},
+             "poll": classmethod(poll), "draw": draw_panel}
+    if toggle:
+        attrs["draw_header"] = draw_header
+    if help_key:
+        attrs["draw_header_preset"] = draw_header_preset
+    return type(idname, (base, bpy.types.Panel), attrs)
+
+
+def _layer_panels(base, prefix, layer_parent):
+    return tuple(_layer_panel(base, prefix, layer_parent, *spec) for spec in LAYER_PANELS)
 
 
 # --- Shared drawing ------------------------------------------------------------------------
@@ -455,13 +648,14 @@ def draw_status(layout, comp):
         box.label_multiline(text=st["error"], max_lines=6)
     stats = st.get("stats")
     if stats:
-        layout.label(text=f"{stats['notes']} note · {stats['seconds'] * 1000:.0f} ms",
-                     icon="SOUND")
-        if stats.get("only_active"):
-            layout.label(text="Rigenerato solo il livello attivo", icon="OUTLINER_DATA_GP_LAYER")
+        parts = [f"{stats['notes']} note", f"{stats['seconds'] * 1000:.0f} ms"]
         if stats.get("sections", 0) > 1:
-            layout.label(text=f"{stats['sections']} sezioni · "
-                         f"{engine.duration(comp):.1f} s", icon="KEYFRAME")
+            parts.append(f"{stats['sections']} sezioni · {engine.duration(comp):.1f} s")
+        if stats.get("only_active"):
+            parts.append("solo il livello attivo")
+        row = layout.row()
+        row.active = False
+        row.label(text=" · ".join(parts), icon="SOUND")
         if stats.get("skipped"):
             layout.label(text=f"{stats['skipped']} parti saltate (vedi la console)",
                          icon="ERROR")
@@ -470,13 +664,10 @@ def draw_status(layout, comp):
             box.label_multiline(text="Viene letto solo il keyframe all'inizio della scena: "
                                 + ", ".join(stats["multi_keyframes"]), icon="INFO")
             box.prop(comp.gp2m, "use_sections")
-    if reader.has_unsupported_stack(comp):
-        box = layout.box()
-        if comp.gp2m.use_modifiers:
-            box.label(text="Modificatori inclusi nel suono", icon="MODIFIER_ON")
-        else:
-            box.label(text="Modificatori ed effetti non cambiano il suono", icon="ERROR")
-        box.prop(comp.gp2m, "use_modifiers")
+    if reader.has_unsupported_stack(comp) and not comp.gp2m.use_modifiers:
+        row = layout.row(align=True)
+        row.label(text="I modificatori di Blender non cambiano il suono", icon="ERROR")
+        row.prop(comp.gp2m, "use_modifiers", text="", icon="MODIFIER_ON")
 
 
 def draw_actions(layout, comp):
@@ -488,12 +679,11 @@ def draw_actions(layout, comp):
              icon="OUTLINER_DATA_GP_LAYER")
     row.operator("gp2m.regenerate", icon="PLAY_SOUND")
     row.prop(comp.gp2m, "mute", text="", icon="MUTE_IPO_ON" if comp.gp2m.mute else "MUTE_IPO_OFF")
-    row = layout.row(align=True)
-    row.operator("gp2m.play_keyboard", icon="KEYTYPE_KEYFRAME_VEC")
+    row.separator()
+    row.operator("gp2m.play_keyboard", text="", icon="KEYTYPE_KEYFRAME_VEC")
     p = prefs.get_prefs()
     if isinstance(p, bpy.types.AddonPreferences):  # "Suona mentre disegni"
-        row.prop(p, "draw_sound", text="", icon="GREASEPENCIL",
-                 emboss=True, toggle=True)
+        row.prop(p, "draw_sound", text="", icon="GREASEPENCIL", toggle=True)
 
 
 def draw_board(layout, s):
@@ -503,6 +693,7 @@ def draw_board(layout, s):
     col = layout.column(align=True)
     col.prop(s, "bpm")
     col.prop(s, "length")
+    col = layout.column(heading="Ripeti", align=True)
     col.prop(s, "loop")
     col.prop(s, "use_sections")
     col = layout.column(align=True)
@@ -513,7 +704,7 @@ def draw_board(layout, s):
     col = layout.column(align=True)
     col.prop(s, "row_height")
     col.prop(s, "seconds_width")
-    col.prop(s, "show_beats")
+    layout.prop(s, "show_beats")
     layout.operator("gp2m.rebuild_board", icon="GRID")
 
 
@@ -527,94 +718,92 @@ def draw_reading(layout, s):
     col.prop(s, "time_grid")
     sub = col.column(align=True)
     sub.active = s.time_grid != "OFF"
-    sub.prop(s, "swing")
+    sub.prop(s, "swing", slider=True)
     col.prop(s, "min_note")
-    col = layout.column(align=True)
-    col.prop(s, "master_volume")
-    col.prop(s, "use_master")
-    sub = col.column(align=True)
-    sub.active = s.use_master
-    sub.prop(s, "ambience")
-    col.prop(s, "room")
-    col.prop(s, "sample_rate")
-    layout.prop(s, "use_modifiers")
+    layout.prop(s, "use_modifiers", text="Modificatori di Blender")
+
+
+def draw_mix(layout, s):
+    layout.use_property_split = True
+    layout.use_property_decorate = False
+    layout.prop(s, "master_volume", slider=True)
+    layout.prop(s, "room")
+    layout.prop(s, "sample_rate")
+
+
+def draw_master(layout, s):
+    layout.use_property_split = True
+    layout.use_property_decorate = False
+    layout.active = s.use_master
+    layout.prop(s, "ambience", slider=True)
 
 
 def draw_effects(layout, fx):
+    """Instrument effects (no checkboxes: an amount at zero is off)."""
     col = layout.column(align=True)
-    col.prop(fx, "delay_mix")
+    col.prop(fx, "delay_mix", slider=True)
     sub = col.column(align=True)
     sub.active = fx.delay_mix > 0
     sub.prop(fx, "delay_beats")
-    sub.prop(fx, "delay_feedback")
+    sub.prop(fx, "delay_feedback", slider=True)
     col = layout.column(align=True)
-    col.prop(fx, "reverb_mix")
+    col.prop(fx, "reverb_mix", slider=True)
     sub = col.column(align=True)
     sub.active = fx.reverb_mix > 0
-    sub.prop(fx, "reverb_size")
-    layout.prop(fx, "lofi")
+    sub.prop(fx, "reverb_size", slider=True)
+    layout.prop(fx, "lofi", slider=True)
 
 
 def draw_layer_details(layout, gp, layer):
+    """Every setting of a layer in one column (used outside the panels)."""
     settings = props.find_layer_settings(gp, layer.name)
-    box = layout.column()
-    box.use_property_split = True
-    box.use_property_decorate = False
-    box.prop(layer, "opacity", text="Volume (opacità livello)", slider=True)
+    col = _split(layout)
+    col.prop(layer, "opacity", text="Volume", slider=True)
     if settings is None:
-        box.label(text="Impostazioni in preparazione…")
+        col.label(text="Impostazioni in preparazione…")
         return
-    box.prop(settings, "mode")
-    if settings.mode == "LEGATO":
-        box.prop(settings, "glide")
-    if settings.mode in ("LEGATO", "OPTICAL_LEGATO"):
-        box.prop(settings, "legato_gap")
-    box.prop(settings, "fill_mode")
-    box.prop(settings, "harmony")
-    col = box.column(align=True)
-    col.prop(settings, "canon_voices")
-    sub = col.column(align=True)
-    sub.active = settings.canon_voices > 1
-    sub.prop(settings, "canon_delay")
-    sub.prop(settings, "canon_transpose")
-    draw_effects(box, settings)
+    col.prop(settings, "mode")
+    draw_layer_reading(layout, settings)
+    for _key, label, parent, draw, toggle, _help in LAYER_PANELS:
+        if parent and toggle:
+            layout.prop(settings, toggle, text=label)
+            if getattr(settings, toggle):
+                draw(layout, settings)
 
 
 def draw_instrument_details(layout, material):
     layout.use_property_split = True
     layout.use_property_decorate = False
-    layout.prop(material, "gp2m_instrument")
-    layout.prop(material, "gp2m_volume", slider=True)
+    col = layout.column(align=True)
+    col.prop(material, "gp2m_instrument")
+    col.prop(material, "gp2m_volume", slider=True)
     if material.gp2m_instrument == "SAMPLE":
-        box = layout.box()
-        box.label(text="Campione", icon="FILE_SOUND")
-        box.template_ID(material, "gp2m_sample", open="sound.open")
-        box.operator("gp2m.load_sample", icon="FILEBROWSER")
-        box.prop(material, "gp2m_sample_root")
-        box.prop(material, "gp2m_sample_loop")
+        col = layout.column(align=True)
+        col.template_ID(material, "gp2m_sample", open="sound.open")
+        col.operator("gp2m.load_sample", icon="FILEBROWSER")
+        col = layout.column(align=True)
+        col.prop(material, "gp2m_sample_root")
+        col.prop(material, "gp2m_sample_loop")
     if material.gp2m_instrument == "LIBRARY":
-        box = layout.box()
-        box.label(text="Libreria (SoundFont .sf2 o .sfz)", icon="ASSET_MANAGER")
-        box.prop(material, "gp2m_library_path", text="File")
-        box.prop(material, "gp2m_library_preset")
-    box = layout.box()
-    box.label(text="Effetti dello strumento", icon="MODIFIER")
-    draw_effects(box, material.gp2m_fx)
+        col = layout.column(align=True)
+        col.prop(material, "gp2m_library_path", text="File")
+        col.prop(material, "gp2m_library_preset")
 
 
 def draw_play(layout, scene, comp=None):
     play = scene.gp2m_play
     layout.row().prop(play, "mode", expand=True)
-    layout.prop(play, "fit_range")
+    col = layout.column()
+    col.use_property_split = True
+    col.use_property_decorate = False
+    col.prop(play, "fit_range")
     if comp is not None:
-        col = layout.column(align=True)
-        col.use_property_split = True
-        col.use_property_decorate = False
         col.prop(comp.gp2m, "layer_channels")
-        col.prop(comp.gp2m, "channel", text="Canale (0 = auto)")
         sub = col.column(align=True)
-        sub.active = play.mode == "SEQUENCE"
-        sub.prop(comp.gp2m, "order")
+        sub.prop(comp.gp2m, "channel", text="Canale (0 = auto)")
+        row = sub.row(align=True)
+        row.active = play.mode == "SEQUENCE"
+        row.prop(comp.gp2m, "order")
 
 
 def draw_export(layout):
@@ -647,21 +836,43 @@ class GP2M_PT_data(_DataPanel, bpy.types.Panel):
 
     def draw(self, context):
         comp = active_composition(context)
-        draw_status(self.layout, comp)
         draw_actions(self.layout, comp)
+        draw_status(self.layout, comp)
+
+
+def _copy_paste_header(layout):
+    row = layout.row(align=True)
+    row.operator("gp2m.copy_layer_settings", text="", icon="COPYDOWN", emboss=False)
+    row.operator("gp2m.paste_layer_settings", text="", icon="PASTEDOWN", emboss=False)
+
+
+class GP2M_PT_data_layers(_DataPanel, bpy.types.Panel):
+    bl_label = "Livelli"
+    bl_parent_id = "GP2M_PT_data"
+
+    def draw_header_preset(self, _context):
+        _copy_paste_header(self.layout)
+
+    def draw(self, context):
+        draw_layer_list(self.layout, active_composition(context))
+
+
+DATA_LAYER_PANELS = _layer_panels(_DataPanel, "data", "GP2M_PT_data_layers")
 
 
 class GP2M_PT_data_board(_DataPanel, bpy.types.Panel):
     bl_label = "Tavola e tempo"
     bl_parent_id = "GP2M_PT_data"
+    bl_options = {"DEFAULT_CLOSED"}
 
     def draw(self, context):
         draw_board(self.layout, active_composition(context).gp2m)
 
 
 class GP2M_PT_data_reading(_DataPanel, bpy.types.Panel):
-    bl_label = "Lettura"
+    bl_label = "Scala e ritmo"
     bl_parent_id = "GP2M_PT_data"
+    bl_options = {"DEFAULT_CLOSED"}
 
     def draw_header_preset(self, _context):
         help.button(self.layout, "READING")
@@ -670,12 +881,24 @@ class GP2M_PT_data_reading(_DataPanel, bpy.types.Panel):
         draw_reading(self.layout, active_composition(context).gp2m)
 
 
-class GP2M_PT_data_layers(_DataPanel, bpy.types.Panel):
-    bl_label = "Livelli e strumenti"
+class GP2M_PT_data_mix(_DataPanel, bpy.types.Panel):
+    bl_label = "Mix"
     bl_parent_id = "GP2M_PT_data"
+    bl_options = {"DEFAULT_CLOSED"}
 
     def draw(self, context):
-        draw_layers_and_instruments(self.layout, active_composition(context))
+        draw_mix(self.layout, active_composition(context).gp2m)
+
+
+class GP2M_PT_data_master(_DataPanel, bpy.types.Panel):
+    bl_label = "Suono finito"
+    bl_parent_id = "GP2M_PT_data_mix"
+
+    def draw_header(self, context):
+        self.layout.prop(active_composition(context).gp2m, "use_master", text="")
+
+    def draw(self, context):
+        draw_master(self.layout, active_composition(context).gp2m)
 
 
 class GP2M_PT_data_play(_DataPanel, bpy.types.Panel):
@@ -687,17 +910,20 @@ class GP2M_PT_data_play(_DataPanel, bpy.types.Panel):
         draw_play(self.layout, context.scene, active_composition(context))
 
 
-class GP2M_PT_material(bpy.types.Panel):
+class _MaterialPanel:
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "material"
-    bl_label = "Strumento musicale"
 
     @classmethod
     def poll(cls, context):
         material = getattr(context, "material", None)
         return (active_composition(context) is not None and material is not None
                 and material.grease_pencil is not None and not board.is_board_material(material))
+
+
+class GP2M_PT_material(_MaterialPanel, bpy.types.Panel):
+    bl_label = "Strumento musicale"
 
     def draw_header(self, _context):
         self.layout.label(icon="FILE_SOUND")
@@ -707,6 +933,18 @@ class GP2M_PT_material(bpy.types.Panel):
 
     def draw(self, context):
         draw_instrument_details(self.layout, context.material)
+
+
+class GP2M_PT_material_fx(_MaterialPanel, bpy.types.Panel):
+    bl_label = "Effetti dello strumento"
+    bl_parent_id = "GP2M_PT_material"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+        draw_effects(layout, context.material.gp2m_fx)
 
 
 class GP2M_PT_output(bpy.types.Panel):
@@ -790,21 +1028,27 @@ class GP2M_PT_main(_Panel, bpy.types.Panel):
         comp = active_composition(context)
         if comp is None:
             layout.label(text="Nessuna composizione selezionata.")
-            layout.operator("gp2m.add_composition", icon="ADD")
-            layout.operator("gp2m.import_midi", icon="IMPORT")
-            layout.operator("gp2m.import_web", icon="URL")
+            col = layout.column(align=True)
+            col.operator("gp2m.add_composition", icon="ADD")
+            col.operator("gp2m.import_midi", icon="IMPORT")
+            col.operator("gp2m.import_web", icon="URL")
             return
-        layout.label(text=comp.name, icon="OUTLINER_OB_GREASEPENCIL")
-        draw_status(layout, comp)
         draw_actions(layout, comp)
+        draw_status(layout, comp)
         layout.row().prop(context.scene.gp2m_play, "mode", expand=True)
 
 
 class GP2M_PT_layers(_CompositionPanel, bpy.types.Panel):
-    bl_label = "Livelli e strumenti"
+    bl_label = "Livelli"
+
+    def draw_header_preset(self, _context):
+        _copy_paste_header(self.layout)
 
     def draw(self, context):
-        draw_layers_and_instruments(self.layout, active_composition(context), details=False)
+        draw_layer_list(self.layout, active_composition(context))
+
+
+VIEW_LAYER_PANELS = _layer_panels(_Panel, "view", "GP2M_PT_layers")
 
 
 # --- Menus ---------------------------------------------------------------------------------
@@ -839,15 +1083,20 @@ classes = RECORDED_MENUS + CHANGE_RECORDED_MENUS + (
     GP2M_MT_move_to_group,
     GP2M_UL_layers,
     GP2M_PT_data,
+    GP2M_PT_data_layers,
+) + DATA_LAYER_PANELS + (
     GP2M_PT_data_board,
     GP2M_PT_data_reading,
-    GP2M_PT_data_layers,
+    GP2M_PT_data_mix,
+    GP2M_PT_data_master,
     GP2M_PT_data_play,
     GP2M_PT_material,
+    GP2M_PT_material_fx,
     GP2M_PT_output,
     GP2M_PT_scene,
     GP2M_PT_main,
     GP2M_PT_layers,
+) + VIEW_LAYER_PANELS + (
     VIEW3D_MT_gp2m_add,
 )
 

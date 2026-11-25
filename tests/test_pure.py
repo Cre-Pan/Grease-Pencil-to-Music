@@ -1100,3 +1100,86 @@ def test_sections_keep_one_stem_per_layer():
     assert sorted(name for name, _a in joined.stems) == ["A", "B"]
     total = sum(audio for _name, audio in joined.stems)
     assert np.abs(total - joined.audio).max() < 1e-4
+
+
+# --- layer modifiers (0.0.15) -----------------------------------------------------------
+
+from grease_pencil_to_music import layer_mods  # noqa: E402
+
+MB = layer_mods.Board(low_note=48, row_height=H, seconds_width=1.0, length=8.0, bpm=120.0,
+                      rows=37, scale="MAJOR", root=0)
+
+
+def test_mods_off_keep_the_strokes():
+    s = stroke((1.0, 2.0), (C4_ROW, C4_ROW))
+    out = layer_mods.apply([s], layer_mods.Stack(), MB)
+    assert out == [s] and not layer_mods.Stack()
+
+
+def test_array_repeats_every_beats_and_climbs_the_scale():
+    s = stroke((0.0, 0.4), (C4_ROW, C4_ROW))  # C4 = degree 0 of C major
+    stack = layer_mods.Stack(array=layer_mods.Array(count=3, beats=2.0, pitch=1, decay=0.5))
+    out = layer_mods.apply([s], stack, MB)
+    assert len(out) == 3
+    beat = 0.5  # 120 BPM, one second per board unit
+    assert np.allclose([o.x[0] for o in out], [0.0, 2 * beat, 4 * beat])
+    notes = [round(48 + o.z[0] / H - 0.5) for o in out]
+    assert notes == [60, 62, 64]  # C, D, E
+    assert np.allclose([o.radius[0] for o in out], [0.02, 0.01, 0.005])
+    fill = layer_mods.Stack(array=layer_mods.Array(fill=True, beats=4.0))  # 2 s apart, 8 s loop
+    assert len(layer_mods.apply([s], fill, MB)) == 4
+    assert s.x[0] == 0.0  # the input is untouched
+
+
+def test_mirror_in_time_and_pitch():
+    s = stroke((1.0, 2.0), (C4_ROW, C4_ROW + 4))
+    stack = layer_mods.Stack(mirror=layer_mods.Mirror(time=True, pitch=True, keep=False))
+    out = layer_mods.apply([s], stack, MB)
+    assert len(out) == 3  # time, pitch, both
+    t = out[0]
+    assert np.all(np.diff(t.x) >= 0)  # still runs forward in time
+    assert np.isclose(t.x[0], 8.0 - 2.0) and np.isclose(t.z[0], s.z[-1])
+    centre = 0.5 * 37 * H
+    assert np.allclose(out[1].z, 2 * centre - s.z)
+
+
+def test_transpose_fade_and_noise():
+    s = stroke((0.0, 2.0), (C4_ROW, C4_ROW))
+    semis = layer_mods.Stack(transpose=layer_mods.Transpose(steps=-3, unit="SEMITONES"))
+    assert np.allclose(layer_mods.apply([s], semis, MB)[0].z, s.z - 3 * H)
+    fade = layer_mods.Stack(fade=layer_mods.Fade(direction="BOTH", length=0.5, minimum=0.0))
+    r = layer_mods.apply([s], fade, MB)[0].radius
+    assert r[0] == 0 and r[-1] == 0 and np.isclose(r[len(r) // 2], 0.02, rtol=1e-3)
+    song = layer_mods.Stack(fade=layer_mods.Fade(direction="OUT", scope="SONG", length=1.0))
+    late = layer_mods.apply([stroke((6.0, 7.0), (C4_ROW, C4_ROW))], song, MB)[0]
+    assert late.radius.max() < 0.02 * 0.3
+    noisy = layer_mods.Stack(noise=layer_mods.Noise(pitch=0.5, width=0.5, time=0.1))
+    a = layer_mods.apply([s], noisy, MB)[0]
+    b = layer_mods.apply([stroke((5.0, 6.0), (2, 2)), s], noisy, MB)[1]
+    assert not np.allclose(a.z, s.z) and np.allclose(a.z, b.z)  # same stroke, same noise
+
+
+def test_layer_modifiers_change_the_sound():
+    spec = free_spec()
+    mapping = interpret.Mapping()
+    s = stroke((0.5, 1.0), (C4_ROW, C4_ROW))
+    plain = mixer.render_layers([mixer.LayerInput("L1", [s])], spec, mapping, SR)[0]
+    array = mixer.LayerInput("L1", [s], mods=layer_mods.Stack(
+        array=layer_mods.Array(count=3, beats=2.0)))
+    copied = mixer.render_layers([array], spec, mapping, SR)[0]
+    assert len(copied.notes) == 3 * len(plain.notes)
+    assert copied.key != plain.key
+
+
+def test_web_modifiers_round_trip():
+    web = [{"type": "array", "on": True, "count": 3, "beats": 2, "pitch": 1, "unit": "semi"},
+           {"type": "jitter", "on": False, "pitch": 0.3},
+           {"type": "fade", "dir": "both", "scope": "song", "len": 0.3, "min": 0.1},
+           {"type": "array", "count": 9}]  # only one Array in the add-on
+    values = web_project.mods_to_settings(web)
+    assert values["use_array"] and values["array_count"] == 3
+    assert values["array_unit"] == "SEMITONES" and values["use_noise"] is False
+    assert values["fade_direction"] == "BOTH" and values["fade_scope"] == "SONG"
+    back = web_project.settings_to_mods(values)
+    assert [m["type"] for m in back] == ["array", "fade"]
+    assert back[0]["unit"] == "semi" and back[1]["dir"] == "both"

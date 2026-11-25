@@ -382,6 +382,9 @@ def on_load_post(*_args):
         _scene_preview[scene.name] = _preview(scene)
     _object_signature[0] = _signature()
     for obj in compositions():
+        for item in obj.data.gp2m_layers:  # files saved before 0.0.15
+            if item.settings_version < props.SETTINGS_VERSION:
+                props.migrate_layer_settings(item)
         _stack_counts[obj.name] = _stack_count(obj)
         # Sound files live in a temporary folder: recreate them for this session,
         # even when automatic updates are off.

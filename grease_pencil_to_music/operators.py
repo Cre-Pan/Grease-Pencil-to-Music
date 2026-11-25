@@ -823,6 +823,71 @@ class GP2M_OT_merge_layer(bpy.types.Operator):
         return {"FINISHED"}
 
 
+# Settings copied with "Copia impostazioni" (kept for the session, like Blender's
+# own copy of modifiers between objects).
+_clipboard = {}
+
+
+def _active_settings(context):
+    comp = active_composition(context)
+    if comp is None:
+        return None, None
+    layer = comp.data.layers.active
+    if layer is None or board.is_board_layer(layer):
+        return comp, None
+    return comp, props.find_layer_settings(comp.data, layer.name)
+
+
+class GP2M_OT_copy_layer_settings(bpy.types.Operator):
+    """Copia lettura, armonia, modificatori ed effetti del livello attivo"""
+
+    bl_idname = "gp2m.copy_layer_settings"
+    bl_label = "Copia impostazioni del livello"
+    bl_options = {"REGISTER"}
+
+    @classmethod
+    def poll(cls, context):
+        return _active_settings(context)[1] is not None
+
+    def execute(self, context):
+        _comp, settings = _active_settings(context)
+        _clipboard.clear()
+        _clipboard.update(props.layer_values(settings))
+        self.report({"INFO"}, f"Impostazioni di {settings.name} copiate")
+        return {"FINISHED"}
+
+
+class GP2M_OT_paste_layer_settings(bpy.types.Operator):
+    """Incolla le impostazioni copiate nel livello attivo, o in tutti i livelli"""
+
+    bl_idname = "gp2m.paste_layer_settings"
+    bl_label = "Incolla impostazioni del livello"
+    bl_options = {"REGISTER", "UNDO"}
+
+    every: BoolProperty(name="In tutti i livelli", default=False,
+                        description="Incolla in tutti i livelli della composizione")
+
+    @classmethod
+    def poll(cls, context):
+        if not _clipboard:
+            cls.poll_message_set("Prima copia le impostazioni di un livello")
+            return False
+        return _active_settings(context)[1] is not None
+
+    def execute(self, context):
+        comp, settings = _active_settings(context)
+        gp = comp.data
+        targets = ([props.find_layer_settings(gp, layer.name) for layer in board.user_layers(gp)]
+                   if self.every else [settings])
+        targets = [item for item in targets if item is not None]
+        for item in targets:
+            props.set_layer_values(item, _clipboard)
+        engine.state(comp).pop("layers", None)  # every layer may have changed
+        self.report({"INFO"}, f"Impostazioni incollate in {len(targets)} livell"
+                    + ("o" if len(targets) == 1 else "i"))
+        return {"FINISHED"}
+
+
 def _target_group(gp):
     """The active group, or the group of the active layer."""
     group = gp.layer_groups.active
@@ -854,4 +919,6 @@ classes = (
     GP2M_OT_layers_hide_others,
     GP2M_OT_layers_lock,
     GP2M_OT_merge_layer,
+    GP2M_OT_copy_layer_settings,
+    GP2M_OT_paste_layer_settings,
 )
