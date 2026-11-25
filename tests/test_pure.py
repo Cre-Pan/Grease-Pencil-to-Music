@@ -1322,3 +1322,53 @@ def test_sections_use_the_room_of_the_composition():
     count = min(len(hall.audio), len(church.audio))
     assert len(hall.audio) != len(church.audio) or not np.allclose(
         hall.audio[:count], church.audio[:count])
+
+
+@pytest.mark.parametrize("mode", ["QUANTIZED", "LEGATO"])
+@pytest.mark.parametrize("instrument", ["SAW", "S_PIANO", "PLUCK"])
+def test_instrument_volume_scales_the_voices_without_synthesis(monkeypatch, mode, instrument):
+    """Changing an instrument's volume reuses the voices rendered at volume 1: same
+    sound (and MIDI velocities) as synthesizing them again, no synthesis."""
+    spec = free_spec(length=2.0)
+    mapping = interpret.Mapping()
+
+    def layer(gain):
+        strokes = [replace(stroke((0.1, 0.6), (12, 14), instrument=instrument), gain=gain),
+                   replace(stroke((0.7, 1.2), (16, 16), instrument=instrument), gain=gain),
+                   replace(filled((1.3, 1.8), 10, 14), instrument=instrument, gain=gain)]
+        return [mixer.LayerInput("A", strokes, mode=mode, fx=mixer.LayerFx(reverb_mix=0.3))]
+    mixer.clear_cache()
+    mixer.render(layer(1.0), spec, mapping, SR, master_fx=mixer.MasterFx())
+    calls = []
+    original = mixer._render_voices
+    monkeypatch.setattr(mixer, "_render_voices",
+                        lambda *a, **k: calls.append(1) or original(*a, **k))
+    for gain in (0.4, 1.7, 0.9):
+        cached = mixer.render(layer(gain), spec, mapping, SR, master_fx=mixer.MasterFx())
+        assert not calls
+        monkeypatch.setattr(mixer, "_unit_gain", lambda *a: None)  # synthesized again
+        mixer.clear_cache()
+        fresh = mixer.render(layer(gain), spec, mapping, SR, master_fx=mixer.MasterFx())
+        monkeypatch.undo()
+        monkeypatch.setattr(mixer, "_render_voices",
+                            lambda *a, **k: calls.append(1) or original(*a, **k))
+        assert np.max(np.abs(cached.audio - fresh.audio)) < 1e-5
+        assert [(n.pitch, n.velocity) for n in cached.notes] == \
+            [(n.pitch, n.velocity) for n in fresh.notes]
+        mixer.clear_cache()
+        mixer.render(layer(1.0), spec, mapping, SR, master_fx=mixer.MasterFx())
+        calls.clear()
+
+
+def test_loud_strokes_are_synthesized_again_at_the_ceiling():
+    """Where the volume would push a voice past the amplitude ceiling (interpret clips
+    it), the stroke is synthesized at its own volume, as before."""
+    spec = free_spec(length=1.0)
+    mapping = interpret.Mapping()
+    loud = replace(stroke((0.1, 0.8), (12, 12), radius=0.2), gain=2.0)
+    args = (spec, mapping, "QUANTIZED", "TONAL", interpret.full_radius(H), (), 0.12, 0,
+            None, "OFF")
+    unit = mixer._unit_gain(loud, args)
+    peak = max(float(np.max(v.amp)) for v in mixer._interpret_stroke(
+        replace(loud, gain=1.0), *args)[1].voices)
+    assert (unit is None) == (peak * 2.0 >= mixer.AMP_CEILING)

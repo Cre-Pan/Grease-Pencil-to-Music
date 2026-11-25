@@ -355,6 +355,14 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.29
+
+- **Il volume di uno strumento non risintetizza più i tratti.** Le voci di uno strumento
+  sono proporzionali al suo volume: si riusano quelle calcolate a volume 1 e si scalano
+  (anche nelle letture legate). Le note MIDI tengono la loro velocity. Solo dove il volume
+  porterebbe una voce oltre il tetto di ampiezza (dove veniva tagliata) il tratto si
+  ricalcola come prima. Differenza con la sintesi completa sotto 1e-5.
+
 ## 0.0.28
 
 Meno lag mentre disegni, modifichi e scolpisci (il suono è identico)

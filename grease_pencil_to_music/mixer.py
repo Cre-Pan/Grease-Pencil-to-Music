@@ -309,14 +309,56 @@ def _interpret_stroke(stroke, spec, mapping, mode, fill_mode, radius_ref, contex
     return key, interp
 
 
+AMP_CEILING = 3.0  # interpret clips the amplitude of a voice here
+
+
+def _unit_gain(stroke, args):
+    """The instrument volume (``stroke.gain``) only scales the amplitude of the voices,
+    and the voices are linear in it, unless the amplitude reaches the ceiling where
+    interpret clips it. ``(key, interpretation)`` of the stroke at volume 1 when its
+    sound times the volume is the stroke's own sound, else None.
+
+    ``args``: the arguments of :func:`_interpret_stroke` after the stroke."""
+    gain = float(stroke.gain)
+    if gain == 1.0 or not gain > 0.0:
+        return None
+    key, interp = _interpret_stroke(replace(stroke, gain=1.0), *args)
+    peak = max((float(np.max(voice.amp)) for voice in interp.voices if len(voice.amp)),
+               default=0.0)
+    if peak * max(gain, 1.0) >= AMP_CEILING:
+        return None
+    return key, interp
+
+
+def _scaled(rendered, gain):
+    gain = np.float32(gain)
+    return [(offset, buffer * gain) for offset, buffer in rendered]
+
+
 def _render_stroke(stroke, spec, mapping, mode, fill_mode, radius_ref, sample_rate,
                    context_key, glide=0.12, transpose=0, errors=None, harmony="OFF"):
     errors = errors or _Errors()
-    key, interp = _interpret_stroke(stroke, spec, mapping, mode, fill_mode, radius_ref,
-                                    context_key, glide, transpose, errors, harmony)
+    args = (spec, mapping, mode, fill_mode, radius_ref, context_key, glide, transpose,
+            errors, harmony)
+    key, interp = _interpret_stroke(stroke, *args)
     cached = _stroke_cache.get(key)
     if cached is not None:
         return key, cached
+    unit = _unit_gain(stroke, args)
+    if unit is not None:
+        # Another instrument volume: the voices at volume 1, scaled (no synthesis
+        # again while the volume slider moves). The notes keep their velocity.
+        unit_key, unit_interp = unit
+        rendered = _stroke_cache.get(unit_key)
+        if rendered is None:
+            before = errors.count
+            voices = _render_voices(unit_interp.voices, sample_rate, mapping.vibrato_rate,
+                                    errors)
+            rendered = (voices, unit_interp.notes, _curves_of(unit_interp.voices))
+            if errors.count == before:
+                _stroke_cache.put(unit_key, rendered)
+        return key, (_scaled(rendered[0], stroke.gain), interp.notes,
+                     _curves_of(interp.voices))
     before = errors.count
     rendered = _render_voices(interp.voices, sample_rate, mapping.vibrato_rate, errors)
     value = (rendered, interp.notes, _curves_of(interp.voices))
@@ -337,16 +379,28 @@ def _render_legato(layer, spec, mapping, radius_ref, sample_rate, context_key, t
     Returns ``(stroke keys, [(fx, rendered voices)], notes, curves, voice count)``."""
     gap = layer.legato_gap * 60.0 / max(spec.bpm, 1e-6)
     keys, notes, by_fx, filled = [], [], {}, set()
+    args = (spec, mapping, layer.mode, layer.fill_mode, radius_ref, context_key, layer.glide,
+            transpose, errors)
+    # The instrument volume of a chain of effects: when every stroke of it has the same
+    # one and the voices are linear in it (see _unit_gain), the voices are joined and
+    # rendered at volume 1, then scaled.
+    gains = {}
+    for stroke in layer.strokes:
+        gains.setdefault(stroke.fx, set()).add(float(stroke.gain))
+    unit_fx = {fx for fx, values in gains.items()
+               if len(values) == 1 and next(iter(values)) != 1.0
+               and all(_unit_gain(stroke, args) is not None
+                       for stroke in layer.strokes if stroke.fx == fx)}
     for stroke in layer.strokes:
         # Harmony is added after the join: the added voices must not be joined
         # with the melody they accompany.
-        key, interp = _interpret_stroke(stroke, spec, mapping, layer.mode, layer.fill_mode,
-                                        radius_ref, context_key, layer.glide, transpose,
-                                        errors)
+        key, interp = _interpret_stroke(stroke, *args)
         keys.append(key)
         harmony = "OFF" if stroke.filled else layer.harmony
         notes.extend(harmonize(interpret.Interpretation([], interp.notes), harmony,
                                spec).notes)
+        if stroke.fx in unit_fx:
+            key, interp = _unit_gain(stroke, args)
         tags, voices = by_fx.setdefault(stroke.fx, ([], []))
         for index, voice in enumerate(interp.voices):
             tags.append((key, index))
@@ -355,6 +409,7 @@ def _render_legato(layer, spec, mapping, radius_ref, sample_rate, context_key, t
             filled.add(key)
     parts, curves, count = [], [], 0
     for fx, (tags, voices) in by_fx.items():
+        scale = next(iter(gains[fx])) if fx in unit_fx else None
         rendered = []
         for members, voice in interpret.legato_join(voices, gap, _joinable):
             vkey = hashlib.blake2b(repr(([tags[i] for i in members], round(gap, 6),
@@ -369,7 +424,7 @@ def _render_legato(layer, spec, mapping, radius_ref, sample_rate, context_key, t
                 value = _render_voices(with_harmony, sample_rate, mapping.vibrato_rate, errors)
                 if errors.count == before:
                     _stroke_cache.put(vkey, value)
-            rendered.extend(value)
+            rendered.extend(value if scale is None else _scaled(value, scale))
             curves.extend(_curves_of([voice]))
             count += len(value)
         parts.append((fx, rendered))
