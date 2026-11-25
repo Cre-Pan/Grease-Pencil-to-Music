@@ -374,6 +374,8 @@
   la testina, anche in "una dopo l'altra" e con le sezioni da keyframe.
 - Web app: un livello silenziato nella web app diventa un livello **muto** (visibile) invece
   che nascosto, e viceversa all'export.
+- Corretto un crash: con Auto attivo, la rigenerazione aspetta la fine di G/R/S/Alt+S in Edit
+  Mode.
 
 ## 0.0.9
 
