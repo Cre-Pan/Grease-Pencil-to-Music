@@ -92,6 +92,20 @@ def apply_layer_color(gp_data, item):
                 strip.color_tag = item.color
 
 
+def apply_layer_mix(gp_data, item):
+    """The Sequencer clip of the layer takes its volume and pan right away."""
+    if item.is_group:
+        return
+    from . import engine
+    for obj in bpy.data.objects:
+        if obj.type != "GREASEPENCIL" or obj.data != gp_data or not obj.gp2m.is_composition:
+            continue
+        for scene in obj.users_scene:
+            strip = engine.layer_strips(scene, obj).get(item.name)
+            if strip is not None:
+                engine.dress_strip(obj, strip, item.name)
+
+
 def _color_changed(self, _context):
     self.color_assigned = True
     apply_layer_color(self.id_data, self)
@@ -351,6 +365,16 @@ class GP2M_LayerSettings(bpy.types.PropertyGroup):
                                  "(12 = un'ottava sopra, -5 = una quarta sotto…)",
                                  update=_sound_changed)
     settings_version: IntProperty(default=0, options={"HIDDEN"})
+    clip_volume: FloatProperty(
+        name="Volume clip", default=1.0, min=0.0, max=10.0, soft_max=2.0,
+        update=lambda self, context: apply_layer_mix(self.id_data, self),
+        description="Volume della clip del livello nel Video Sequencer (lo stesso valore: "
+        "cambiandolo nel Sequencer cambia qui). Vale anche negli export")
+    clip_pan: FloatProperty(
+        name="Pan", default=0.0, min=-1.0, max=1.0,
+        update=lambda self, context: apply_layer_mix(self.id_data, self),
+        description="Bilanciamento sinistra/destra della clip del livello nel Video "
+        "Sequencer (lo stesso valore). Vale anche negli export")
     color: EnumProperty(name="Colore", items=LAYER_COLOR_ITEMS, default="NONE",
                         update=_color_changed,
                         description="Colore del livello: la sua strip nel Video Sequencer "
@@ -491,6 +515,11 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
                          "strip audio, o la meta-clip con dentro i livelli "
                          "(0 = scegli automaticamente il primo libero)",
                          update=_arrangement_changed)
+    start_delay: FloatProperty(
+        name="Parte dopo (s)", default=0.0, min=0.0, max=3600.0, subtype="TIME_ABSOLUTE",
+        unit="TIME_ABSOLUTE", update=_arrangement_changed,
+        description="La composizione parte dopo questi secondi (anche spostando la sua "
+        "clip nel Video Sequencer): testina e suono la seguono")
     order: IntProperty(name="Ordine", default=0, min=0, max=999,
                        description="Posizione nella riproduzione 'Una dopo l'altra'",
                        update=_arrangement_changed)

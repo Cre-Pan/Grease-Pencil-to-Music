@@ -399,12 +399,35 @@ def midi_tracks(notes):
     return tracks
 
 
+def _clip_mix(obj, result):
+    """The mix as the Sequencer plays it: every layer with its clip volume and pan."""
+    gains = {}
+    for name, _audio in result.stems:
+        item = props.find_layer_settings(obj.data, name)
+        if item is not None:
+            gains[name] = (item.clip_volume, item.clip_pan)
+    if all(abs(v - 1.0) < 1e-6 and abs(p) < 1e-6 for v, p in gains.values()):
+        return result.audio
+    total = np.zeros_like(result.audio, dtype=np.float32)
+    for name, audio in result.stems:
+        volume, pan = gains.get(name, (1.0, 0.0))
+        audio = np.asarray(audio, dtype=np.float32) * volume
+        if audio.ndim == 2 and audio.shape[1] == 2 and abs(pan) > 1e-6:
+            audio = audio * np.array([min(1.0, 1.0 - pan), min(1.0, 1.0 + pan)],
+                                     dtype=np.float32)
+        count = min(len(total), len(audio))
+        total[:count] += audio[:count]
+    return np.clip(total, -1.0, 1.0)
+
+
 def export(obj, scene, path, fmt):
-    result, _reads = render_composition(obj, scene)
+    per_layer = obj.gp2m.layer_channels
+    result, _reads = render_composition(obj, scene, stems=per_layer)
     if fmt == "MIDI":
         midi.write_midi(path, midi_tracks(result.notes), obj.gp2m.bpm)
     else:
-        write_audio(path, result.audio, result.sample_rate, fmt, prefs.get_prefs().mp3_bitrate)
+        audio = _clip_mix(obj, result) if per_layer and result.stems else result.audio
+        write_audio(path, audio, result.sample_rate, fmt, prefs.get_prefs().mp3_bitrate)
     return result
 
 
@@ -773,6 +796,11 @@ def _place_layer_strips(scene, obj, result):
         if layer is not None and layer not in names and layer not in silent:
             _remove_strip(editor, strip)
     strips = layer_strips(scene, obj)
+    for name, strip in strips.items():  # 0.0.21: the volume and pan set on the strip
+        item = props.find_layer_settings(obj.data, name)
+        if item is not None and strip.parent_meta() is None:
+            item["clip_volume"] = min(max(strip.volume, 0.0), 10.0)
+            item["clip_pan"] = min(max(strip.pan, -1.0), 1.0)
     kept = [name for name in strips if name not in names]
     channels = {name: index + 1 for index, name in
                 enumerate(layer_channel_order(obj, names + kept))}
@@ -827,11 +855,41 @@ def _place_layer_strips(scene, obj, result):
 
 
 def _color_strip(obj, strip, layer_name):
-    """The strip of a layer has the layer's color."""
+    dress_strip(obj, strip, layer_name)
+
+
+def dress_strip(obj, strip, layer_name):
+    """The strip of a layer has the layer's color, clip volume and pan (animated
+    values are left to their keyframes)."""
     item = props.find_layer_settings(obj.data, layer_name)
     color = item.color if item is not None else "NONE"
     if strip.color_tag != color:
         strip.color_tag = color
+    if item is None:
+        return
+    scene = strip.id_data
+    for attr, value in (("volume", item.clip_volume), ("pan", item.clip_pan)):
+        if not is_animated(scene, strip, attr) and abs(getattr(strip, attr) - value) > 1e-5:
+            setattr(strip, attr, value)
+
+
+def is_animated(scene, strip, attr):
+    """True when the strip's ``attr`` has keyframes or a driver."""
+    path = f'["{strip.name}"].{attr}'
+    data = scene.animation_data
+    if data is None:
+        return False
+    curves = list(data.drivers)
+    action = data.action
+    if action is not None:
+        try:
+            curves += list(action.fcurves)
+        except AttributeError:  # slotted actions (Blender 5)
+            for layer in getattr(action, "layers", ()):
+                for strip_ in layer.strips:
+                    for bag in strip_.channelbags:
+                        curves += list(bag.fcurves)
+    return any(curve.data_path.endswith(path) for curve in curves)
 
 
 def _same_file(strip, path):
@@ -918,6 +976,10 @@ def arrange(scene):
         _arranging[0] = False
 
 
+def delay_frames(obj, scene):
+    return max(0, int(round(obj.gp2m.start_delay * _fps(scene))))
+
+
 def _arrange(scene):
     """Place, mute and time every composition of the scene for the play mode.
 
@@ -944,12 +1006,16 @@ def _arrange(scene):
         _last_solo[scene.name] = solo.name
 
     offset = 0
+    ends = []
     for obj in comps:
         st = state(obj)
-        start_offset = offset if play.mode == "SEQUENCE" else 0
+        delay = delay_frames(obj, scene)
+        start_offset = (offset if play.mode == "SEQUENCE" else 0) + delay
         if play.mode == "SEQUENCE":
-            offset += lengths[obj.name]
+            offset = start_offset + lengths[obj.name]
+        ends.append((obj, start_offset + lengths[obj.name]))
         st["offset_frames"] = start_offset
+        st["delay_frames"] = delay
         board.set_playhead_offset(obj, start_offset, st.get("sections"))
         board.update_preview_shade(obj, scene)
         strips = composition_strips(scene, obj)
@@ -975,9 +1041,9 @@ def _arrange(scene):
         if play.mode == "SEQUENCE":
             total = offset
         elif solo is not None:
-            total = lengths[solo.name]
+            total = next(end for obj, end in ends if obj == solo)
         else:
-            total = max(lengths.values())
+            total = max(end for _obj, end in ends)
         end = scene.frame_start + total - 1
         if scene.frame_end != end:
             scene.frame_end = end

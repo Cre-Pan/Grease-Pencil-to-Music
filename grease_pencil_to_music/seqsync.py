@@ -7,7 +7,10 @@
   Grease Pencil layers (channel 1 = bottom layer). Layers inside a group are
   reordered only among themselves.
 * Moving the meta-clip to another channel changes the composition's "Canale", so
-  the Composizioni list follows.
+  the Composizioni list follows; moving it in time makes the composition start
+  later ("Parte dopo"): playhead and sound follow.
+* Volume, pan and color of a layer's clip are the layer's "Volume clip", "Pan" and
+  color, both ways (animated values are left to their keyframes); exports use them.
 
 Runs after every depsgraph update of a scene, never while a transform (G in the
 Sequencer) is running: then once it ends.
@@ -40,6 +43,61 @@ def _sync_mutes(scene, obj):
     if changed:
         engine.sync_layer_mutes(scene, obj)  # e.g. hidden or silenced by a Solo
     return changed
+
+
+def _sync_mix(scene, obj):
+    """Volume, pan and color changed on a layer's clip: the layer takes them (the
+    add-on keeps them equal, so a difference was made in the Sequencer). Animated
+    values belong to their keyframes and are left alone."""
+    changed = False
+    for name, strip in engine.layer_strips(scene, obj).items():
+        item = _settings(obj.data, name)
+        if item is None:
+            continue
+        if strip.color_tag != item.color:
+            item.color = strip.color_tag
+            changed = True
+        mixed = False
+        for attr, prop, low, high in (("volume", "clip_volume", 0.0, 10.0),
+                                      ("pan", "clip_pan", -1.0, 1.0)):
+            if engine.is_animated(scene, strip, attr):
+                continue
+            value = min(max(getattr(strip, attr), low), high)
+            if abs(value - getattr(item, prop)) > 1e-5:
+                item[prop] = value  # both read before writing back (no update in between)
+                mixed = True
+        if mixed:
+            engine.dress_strip(obj, strip, name)  # back in range, if it was outside
+            changed = True
+    return changed
+
+
+def _sync_time(scene, obj):
+    """The composition's clip moved in time: it now starts later (or earlier, never
+    before the scene start; "Parte dopo")."""
+    strip = engine.top_strip(scene, obj)
+    if strip is None:
+        return False
+    st = engine.state(obj)
+    if "offset_frames" not in st:
+        return False  # never arranged yet
+    if strip.type == "META":
+        inner = [s for s in strip.strips if s.type == "SOUND"]
+        if not inner:
+            return False
+        start = min(s.content_start for s in inner)
+    else:
+        start = strip.content_start
+    expected = scene.frame_start + st["offset_frames"]
+    if int(round(start)) == int(expected):
+        return False
+    base = st["offset_frames"] - st.get("delay_frames", 0)
+    fps = scene.render.fps / scene.render.fps_base
+    delay = max(0.0, (start - scene.frame_start - base) / fps)
+    if abs(delay - obj.gp2m.start_delay) < 0.5 / fps:
+        return False
+    obj.gp2m.start_delay = round(delay, 4)
+    return True
 
 
 def _reorder(gp, wanted):
@@ -100,10 +158,13 @@ def sync_scene(scene):
             if not obj.gp2m.layer_channels or engine.meta_strip(scene, obj) is None:
                 if engine.top_strip(scene, obj) is not None:
                     changed |= _sync_channel(scene, obj)
+                    changed |= _sync_time(scene, obj)
                 continue
             changed |= _sync_mutes(scene, obj)
+            changed |= _sync_mix(scene, obj)
             changed |= _sync_order(scene, obj)
             changed |= _sync_channel(scene, obj)
+            changed |= _sync_time(scene, obj)
     finally:
         _busy[0] = False
     if changed:

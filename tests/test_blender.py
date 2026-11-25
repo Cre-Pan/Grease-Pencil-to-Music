@@ -1897,6 +1897,9 @@ def test_sequencer_volume_of_a_layer_strip_is_kept(comp):
     names = _two_layers(comp)
     engine.regenerate(comp)
     engine.layer_strips(scene, comp)[names[0]].volume = 0.3
+    sub("seqsync").sync_scene(scene)  # what the depsgraph handler does after the change
+    assert sub("props").find_layer_settings(comp.data, names[0]).clip_volume == \
+        pytest.approx(0.3)
     add_stroke(comp, 0, line(comp, 6.0, 7.5, 64))  # longer sound: strips may be recreated
     engine.regenerate(comp)
     assert engine.layer_strips(scene, comp)[names[0]].volume == pytest.approx(0.3)
@@ -2408,3 +2411,41 @@ def test_moving_clips_reorders_layers_and_compositions(comp):
     meta.channel = free
     seqsync.sync_scene(scene)
     assert comp.gp2m.channel == free and meta.channel == free
+
+
+def test_clip_volume_pan_color_and_time_follow_the_sequencer(comp, tmp_path):
+    engine, seqsync, props = sub("engine"), sub("seqsync"), sub("props")
+    scene = bpy.context.scene
+    names = _two_layers(comp)
+    engine.regenerate(comp)
+    item = props.find_layer_settings(comp.data, names[0])
+    strip = engine.layer_strips(scene, comp)[names[0]]
+    # From the layer to the clip, at once.
+    item.clip_volume, item.clip_pan = 0.5, -0.4
+    assert abs(strip.volume - 0.5) < 1e-5 and abs(strip.pan + 0.4) < 1e-5
+    # From the clip (changed in the Sequencer) to the layer.
+    strip.volume, strip.pan, strip.color_tag = 0.8, 0.3, "COLOR_07"
+    assert seqsync.sync_scene(scene)
+    assert abs(item.clip_volume - 0.8) < 1e-5 and abs(item.clip_pan - 0.3) < 1e-5
+    assert item.color == "COLOR_07"
+    # The export plays the layers as the Sequencer does.
+    path = str(tmp_path / "mix.wav")
+    item.clip_volume, item.clip_pan = 0.0, 0.0
+    engine.export(comp, scene, path, "WAV")
+    _rate, quiet = read_wav(path)
+    item.clip_volume = 1.0
+    engine.export(comp, scene, path, "WAV")
+    _rate, loud = read_wav(path)
+    assert np.abs(loud.astype(np.int64)).sum() > np.abs(quiet.astype(np.int64)).sum() > 0
+    # Moving the meta-clip later: the composition starts later.
+    engine.arrange(scene)
+    meta = engine.meta_strip(scene, comp)
+    fps = scene.render.fps / scene.render.fps_base
+    meta.content_start = meta.content_start + round(2 * fps)
+    assert seqsync.sync_scene(scene)
+    assert abs(comp.gp2m.start_delay - 2.0) < 0.05
+    inner = engine.layer_strips(scene, comp)[names[0]]
+    assert inner.content_start == scene.frame_start + engine.state(comp)["offset_frames"]
+    comp.gp2m.start_delay = 0.0
+    assert min(s.content_start for s in engine.layer_strips(scene, comp).values()) \
+        == scene.frame_start + engine.state(comp)["offset_frames"]

@@ -394,8 +394,18 @@ def draw_layer_list(layout, comp):
     if settings is not None:
         col.prop(settings, "mode")
     col.prop(layer, "opacity", text="Volume", slider=True)
+    _clip_mix_props(col, settings)
     if settings is not None and settings.solo_saved_opacity >= 0.0:
         col.label(text="Attenuato dal Solo di un altro livello", icon="INFO")
+
+
+def _clip_mix_props(col, settings):
+    """Volume and pan of the layer's clip in the Sequencer (the same values)."""
+    if settings is None:
+        return
+    sub = col.column(align=True)
+    sub.prop(settings, "clip_volume", slider=True)
+    sub.prop(settings, "clip_pan", slider=True)
 
 
 def draw_layer_instruments(layout, comp, layer, settings):
@@ -743,6 +753,7 @@ def draw_layer_details(layout, gp, layer):
     settings = props.find_layer_settings(gp, layer.name)
     col = _split(layout)
     col.prop(layer, "opacity", text="Volume", slider=True)
+    _clip_mix_props(col, settings)
     if settings is None:
         col.label(text="Impostazioni in preparazione…")
         return
@@ -787,6 +798,7 @@ def draw_play(layout, scene, comp=None):
         col.prop(comp.gp2m, "layer_channels")
         sub = col.column(align=True)
         sub.prop(comp.gp2m, "channel", text="Canale (0 = auto)")
+        sub.prop(comp.gp2m, "start_delay")
         row = sub.row(align=True)
         row.active = play.mode == "SEQUENCE"
         row.prop(comp.gp2m, "order")
