@@ -56,6 +56,11 @@ def comp(addon):
     sub("engine")._state.pop(obj.name, None)
 
 
+def _grid(comp):
+    """Grease Pencil data of the composition's grid object."""
+    return sub("board").grid_object(comp).data
+
+
 def add_stroke(obj, layer_index, points, radius=0.02, material_index=0, frame=None):
     """``points``: (x, z) pairs in board coordinates; ``layer_index`` counts the
     user layers only (0 = "Livello 1"); ``frame``: keyframe number (new if missing)."""
@@ -97,22 +102,32 @@ def test_menu_and_panels_are_registered(addon):
     assert hasattr(bpy.ops.gp2m, "add_composition")
 
 
-def test_add_composition_is_one_object(comp):
+def test_add_composition_has_its_grid_apart(comp):
     board = sub("board")
     s = comp.gp2m
     assert s.is_composition and comp.name.startswith("Composizione Musicale")
-    assert len(comp.children) == 0  # no parent lines: everything is inside
+    # The grid is its own Grease Pencil object, a child of the composition.
+    grid = board.grid_object(comp)
+    assert list(comp.children) == [grid] and grid.name == comp.name + board.GRID_SUFFIX
+    assert board.is_grid(grid) and not grid.gp2m.is_composition
+    assert all(grid.lock_location) and all(grid.lock_scale)
+    assert comp.show_in_front and not grid.show_in_front
+    assert tuple(grid.matrix_world.translation)[1] > tuple(comp.matrix_world.translation)[1]
     names = [layer.name for layer in comp.data.layers]
     assert [l.name for l in board.user_layers(comp.data)] == ["Livello 1", "Livello 2",
                                                               "Livello 3"]
-    # Board at the bottom, playhead on top, user layers in between.
-    assert board.is_board_layer(comp.data.layers[0]) and names[-1] == board.HEAD_LAYER
-    assert all(layer.lock for layer in comp.data.layers if board.is_board_layer(layer))
+    # The drawing has only the user layers and the playhead on top.
+    assert names[-1] == board.HEAD_LAYER and names[:-1] == ["Livello 1", "Livello 2",
+                                                           "Livello 3"]
+    assert comp.data.layer_groups.get(board.BOARD_GROUP) is None
+    assert all(board.is_board_layer(layer) and layer.lock for layer in grid.data.layers)
     assert comp.data.layers.active.name == "Livello 1"
+    board_materials = [m.name for m in comp.data.materials if board.is_board_material(m)]
+    assert board_materials == ["GP2M Testina"]
     instruments = [slot.material.gp2m_instrument for slot in comp.material_slots
                    if not board.is_board_material(slot.material)]
     assert len(instruments) == 25 and {"PLUCK", "KICK", "SNARE", "HIHAT"} <= set(instruments)
-    labels = comp.data.layers.get("GP2M Etichette").frames[0].drawing
+    labels = board.grid_object(comp).data.layers.get("GP2M Etichette").frames[0].drawing
     assert len(labels.strokes) > 10
     # Empty composition: a silent strip already exists and the scene loops 8 s.
     scene = bpy.context.scene
@@ -136,7 +151,7 @@ def test_playhead_follows_time(comp):
 def test_key_labels_options(comp):
     board = sub("board")
     def label_strokes():
-        return len(comp.data.layers.get("GP2M Etichette").frames[0].drawing.strokes)
+        return len(_grid(comp).layers.get("GP2M Etichette").frames[0].drawing.strokes)
     counts = {}
     for mode in ("NONE", "C", "WHITE", "ALL"):
         comp.gp2m.key_labels = mode
@@ -272,11 +287,11 @@ def test_export_wav_mp3_midi(comp, tmp_path):
 def test_board_rebuild_follows_settings(comp):
     board = sub("board")
     add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
-    keys_before = len(comp.data.layers.get("GP2M Tasti").frames[0].drawing.strokes)
+    keys_before = len(_grid(comp).layers.get("GP2M Tasti").frames[0].drawing.strokes)
     comp.gp2m.length = 4.0
     comp.gp2m.octaves = 2
     board._rebuild_pending()  # normally run by a timer
-    keys_after = len(comp.data.layers.get("GP2M Tasti").frames[0].drawing.strokes)
+    keys_after = len(_grid(comp).layers.get("GP2M Tasti").frames[0].drawing.strokes)
     assert keys_after < keys_before
     # The user's drawing survives the rebuild.
     assert len(board.user_layers(comp.data)[0].frames[0].drawing.strokes) == 1
@@ -619,7 +634,7 @@ def test_preview_range_darkens_the_grid_only(comp):
     scene = bpy.context.scene
     add_stroke(comp, 0, line(comp, 0.5, 3.5, 60))
     sound = engine.regenerate(comp).key
-    shade = comp.data.layers.get(board.SHADE_LAYER)
+    shade = _grid(comp).layers.get(board.SHADE_LAYER)
     assert shade is not None and board.is_board_layer(shade)
     assert len(shade.frames[0].drawing.strokes) == 0
     fps = scene.render.fps / scene.render.fps_base
@@ -639,13 +654,13 @@ def test_preview_range_darkens_the_grid_only(comp):
         assert engine.regenerate(comp).key == sound  # the music is the same
         # A rebuilt board keeps the shading.
         board.rebuild(comp, scene)
-        shade = comp.data.layers.get(board.SHADE_LAYER)
+        shade = _grid(comp).layers.get(board.SHADE_LAYER)
         assert len(shade.frames[0].drawing.strokes) == 2
         assert board.board_materials_ok(comp)
     finally:
         scene.use_preview_range = False
     assert board.update_preview_shade(comp, scene)
-    assert len(comp.data.layers.get(board.SHADE_LAYER).frames[0].drawing.strokes) == 0
+    assert len(_grid(comp).layers.get(board.SHADE_LAYER).frames[0].drawing.strokes) == 0
 
 
 def _fresh(addon):
@@ -900,14 +915,15 @@ def test_keyboard_header_without_an_editor(comp):
 def test_array_modifier_leaves_the_board_alone(comp):
     board, handlers = sub("board"), sub("handlers")
     add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
-    keys = len(comp.data.layers.get("GP2M Tasti").frames[0].drawing.strokes)
+    keys = len(_grid(comp).layers.get("GP2M Tasti").frames[0].drawing.strokes)
     array = comp.modifiers.new("Array", "GREASE_PENCIL_ARRAY")
     array.count = 3
     handlers._dirty.add(comp.name)
     handlers.flush()  # what the timer does after a modifier is added
     assert array.use_layer_pass_filter and array.invert_layer_pass_filter
     evaluated = comp.evaluated_get(bpy.context.evaluated_depsgraph_get()).data
-    assert len(evaluated.layers["GP2M Tasti"].current_frame().drawing.strokes) == keys
+    assert len(evaluated.layers[board.HEAD_LAYER].current_frame().drawing.strokes) == 1
+    assert len(_grid(comp).layers["GP2M Tasti"].frames[0].drawing.strokes) == keys
     user = board.user_layers(evaluated)[0]
     assert len(user.current_frame().drawing.strokes) == 3
 
@@ -1676,7 +1692,7 @@ def test_group_made_in_blenders_list_keeps_the_playhead_on_top(comp):
     board.ensure_order(gp)
     props.ensure_layer_settings(gp)
     roots = [n.name for n in gp.root_nodes]
-    assert roots[-1] == board.HEAD_GROUP and roots[0] == board.BOARD_GROUP
+    assert roots[-1] == board.HEAD_GROUP and board.BOARD_GROUP not in roots
     assert props.find_layer_settings(gp, "Archi").is_group
     group.is_expanded = True
     assert _shown(gp)[:2] == ["Archi", "Livello 3"]
@@ -1709,7 +1725,6 @@ def test_layer_specials_like_blender(comp):
     assert len(board.layer_instruments(comp, "Livello 1")) == count + moved
     assert props.find_layer_settings(gp, "Livello 2") is None
     assert list(gp.root_nodes)[-1].name == board.HEAD_GROUP
-    assert list(gp.root_nodes)[0].name == board.BOARD_GROUP
     assert [n.pitch for n in engine.regenerate(comp).notes] == [64]
     # Merging the bottom layer would cross the board.
     gp.layers.active = board.user_layers(gp)[0]
@@ -1719,18 +1734,60 @@ def test_layer_specials_like_blender(comp):
     assert len(gp.layers.active.frames[0].drawing.strokes) == 0
 
 
-def test_old_board_group_is_renamed(comp):
-    board = sub("board")
+def test_grid_inside_the_composition_moves_out(comp):
+    """Files up to 0.0.20 had the grid inside the composition (group renamed in 0.0.12)."""
+    board, operators = sub("board"), sub("operators")
     gp = comp.data
-    gp.layer_groups[board.BOARD_GROUP].name = board.LEGACY_BOARD_GROUP  # a 0.0.12 file
-    assert board.has_board(comp)
-    assert all(board.is_board_layer(l) for l in gp.layer_groups[board.LEGACY_BOARD_GROUP]
-               .children)
-    board.ensure_order(gp)
-    assert gp.layer_groups.get(board.BOARD_GROUP) is not None
-    assert gp.layer_groups.get(board.LEGACY_BOARD_GROUP) is None
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60), material_index=1)
+    instrument = gp.materials[1].name
+    # Rebuild what an old file looks like: board group and materials inside.
+    old_grid = board.grid_object(comp)
+    bpy.data.objects.remove(old_grid, do_unlink=True)
+    group = gp.layer_groups.new(board.LEGACY_BOARD_GROUP)
+    gp.layer_groups.move_bottom(group)
+    index = board._ensure_materials(gp)
+    keys = gp.layers.new("GP2M Tasti", set_active=False, layer_group=group)
+    board._add_strokes(keys.frames.new(1).drawing,
+                       [([(0, 0), (1, 0)], 0.01, index["GP2M Tasto nero"], "line")])
+    operators.append_instrument(comp, board.instrument_materials(["SINE"])[0])
+    assert not board.has_board(comp)
     board.rebuild(comp)
-    assert [g.name for g in gp.layer_groups] .count(board.BOARD_GROUP) == 1
+    assert board.has_board(comp)
+    assert gp.layer_groups.get(board.LEGACY_BOARD_GROUP) is None
+    assert gp.layer_groups.get(board.BOARD_GROUP) is None
+    assert [m.name for m in gp.materials if board.is_board_material(m)] == ["GP2M Testina"]
+    stroke = board.user_layers(gp)[0].frames[0].drawing.strokes[0]
+    assert gp.materials[stroke.material_index].name == instrument  # same instrument
+    assert board.board_materials_ok(comp)
+    assert len(_grid(comp).layers["GP2M Tasti"].frames[0].drawing.strokes) > 10
+
+
+def test_clicking_the_grid_selects_the_composition(comp):
+    board, handlers = sub("board"), sub("handlers")
+    view_layer = bpy.context.view_layer
+    grid = board.grid_object(comp)
+    comp.select_set(False)
+    grid.select_set(True)
+    view_layer.objects.active = grid
+    assert handlers.select_composition_of_grid(view_layer) == comp
+    assert view_layer.objects.active == comp and comp.select_get()
+    assert not grid.select_get()
+
+
+def test_duplicate_and_delete_take_care_of_the_grid(comp):
+    board, engine, handlers = sub("board"), sub("engine"), sub("handlers")
+    copy = comp.copy()
+    bpy.context.scene.collection.objects.link(copy)
+    assert copy.gp2m.grid == comp.gp2m.grid and board.grid_object(copy) is None
+    assert not board.has_board(copy)
+    board.make_independent(handlers.compositions())
+    board.rebuild(copy)
+    assert board.grid_object(copy) not in (None, board.grid_object(comp))
+    grid_name = board.grid_object(copy).name
+    bpy.data.objects.remove(copy, do_unlink=True)
+    engine.cleanup_orphans()
+    assert bpy.data.objects.get(grid_name) is None
+    assert board.grid_object(comp) is not None
 
 
 # --- One channel per layer, absolute volumes, Auto on the active layer only -----------

@@ -355,6 +355,19 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.21
+
+La griglia è un Grease Pencil a parte
+
+- **Tavola separata**: tastiera, griglia, righe, etichette e ombra del Preview Range stanno in
+  *<composizione> · Tavola*, un Grease Pencil figlio della composizione, bloccato e un poco
+  dietro al disegno. Cliccando la griglia viene selezionata la composizione, quindi Draw Mode, G/R/S
+  e i pannelli lavorano sempre sul Grease Pencil del disegno. La testina resta in cima alla
+  composizione. Nella composizione restano solo i tuoi livelli e i tuoi strumenti.
+- I file salvati prima spostano la griglia fuori dalla composizione all'apertura (i tratti
+  mantengono i loro strumenti). Duplicando una composizione (Shift+D) la copia ha la sua tavola;
+  cancellandola sparisce anche la tavola.
+
 ## 0.0.20
 
 La composizione segue In e Out della scena; un colore per livello

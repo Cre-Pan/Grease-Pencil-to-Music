@@ -17,7 +17,7 @@ def active_composition(context):
         return None
     if obj.type == "GREASEPENCIL" and obj.gp2m.is_composition:
         return obj
-    parent = obj.parent
+    parent = obj.parent  # the grid (or a legacy child) of a composition
     if parent is not None and parent.type == "GREASEPENCIL" and parent.gp2m.is_composition:
         return parent
     return None

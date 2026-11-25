@@ -25,8 +25,10 @@ disegna su una tavola, e la tavola suona.
 ## Uso
 
 1. Nel viewport 3D: **Shift+A → Doodle Music → Composizione Musicale**.
-   Viene creato **un unico oggetto** *Composizione Musicale 1*: la tavola (tastiera,
-   griglia, etichette e testina) sta in gruppi di livelli bloccati dentro l'oggetto stesso.
+   Viene creata *Composizione Musicale 1*, il Grease Pencil su cui disegni (con la testina in
+   cima), e sua figlia *Composizione Musicale 1 · Tavola*, un Grease Pencil a parte con
+   tastiera, griglia ed etichette. La tavola è bloccata e cliccandola selezioni la
+   composizione: entrando in **Draw Mode** disegni sempre sulla composizione, mai sulla griglia.
    La composizione parte **vuota**: un livello con un solo strumento (Flauto). La vista
    passa a frontale, *Solid → Texture*; si resta in Object Mode (passa a **Draw Mode** per
    disegnare).
@@ -39,7 +41,7 @@ disegna su una tavola, e la tavola suona.
    entrano ed escono dai gruppi. Il menu **▾** è come quello di Blender: duplica (con
    impostazioni e strumenti copiati), mostra tutti / nascondi gli altri, blocca / sblocca
    tutti, unisci sotto / unisci gruppo, nuovo gruppo, sposta nel gruppo, sciogli gruppo; la
-   tavola (gruppo *Tavola Composizione*) non viene mai toccata. Sotto la lista ci sono lettura, volume e gli strumenti del
+   tavola (l'oggetto *· Tavola*) non viene mai toccata. Sotto la lista ci sono lettura, volume e gli strumenti del
    livello attivo: **+ Strumento** ne aggiunge altri (sintetizzati, percussioni, Campione,
    Libreria), **♪** accanto a uno strumento lo cambia (i tratti restano), il pulsante col nome
    lo rende quello con cui disegni.

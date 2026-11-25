@@ -27,7 +27,7 @@ colore = voce).
 | Uscite | una strip per livello nel Video Sequencer (o una col mix), export WAV, MP3, MIDI, overlay nella Timeline |
 | Volume dello spessore | assoluto (0,8 righe = pieno, come la web app), mai relativo agli altri tratti |
 | Suono finito per livello | parte lineare (ambiente, low cut) per livello; dinamica calcolata sul mix e applicata uguale a ogni livello: le strip sommate sono il mix |
-| Oggetto | un solo oggetto per composizione: la tavola è fatta di livelli bloccati dentro di esso |
+| Oggetto | dalla 0.0.21 due Grease Pencil: la composizione (i tuoi livelli e la testina) e sua figlia *· Tavola* (griglia, tastiera, etichette, bloccata; cliccarla seleziona la composizione) |
 | Indipendenza | ogni composizione ha dati e materiali-strumento propri (anche dopo Shift+D / Alt+D) |
 | Ascolto | per scena: tutte insieme, solo l'attiva, una dopo l'altra (strip spostate, testina con offset) |
 | Scala oggetto | X = durata del loop, Z = ottave; la scala torna a 1 a fine trasformazione |

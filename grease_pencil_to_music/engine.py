@@ -440,6 +440,15 @@ def cleanup_orphans():
                 if sound is not None and sound.users == 0:
                     bpy.data.sounds.remove(sound)
     for obj in list(bpy.data.objects):
+        # The grid of a deleted composition, or a copy of a grid (Shift+D).
+        if board.is_grid(obj):
+            owner = board.grid_owner(obj)
+            if owner is None or owner.gp2m.grid != obj:
+                data = obj.data
+                bpy.data.objects.remove(obj, do_unlink=True)
+                if data is not None and data.users == 0:
+                    bpy.data.grease_pencils.remove(data)
+            continue
         if obj.get(ROLE) in ("board", "label", "playhead") and obj.parent is None:
             data = obj.data
             bpy.data.objects.remove(obj, do_unlink=True)

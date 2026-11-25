@@ -1,15 +1,16 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The drawing board, built *inside* the composition object.
+"""The drawing board of a composition: a small rig of two Grease Pencil objects.
 
-Everything lives in the composition's own Grease Pencil data, so a
-composition is one single object (no parent lines, Shift+D duplicates a whole
-work plane):
+* the composition (the object you draw on): only your layers and instruments,
+  plus the layer group "GP2M Testina" on top (locked) with the playhead, moved by
+  a driver on the layer translation;
+* its grid, "<composition> · Tavola", a child of the composition (since 0.0.21):
+  layer group "Tavola Composizione" with background, grid, note rows, piano keys,
+  labels and the dark boxes outside the scene Preview Range. Its transform is
+  locked and clicking it selects the composition, so Draw Mode always opens on the
+  drawing, never on the grid. The composition is drawn in front of it.
 
-* layer group "Tavola Composizione" (bottom, locked): background, grid, note rows,
-  piano keys, labels and the dark boxes outside the scene Preview Range;
-* layer group "GP2M Testina" (top, locked): the playhead, moved by a driver
-  on the layer translation;
-* the user's layers in between.
+Files up to 0.0.20 kept the grid inside the composition: it moves out on load.
 
 Board coordinates are the object's local X-Z plane ("the wall"):
 x = 0 is the loop start, one second is ``seconds_width`` wide; z = 0 is the
@@ -31,6 +32,10 @@ HEAD_LAYER = "GP2M Linea testina"
 BOARD_FLAG = "gp2m_board"  # custom property on board materials
 LEGACY_ROLE = "gp2m_role"  # 0.0.1 used separate child objects
 BOARD_PASS = 77  # layer pass index of board layers, excluded from modifiers
+GRID_ROLE = "gp2m_grid"  # custom property on the grid object
+GRID_SUFFIX = " · Tavola"
+GRID_DEPTH = 0.005  # the grid sits just behind the drawing (+Y, away from the front view)
+HEAD_MATERIALS = ("GP2M Testina",)  # the only board material left in the composition
 
 # name: (stroke RGBA or None, fill RGBA or None)
 BOARD_MATERIALS = {
@@ -521,11 +526,11 @@ def update_preview_shade(comp, scene=None):
 
     Returns True if the board was touched.
     """
-    gp = comp.data
-    layer = gp.layers.get(SHADE_LAYER)
+    grid = grid_object(comp)
+    gp = grid.data if grid is not None else None
+    layer = gp.layers.get(SHADE_LAYER) if gp is not None else None
     if layer is None or not is_board_layer(layer):
-        if has_board(comp):
-            request_rebuild(comp)  # board of an older version: add the layer
+        request_rebuild(comp)  # board of an older version: add the layer
         return False
     scene = scene or bpy.context.scene
     s = comp.gp2m
@@ -550,11 +555,13 @@ def update_preview_shade(comp, scene=None):
 
 # --- Assembly ------------------------------------------------------------------
 
-def _ensure_materials(gp):
-    """Append the board materials to the composition (after the instruments)."""
+def _ensure_materials(gp, wanted=None):
+    """Append the board materials (or only ``wanted``) after the instruments."""
     index = {}
     names = [m.name if m else "" for m in gp.materials]
     for name, (stroke, fill) in BOARD_MATERIALS.items():
+        if wanted is not None and name not in wanted:
+            continue
         material = gp_material(name, stroke, fill)
         material[BOARD_FLAG] = True
         if name not in names:
@@ -562,6 +569,80 @@ def _ensure_materials(gp):
             names.append(name)
         index[name] = names.index(name)
     return index
+
+
+def is_grid(obj):
+    return obj is not None and bool(obj.get(GRID_ROLE))
+
+
+def grid_object(comp):
+    """The grid object of the composition, or None (missing, or the one of the
+    composition this one was duplicated from)."""
+    grid = comp.gp2m.grid
+    if grid is None or grid.parent != comp or grid.type != "GREASEPENCIL":
+        return None
+    return grid
+
+
+def grid_owner(grid):
+    owner = grid.parent
+    if owner is not None and owner.type == "GREASEPENCIL" and owner.gp2m.is_composition:
+        return owner
+    return None
+
+
+def ensure_grid(comp):
+    """The grid object of the composition, created when missing."""
+    grid = grid_object(comp)
+    name = comp.name + GRID_SUFFIX
+    if grid is None:
+        data = bpy.data.grease_pencils.new(name)
+        grid = bpy.data.objects.new(name, data)
+        grid[GRID_ROLE] = True
+        for collection in comp.users_collection or (bpy.context.scene.collection,):
+            collection.objects.link(grid)
+        grid.parent = comp
+        grid.matrix_parent_inverse.identity()
+        grid.lock_location = grid.lock_rotation = grid.lock_scale = (True, True, True)
+        grid.show_in_front = False  # the drawing (in front) stays above the grid
+        comp.show_in_front = True
+        comp.gp2m.grid = grid
+    elif grid.data is None or grid.data.users > 1:
+        grid.data = bpy.data.grease_pencils.new(name)
+    if grid.name != name:
+        grid.name = name
+    if grid.data.name != grid.name:
+        grid.data.name = grid.name
+    place = (*grid.location, *grid.rotation_euler, *grid.scale)
+    if any(abs(a - b) > 1e-6 for a, b in zip(place, (0.0, GRID_DEPTH, 0.0, 0.0, 0.0, 0.0,
+                                                      1.0, 1.0, 1.0))):
+        grid.location = (0.0, GRID_DEPTH, 0.0)
+        grid.rotation_euler = (0.0, 0.0, 0.0)
+        grid.scale = (1.0, 1.0, 1.0)
+    return grid
+
+
+def _strip_inner_board(comp):
+    """Up to 0.0.20 the grid lived inside the composition: take it out (its layers,
+    group and materials; the playhead stays). Returns True if something changed."""
+    gp = comp.data
+    changed = False
+    for name in (BOARD_GROUP, LEGACY_BOARD_GROUP):
+        group = gp.layer_groups.get(name)
+        if group is None:
+            continue
+        for layer in [layer for layer in gp.layers if group in ancestors(layer)]:
+            gp.layers.remove(layer)
+        group = gp.layer_groups.get(name)
+        if group is not None:
+            gp.layer_groups.remove(group, keep_children=False)
+        changed = True
+    for index in reversed(range(len(gp.materials))):
+        material = gp.materials[index]
+        if is_board_material(material) and material.name not in HEAD_MATERIALS:
+            gp.materials.pop(index=index)  # no stroke uses it any more
+            changed = True
+    return changed
 
 
 def _ensure_group(gp, name, bottom):
@@ -673,8 +754,15 @@ def protect_board(obj):
 
 
 def has_board(comp):
+    """True when the composition has its grid object and its playhead (and no grid of
+    0.0.20 or earlier still inside)."""
     groups = comp.data.layer_groups
-    return groups.get(BOARD_GROUP) is not None or groups.get(LEGACY_BOARD_GROUP) is not None
+    if groups.get(BOARD_GROUP) is not None or groups.get(LEGACY_BOARD_GROUP) is not None:
+        return False
+    grid = grid_object(comp)
+    return (grid is not None and grid.data is not None
+            and grid.data.layer_groups.get(BOARD_GROUP) is not None
+            and groups.get(HEAD_GROUP) is not None)
 
 
 def rename_legacy_board(gp):
@@ -706,8 +794,13 @@ def board_materials_ok(comp):
     slots, Ctrl+Z leaves the board strokes on the neighbouring materials and
     keyboard and grid turn black.
     """
+    grid = grid_object(comp)
+    datas = [comp.data] + ([grid.data] if grid is not None and grid.data else [])
+    return all(_materials_ok(gp) for gp in datas)
+
+
+def _materials_ok(gp):
     import numpy as np
-    gp = comp.data
     names = [m.name if m is not None else "" for m in gp.materials]
     for layer in gp.layers:
         allowed = _LAYER_MATERIALS.get(layer.name)
@@ -729,22 +822,26 @@ def board_materials_ok(comp):
 
 
 def rebuild(comp, scene=None):
-    """(Re)create board, labels and playhead inside the composition."""
+    """(Re)create the grid object (board and labels) and the playhead."""
     scene = scene or bpy.context.scene
     _remove_legacy_children(comp)
     s = comp.gp2m
     gp = comp.data
     active_name = gp.layers.active.name if gp.layers.active is not None else None
-    index = _ensure_materials(gp)
+    _strip_inner_board(comp)
+    grid = ensure_grid(comp)
+    grid_gp = grid.data
+    index = _ensure_materials(grid_gp)
     rows, width, top = dimensions(s)
     frame = _first_frame(scene)
     lit = preview_lit(comp, scene)
-    gp[SHADE_KEY] = _shade_signature(s, lit)
+    grid_gp[SHADE_KEY] = _shade_signature(s, lit)
 
-    rename_legacy_board(gp)
+    for layer in [layer for layer in grid_gp.layers if is_board_layer(layer)]:
+        grid_gp.layers.remove(layer)
     for layer in [layer for layer in gp.layers if is_board_layer(layer)]:
-        gp.layers.remove(layer)
-    board_group = _ensure_group(gp, BOARD_GROUP, bottom=True)
+        gp.layers.remove(layer)  # the playhead
+    board_group = _ensure_group(grid_gp, BOARD_GROUP, bottom=True)
     head_group = _ensure_group(gp, HEAD_GROUP, bottom=False)
 
     for name, specs in (
@@ -754,7 +851,7 @@ def rebuild(comp, scene=None):
             ("GP2M Tasti", _keys(s, index, rows)),
             ("GP2M Etichette", _labels(s, index, rows, top)),
             (SHADE_LAYER, _shade(s, index, lit, top))):
-        layer = gp.layers.new(name, set_active=False, layer_group=board_group)
+        layer = grid_gp.layers.new(name, set_active=False, layer_group=board_group)
         layer.use_lights = False
         layer.pass_index = BOARD_PASS
         _add_strokes(layer.frames.new(frame).drawing, specs)
@@ -763,8 +860,10 @@ def rebuild(comp, scene=None):
     head = gp.layers.new(HEAD_LAYER, set_active=False, layer_group=head_group)
     head.use_lights = False
     head.pass_index = BOARD_PASS
+    head_index = _ensure_materials(gp, HEAD_MATERIALS)
     _add_strokes(head.frames.new(frame).drawing,
-                 [([(0.0, -0.12), (0.0, top + 0.04)], 0.012, index["GP2M Testina"], "line")])
+                 [([(0.0, -0.12), (0.0, top + 0.04)], 0.012, head_index["GP2M Testina"],
+                   "line")])
     head.lock = True
     from . import engine
     offset = engine.state(comp).get("offset_frames", 0)
