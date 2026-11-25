@@ -399,13 +399,17 @@ def midi_tracks(notes):
     return tracks
 
 
-def _clip_mix(obj, result):
-    """The mix as the Sequencer plays it: every layer with its clip volume and pan."""
+def _clip_mix(obj, result, scene=None):
+    """The mix as the Sequencer plays it: every layer with its clip volume and pan, and
+    those of its groups (of layers and of compositions)."""
     gains = {}
     for name, _audio in result.stems:
         item = props.find_layer_settings(obj.data, name)
+        volume, pan = strip_bus(scene, obj, name) if scene is not None else layer_bus(obj, name)
         if item is not None:
-            gains[name] = (item.clip_volume, item.clip_pan)
+            gains[name] = (item.clip_volume * volume, min(max(item.clip_pan + pan, -1.0), 1.0))
+        else:
+            gains[name] = (volume, min(max(pan, -1.0), 1.0))
     if all(abs(v - 1.0) < 1e-6 and abs(p) < 1e-6 for v, p in gains.values()):
         return result.audio
     total = np.zeros_like(result.audio, dtype=np.float32)
@@ -426,7 +430,18 @@ def export(obj, scene, path, fmt):
     if fmt == "MIDI":
         midi.write_midi(path, midi_tracks(result.notes), obj.gp2m.bpm)
     else:
-        audio = _clip_mix(obj, result) if per_layer and result.stems else result.audio
+        if per_layer and result.stems:
+            audio = _clip_mix(obj, result, scene)
+        else:
+            audio = result.audio
+            volume, pan = strip_bus(scene, obj) if scene is not None else (1.0, 0.0)
+            if abs(volume - 1.0) > 1e-6 or abs(pan) > 1e-6:
+                audio = np.asarray(audio, dtype=np.float32) * volume
+                if audio.ndim == 2 and audio.shape[1] == 2 and abs(pan) > 1e-6:
+                    pan = min(max(pan, -1.0), 1.0)
+                    audio = audio * np.array([min(1.0, 1.0 - pan), min(1.0, 1.0 + pan)],
+                                             dtype=np.float32)
+                audio = np.clip(audio, -1.0, 1.0)
         write_audio(path, audio, result.sample_rate, fmt, prefs.get_prefs().mp3_bitrate)
     return result
 
@@ -454,8 +469,8 @@ def cleanup_orphans():
         editor = scene.sequence_editor
         if editor is None:
             continue
-        for strip in list(editor.strips):
-            if not _is_composition_strip(strip):
+        for strip in [strip for strips in _containers(editor) for strip in strips]:
+            if is_group_meta(strip) or not _is_composition_strip(strip):
                 continue
             owner = bpy.data.objects.get(strip.get(OWNER_KEY)
                                          or strip.name[len(STRIP_PREFIX):])
@@ -483,6 +498,99 @@ def cleanup_orphans():
 
 OWNER_KEY = "gp2m_composition"  # custom properties of the strips (names get cut at 63 bytes)
 LAYER_KEY = "gp2m_layer"
+GROUP_KEY = "gp2m_group"  # a group of compositions (Ctrl+G in the Sequencer); on the
+#                           group's meta-clip and on the compositions inside it
+LAYER_GROUP_KEY = "gp2m_layer_group"  # the meta-clip of a group of layers
+BUS_VOLUME, BUS_PAN = "gp2m_volume", "gp2m_pan"  # a group's volume and pan (a bus)
+
+
+def is_group_meta(strip):
+    return strip.type == "META" and strip.get(GROUP_KEY) is not None
+
+
+def group_metas(editor):
+    """Every group of compositions in the Sequencer, the outer ones first."""
+    found = []
+    if editor is None:
+        return found
+    level = [strip for strip in editor.strips if is_group_meta(strip)]
+    while level:
+        found.extend(level)
+        level = [strip for meta in level for strip in meta.strips if is_group_meta(strip)]
+    return found
+
+
+def _containers(editor):
+    """Where compositions' clips can be: the top of the Sequencer and the groups."""
+    if editor is None:
+        return []
+    return [editor.strips] + [meta.strips for meta in group_metas(editor)]
+
+
+def find_group(editor, key):
+    return next((meta for meta in group_metas(editor) if meta[GROUP_KEY] == key), None)
+
+
+def composition_group(scene, obj):
+    """The group (meta-clip) the composition is in, or None."""
+    key = obj.get(GROUP_KEY)
+    return find_group(scene.sequence_editor, key) if key else None
+
+
+def _container_meta(scene, obj):
+    """The group the composition's clip goes in (None: the top of the Sequencer); a
+    group that is gone is forgotten."""
+    group = composition_group(scene, obj)
+    if group is None and obj.get(GROUP_KEY) is not None:
+        del obj[GROUP_KEY]
+    return group
+
+
+def _container_strips(scene, obj):
+    group = _container_meta(scene, obj)
+    editor = scene.sequence_editor or scene.sequence_editor_create()
+    return group.strips if group is not None else editor.strips
+
+
+def group_bus(scene, obj):
+    """``(volume, pan, muted)`` of the groups of compositions around the composition."""
+    volume, pan, muted = 1.0, 0.0, False
+    top = top_strip(scene, obj)
+    group = top.parent_meta() if top is not None else composition_group(scene, obj)
+    while group is not None and is_group_meta(group):
+        volume *= float(group.get(BUS_VOLUME, 1.0))
+        pan += float(group.get(BUS_PAN, 0.0))
+        muted = muted or group.mute
+        group = group.parent_meta()
+    return volume, pan, muted
+
+
+def layer_bus(obj, layer_name):
+    """``(volume, pan)`` of the groups of layers around a layer ("Volume clip" and
+    "Pan" of each group)."""
+    volume, pan = 1.0, 0.0
+    layer = obj.data.layers.get(layer_name)
+    group = layer.parent_group if layer is not None else None
+    while group is not None:
+        item = props.find_layer_settings(obj.data, group.name)
+        if item is not None:
+            volume *= item.clip_volume
+            pan += item.clip_pan
+        group = group.parent_group
+    return volume, pan
+
+
+def strip_bus(scene, obj, layer_name=None):
+    """``(volume, pan)`` the groups add to a strip of the composition."""
+    volume, pan, _muted = group_bus(scene, obj)
+    if layer_name is not None:
+        layer_volume, layer_pan = layer_bus(obj, layer_name)
+        volume, pan = volume * layer_volume, pan + layer_pan
+    return volume, pan
+
+
+def muted_by_group(scene, obj):
+    return group_bus(scene, obj)[2]
 
 
 def strip_name(obj, layer=None):
@@ -502,36 +610,64 @@ def _top_strips(editor, obj):
     strip per layer inside) or its mix strip, plus layer strips of 0.0.21 and earlier."""
     if editor is None:
         return []
-    return [strip for strip in editor.strips
-            if (strip.get(OWNER_KEY) is not None or strip.name.startswith(STRIP_PREFIX))
+    return [strip for strips in _containers(editor) for strip in strips
+            if not is_group_meta(strip)
+            and (strip.get(OWNER_KEY) is not None or strip.name.startswith(STRIP_PREFIX))
             and _owned(strip, obj)]
+
+
+def _main(strips, obj):
+    """The composition's own clip among copies (Shift+D gives them a .001 name)."""
+    return next((strip for strip in strips if strip.name == strip_name(obj)), strips[0])
 
 
 def meta_strip(scene, obj):
     """The meta-clip of a composition with 'Un canale per livello', or None."""
-    for strip in _top_strips(scene.sequence_editor, obj):
-        if strip.type == "META":
-            return strip
-    return None
+    metas = [strip for strip in _top_strips(scene.sequence_editor, obj)
+             if strip.type == "META"]
+    return _main(metas, obj) if metas else None
 
 
 def top_strip(scene, obj):
     """What the composition shows on its channel: its meta-clip or its mix strip."""
+    meta = meta_strip(scene, obj)
+    if meta is not None:
+        return meta
     strips = _top_strips(scene.sequence_editor, obj)
-    for strip in strips:
-        if strip.type == "META":
-            return strip
     return min(strips, key=lambda strip: strip.channel) if strips else None
+
+
+def meta_sounds(meta):
+    """The sound strips inside a meta-clip, also inside the meta-clips of its groups of
+    layers."""
+    found = []
+    for strip in meta.strips:
+        if strip.type == "SOUND":
+            found.append(strip)
+        elif strip.type == "META":
+            found.extend(meta_sounds(strip))
+    return found
+
+
+def layer_group_metas(meta):
+    """``{group name: meta-clip}`` of the groups of layers inside a composition's
+    meta-clip (at any depth)."""
+    found = {}
+    for strip in meta.strips:
+        if strip.type == "META":
+            if strip.get(LAYER_GROUP_KEY) is not None:
+                found[strip[LAYER_GROUP_KEY]] = strip
+            found.update(layer_group_metas(strip))
+    return found
 
 
 def composition_strips(scene, obj):
     """Every sound strip of a composition: its mix, or one per layer (inside its
-    meta-clip)."""
+    meta-clip, and inside the meta-clips of its groups of layers)."""
     strips = []
     for strip in _top_strips(scene.sequence_editor, obj):
         if strip.type == "META":
-            strips.extend(inner for inner in strip.strips
-                          if inner.type == "SOUND" and _owned(inner, obj))
+            strips.extend(inner for inner in meta_sounds(strip) if _owned(inner, obj))
         else:
             strips.append(strip)
     return strips
@@ -559,13 +695,16 @@ def _is_composition_strip(strip):
     return strip.get(OWNER_KEY) is not None or strip.name.startswith(STRIP_PREFIX)
 
 
-def foreign_channels(editor):
+def foreign_channels(editor, strips=None):
     """Channels holding strips that belong to no composition (videos, images, sounds
-    added by hand): a composition never shares them. Only the top of the Sequencer
-    counts: strips inside a meta-clip have channels of their own."""
-    if editor is None:
-        return set()
-    return {strip.channel for strip in editor.strips if not _is_composition_strip(strip)}
+    added by hand, groups): a composition never shares them. Only the top of the
+    Sequencer (or of a group, ``strips``) counts: strips inside a meta-clip have
+    channels of their own."""
+    if strips is None:
+        if editor is None:
+            return set()
+        strips = editor.strips
+    return {strip.channel for strip in strips if not _is_composition_strip(strip)}
 
 
 def _block_from(start, count, used):
@@ -585,7 +724,9 @@ def _channel_block(editor, obj, count):
     """First of ``count`` consecutive channels for the composition: its 'Canale'
     when the whole block is free, otherwise the next free block above it (a
     composition never lands on a channel with other clips)."""
-    used = {strip.channel for strip in editor.strips
+    group = composition_group(editor.id_data, obj)
+    strips = group.strips if group is not None else editor.strips
+    used = {strip.channel for strip in strips
             if not (_is_composition_strip(strip) and _owned(strip, obj))}
     return _block_from(obj.gp2m.channel or 1, count, used)
 
@@ -602,7 +743,7 @@ def new_composition_channel(scene, count):
             if _is_composition_strip(strip):
                 top = max(top, strip.channel)
     for obj in scene_compositions(scene):
-        if obj.gp2m.channel:
+        if obj.gp2m.channel and composition_group(scene, obj) is None:
             span = range(obj.gp2m.channel, obj.gp2m.channel + _channel_count(scene, obj))
             used.update(span)
             top = max(top, span[-1])
@@ -614,7 +755,7 @@ def _remove_strip(editor, strip):
     nobody uses any more are removed."""
     sounds = []
     if strip.type == "META":
-        sounds = [inner.sound for inner in strip.strips if getattr(inner, "sound", None)]
+        sounds = [inner.sound for inner in meta_sounds(strip) if getattr(inner, "sound", None)]
     elif getattr(strip, "sound", None) is not None:
         sounds = [strip.sound]
     parent = strip.parent_meta()
@@ -677,7 +818,8 @@ def _place_strip(scene, obj, path, frames):
         obj.gp2m.channel = channel
     if old is not None:
         _remove_strip(editor, old)
-    return _new_strip(scene, strip_name(obj), path, channel, tags={OWNER_KEY: obj.name})
+    return _new_strip(scene, strip_name(obj), path, channel, tags={OWNER_KEY: obj.name},
+                      meta=_container_meta(scene, obj))
 
 
 def _remove_layer_strips(scene, obj, keep=()):
@@ -715,7 +857,7 @@ def _ensure_meta(scene, obj, start):
         for strip in _top_strips(editor, obj):  # the mix strip, layers go inside
             if strip.get(LAYER_KEY) is None:
                 _remove_strip(editor, strip)
-        meta = editor.strips.new_meta(strip_name(obj), channel, int(start))
+        meta = _container_strips(scene, obj).new_meta(strip_name(obj), channel, int(start))
         meta[OWNER_KEY] = obj.name
     elif meta.channel != channel:
         meta.channel = channel
@@ -755,16 +897,16 @@ def rename_composition(obj, name):
         editor = scene.sequence_editor
         if editor is None:
             continue
-        for strip in list(editor.strips):
+        for strip in [strip for strips in _containers(editor) for strip in strips]:
             if strip.get(OWNER_KEY) != old:
                 continue
             strip[OWNER_KEY] = new
             strip.name = strip_name(obj)
             if strip.type == "META":
-                for inner in strip.strips:
+                for inner in meta_sounds(strip) + list(layer_group_metas(strip).values()):
                     if inner.get(OWNER_KEY) == old:
                         inner[OWNER_KEY] = new
-                        layer = inner.get(LAYER_KEY)
+                        layer = inner.get(LAYER_KEY) or inner.get(LAYER_GROUP_KEY)
                         inner.name = strip_name(obj, layer) if layer else strip_name(obj)
     board.request_rebuild(obj)
     return new
@@ -776,6 +918,127 @@ def silent_layers(obj):
     from .reader import audible_layers
     audible = {layer.name for layer in audible_layers(obj.data)}
     return {layer.name for layer in board.user_layers(obj.data) if layer.name not in audible}
+
+
+def _user_roots(gp):
+    return [node for node in gp.root_nodes
+            if not (board.is_group(node) and board.is_board_group(node))
+            and not (not board.is_group(node) and board.is_board_layer(node))]
+
+
+def layer_targets(obj, names):
+    """Where the strips of the layers ``names`` go inside the composition's meta-clip:
+    ``({layer: (groups, channel)}, {groups: channel})``, ``groups`` being the path of
+    group names (outer first; () = right inside the meta-clip). A group of layers is a
+    meta-clip of its own; channel 1 = the bottom node among its siblings. Groups
+    without strips get no meta-clip."""
+    names = set(names)
+    layers, groups = {}, {}
+
+    def heard(node):
+        if board.is_group(node):
+            return any(heard(child) for child in node.children)
+        return node.name in names
+
+    def walk(nodes, path):
+        channel = 0
+        for node in nodes:
+            if not heard(node):
+                continue
+            channel += 1
+            if board.is_group(node):
+                groups[path + (node.name,)] = channel
+                walk(list(node.children), path + (node.name,))
+            else:
+                layers[node.name] = (path, channel)
+        return channel
+
+    top = walk(_user_roots(obj.data), ())
+    for name in sorted(names - set(layers)):  # not on the board (should not happen)
+        top += 1
+        layers[name] = ((), top)
+    return layers, groups
+
+
+def tree_signature(obj):
+    """Which group each user layer and group is in."""
+    gp = obj.data
+    nodes = [node for node in list(gp.layers) + list(gp.layer_groups)
+             if not (board.is_group(node) and board.is_board_group(node))
+             and not (not board.is_group(node) and board.is_board_layer(node))]
+    return sorted((node.name, node.parent_group.name if node.parent_group else "")
+                  for node in nodes)
+
+
+def _same_meta(a, b):
+    return a is not None and b is not None and a.name == b.name
+
+
+def _group_container(obj, meta, path, groups, start):
+    """The meta-clip of the group of layers ``path`` inside ``meta`` (made when
+    missing)."""
+    container = meta
+    for depth in range(len(path)):
+        name = path[depth]
+        found = next((strip for strip in container.strips if strip.type == "META"
+                      and strip.get(LAYER_GROUP_KEY) == name), None)
+        if found is None:
+            found = container.strips.new_meta(strip_name(obj, name),
+                                              groups.get(path[:depth + 1], 1), int(start))
+            found[OWNER_KEY] = obj.name
+            found[LAYER_GROUP_KEY] = name
+        container = found
+    return container
+
+
+def _fit_tree(meta):
+    """The meta-clips of the groups of layers span their strips (inner ones first),
+    then the composition's."""
+    for strip in meta.strips:
+        if strip.type == "META":
+            _fit_tree(strip)
+    fit_meta(meta)
+
+
+def layout_layers(scene, obj, meta):
+    """Every layer strip in the meta-clip of its group, on its channel; the groups'
+    meta-clips on theirs, muted with their group; meta-clips of groups that are gone
+    removed. Remembers the tree it laid out (see seqsync)."""
+    strips = layer_strips(scene, obj)
+    if not strips:
+        return
+    targets, groups = layer_targets(obj, list(strips))
+    start = min(strip.content_start for strip in strips.values())
+    for name, strip in strips.items():
+        path, channel = targets[name]
+        container = _group_container(obj, meta, path, groups, start)
+        if _same_meta(strip.parent_meta(), container) and strip.channel == channel:
+            continue
+        if strip.sound is None:
+            _remove_strip(scene.sequence_editor, strip)
+            continue
+        # Setting .channel shuffles a strip that would overlap another one: the strip
+        # is created again where it goes (temporary overlaps are allowed).
+        _new_strip(scene, strip.name, strip.sound.filepath, channel, old=strip,
+                   tags={OWNER_KEY: obj.name, LAYER_KEY: name}, meta=container,
+                   frame=strip.content_start)
+    metas = layer_group_metas(meta)
+    wanted = {path[-1]: path for path in groups}
+    for name, group_meta in list(metas.items()):
+        if name not in wanted or not meta_sounds(group_meta):
+            _remove_strip(scene.sequence_editor, group_meta)
+            metas.pop(name)
+    for name, group_meta in metas.items():
+        channel = groups[wanted[name]]
+        if group_meta.channel != channel:
+            group_meta.channel = channel
+        item = props.find_layer_settings(obj.data, name)
+        set_clip_mute(group_meta, bool(item is not None and item.mute))
+        if group_meta.name != strip_name(obj, name):
+            group_meta.name = strip_name(obj, name)
+    st = state(obj)
+    st["tree"] = tree_signature(obj)
+    st["layer_groups"] = sorted(metas)
 
 
 def layer_channel_order(obj, names):
@@ -807,6 +1070,10 @@ def sync_layer_mutes(scene, obj):
     silent = silent_layers(obj)
     for name, strip in layer_strips(scene, obj).items():
         set_clip_mute(strip, name in silent)
+    meta = meta_strip(scene, obj)
+    for name, group_meta in (layer_group_metas(meta) if meta is not None else {}).items():
+        item = props.find_layer_settings(obj.data, name)
+        set_clip_mute(group_meta, bool(item is not None and item.mute))
 
 
 def _place_layer_strips(scene, obj, result):
@@ -833,26 +1100,27 @@ def _place_layer_strips(scene, obj, result):
             item["clip_volume"] = min(max(strip.volume, 0.0), 10.0)
             item["clip_pan"] = min(max(strip.pan, -1.0), 1.0)
     kept = [name for name in strips if name not in names]
-    channels = {name: index + 1 for index, name in
-                enumerate(layer_channel_order(obj, names + kept))}
+    targets, groups = layer_targets(obj, names + kept)
+    channels = {name: target[1] for name, target in targets.items()}
+    containers = {name: _group_container(obj, meta, targets[name][0], groups, start)
+                  for name in names + kept}
     for name in kept:
         strip = strips[name]
-        if strip.channel != channels[name] or strip.parent_meta() is None \
-                or strip.parent_meta().name != meta.name:
+        if strip.channel != channels[name] or not _same_meta(strip.parent_meta(),
+                                                             containers[name]):
             if strip.sound is None:
                 _remove_strip(editor, strip)
                 continue
             strip = _new_strip(scene, strip.name, strip.sound.filepath, channels[name],
                                old=strip, tags={OWNER_KEY: obj.name, LAYER_KEY: name},
-                               meta=meta, frame=strip.content_start)
+                               meta=containers[name], frame=strip.content_start)
         set_clip_mute(strip, True)
     # The audio of each layer file (read-only arrays, shared with the mixer's cache).
     paths, sounds = st.setdefault("layer_paths", {}), st.setdefault("layer_audio", {})
     fps = scene.render.fps / scene.render.fps_base
     for index, (name, audio) in enumerate(result.stems):
         strip, channel = strips.get(name), channels[name]
-        inside = strip is not None and strip.parent_meta() is not None \
-            and strip.parent_meta().name == meta.name
+        inside = strip is not None and _same_meta(strip.parent_meta(), containers[name])
         frames = max(1, int(round(len(audio) / result.sample_rate * fps)))
         # The strip must still play the file written for that audio: undo can give
         # it back an older file (kept on disk when Windows could not delete it).
@@ -872,8 +1140,8 @@ def _place_layer_strips(scene, obj, result):
             strip.sound.filepath = path  # reloads the audio, playback goes on
         else:
             strip = _new_strip(scene, strip_name(obj, name), path, channel, old=strip,
-                               tags={OWNER_KEY: obj.name, LAYER_KEY: name}, meta=meta,
-                               frame=start)
+                               tags={OWNER_KEY: obj.name, LAYER_KEY: name},
+                               meta=containers[name], frame=start)
         _color_strip(obj, strip, name)
         set_clip_mute(strip, False)  # heard (a mute set in the Sequencer is the layer's)
         if paths.get(name) != path:
@@ -882,7 +1150,8 @@ def _place_layer_strips(scene, obj, result):
     for name in [name for name in paths if name not in names and name not in kept]:
         _forget_file(paths.pop(name))
         sounds.pop(name, None)
-    fit_meta(meta)
+    layout_layers(scene, obj, meta)
+    _fit_tree(meta)
 
 
 def _color_strip(obj, strip, layer_name):
@@ -899,7 +1168,9 @@ def dress_strip(obj, strip, layer_name):
     if item is None:
         return
     scene = strip.id_data
-    for attr, value in (("volume", item.clip_volume), ("pan", item.clip_pan)):
+    volume, pan = strip_bus(scene, obj, layer_name)
+    for attr, value in (("volume", item.clip_volume * volume),
+                        ("pan", min(max(item.clip_pan + pan, -1.0), 1.0))):
         if not is_animated(scene, strip, attr) and abs(getattr(strip, attr) - value) > 1e-5:
             setattr(strip, attr, value)
 
@@ -986,14 +1257,19 @@ def resolve_channels(scene):
     composition up to the next free block (with 'Un canale per livello' a
     composition takes one channel per layer). The clips are never moved."""
     editor = scene.sequence_editor
-    taken = foreign_channels(editor)
+    taken = {}  # per group (None: the top of the Sequencer): the channels in use
     for obj in sorted(scene_compositions(scene), key=lambda o: o.name):
         if not obj.gp2m.channel:
             continue
+        group = composition_group(scene, obj) if editor is not None else None
+        key = group.get(GROUP_KEY) if group is not None else None
+        if key not in taken:
+            taken[key] = foreign_channels(editor, group.strips if group is not None else None)
+        used = taken[key]
         count = _channel_count(scene, obj)
-        if set(range(obj.gp2m.channel, obj.gp2m.channel + count)) & taken:
-            obj.gp2m.channel = _block_from(obj.gp2m.channel, count, taken)
-        taken |= set(range(obj.gp2m.channel, obj.gp2m.channel + count))
+        if set(range(obj.gp2m.channel, obj.gp2m.channel + count)) & used:
+            obj.gp2m.channel = _block_from(obj.gp2m.channel, count, used)
+        used |= set(range(obj.gp2m.channel, obj.gp2m.channel + count))
 
 
 def arrange(scene):
@@ -1061,12 +1337,19 @@ def _arrange(scene):
         strip = strips[0]
         if strip.content_start != target:
             strip.content_start = target
+        if strip.parent_meta() is not None:  # in a group: the group's volume and pan
+            volume, pan = strip_bus(scene, obj)
+            for attr, value in (("volume", volume), ("pan", min(max(pan, -1.0), 1.0))):
+                if not is_animated(scene, strip, attr) and abs(getattr(strip, attr) - value) > 1e-5:
+                    setattr(strip, attr, value)
         if obj.gp2m.channel == 0:
             obj.gp2m.channel = strip.channel  # show the automatic choice
         elif strip.channel != obj.gp2m.channel:
             strip.channel = obj.gp2m.channel
         if strip.mute != mute:
             strip.mute = mute
+
+    fit_groups(scene)
 
     if play.fit_range and not linked:  # following the scene, the scene leads
         if play.mode == "SEQUENCE":
@@ -1078,6 +1361,17 @@ def _arrange(scene):
         end = scene.frame_start + total - 1
         if scene.frame_end != end:
             scene.frame_end = end
+
+
+def fit_groups(scene):
+    """Every group of compositions spans its clips (the inner ones first); an empty
+    group goes."""
+    editor = scene.sequence_editor
+    for group in reversed(group_metas(editor)):
+        if not len(group.strips):
+            _remove_strip(editor, group)
+        elif not group.lock:
+            fit_meta(group)
 
 
 def _arrange_layers(scene, obj, strips, target, mute):
@@ -1096,28 +1390,17 @@ def _arrange_layers(scene, obj, strips, target, mute):
         obj.gp2m.channel = meta.channel  # the automatic choice
     elif meta.channel != obj.gp2m.channel:
         meta.channel = obj.gp2m.channel
-    order = [layer.name for layer in obj.data.layers]
-    strips = sorted(strips, key=lambda strip: order.index(strip[LAYER_KEY])
-                    if strip[LAYER_KEY] in order else len(order))
-    wrong = [(strip, index + 1) for index, strip in enumerate(strips)
-             if strip.channel != index + 1]
-    for strip, channel in wrong:
-        # Setting .channel shuffles a strip that would overlap another one: the
-        # strip is created again on its channel (temporary overlaps are allowed).
-        if strip.sound is not None:
-            _new_strip(scene, strip.name, strip.sound.filepath, channel, old=strip,
-                       tags={OWNER_KEY: obj.name, LAYER_KEY: strip[LAYER_KEY]}, meta=meta,
-                       frame=strip.content_start)
+    layout_layers(scene, obj, meta)
     sync_layer_mutes(scene, obj)
-    inner = [strip for strip in meta.strips if strip.type == "SOUND"]
+    inner = meta_sounds(meta)
     if inner:
         shift = target - min(strip.content_start for strip in inner)
         if shift:
             meta.content_start = meta.content_start + shift  # moves what is inside too
-        for strip in meta.strips:  # every layer starts with the composition
-            if strip.type == "SOUND" and strip.content_start != target:
+        for strip in meta_sounds(meta):  # every layer starts with the composition
+            if strip.content_start != target:
                 strip.content_start = target
-    fit_meta(meta)
+    _fit_tree(meta)
     state(obj)["meta_span"] = (int(meta.left_handle), int(meta.right_handle))
     if meta.mute != mute:
         meta.mute = mute
@@ -1174,7 +1457,7 @@ def regenerate(obj, scene=None, force=False, only_active=False):
     if not s.is_composition:
         return None
     props.ensure_layer_settings(obj.data)
-    if s.mute and not force and composition_strips(scene, obj):
+    if (s.mute or muted_by_group(scene, obj)) and not force and composition_strips(scene, obj):
         arrange(scene)  # muted: its clips stay, muted, and nothing is rendered
         state(obj)["muted_stale"] = True
         return None

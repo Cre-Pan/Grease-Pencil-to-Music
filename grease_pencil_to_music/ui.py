@@ -1080,6 +1080,54 @@ def draw_export_menu(self, _context):
         self.layout.operator("gp2m.export", text=label, icon="FILE_SOUND").format = fmt
 
 
+# --- Sequencer sidebar: the groups (Ctrl+G) ------------------------------------------
+
+def _sequencer_group(context):
+    """``(strip, composition, settings)`` of the active strip when it is a group: of
+    compositions (composition and settings None) or of layers."""
+    editor = context.scene.sequence_editor if context.scene else None
+    strip = editor.active_strip if editor is not None else None
+    if strip is None or strip.type != "META":
+        return None
+    if engine.is_group_meta(strip):
+        return strip, None, None
+    name = strip.get(engine.LAYER_GROUP_KEY)
+    comp = bpy.data.objects.get(strip.get(engine.OWNER_KEY) or "")
+    if name is None or comp is None or comp.type != "GREASEPENCIL":
+        return None
+    return strip, comp, props.find_layer_settings(comp.data, name)
+
+
+class GP2M_PT_sequencer_group(bpy.types.Panel):
+    """Volume, pan and mute of a group: they apply to everything in it."""
+
+    bl_space_type = "SEQUENCE_EDITOR"
+    bl_region_type = "UI"
+    bl_category = "Musica"
+    bl_label = "Gruppo"
+
+    @classmethod
+    def poll(cls, context):
+        return _sequencer_group(context) is not None
+
+    def draw(self, context):
+        strip, comp, settings = _sequencer_group(context)
+        col = self.layout.column(align=True)
+        if comp is None:
+            col.label(text="Composizioni: " + str(sum(
+                1 for inner in strip.strips if engine._is_composition_strip(inner))))
+            if engine.BUS_VOLUME in strip:
+                col.prop(strip, f'["{engine.BUS_VOLUME}"]', text="Volume", slider=True)
+            if engine.BUS_PAN in strip:
+                col.prop(strip, f'["{engine.BUS_PAN}"]', text="Pan", slider=True)
+            col.prop(strip, "mute", text="Muto")
+        elif settings is not None:
+            col.label(text=comp.name, icon="OUTLINER_OB_GREASEPENCIL")
+            col.prop(settings, "clip_volume", text="Volume", slider=True)
+            col.prop(settings, "pan_percent", text="Pan", slider=True)
+            col.prop(settings, "mute", text="Muto")
+
+
 classes = ADD_FAMILY_MENUS + CHANGE_FAMILY_MENUS + (
     GP2M_MT_add_instrument,
     GP2M_MT_change_instrument,
@@ -1102,6 +1150,7 @@ classes = ADD_FAMILY_MENUS + CHANGE_FAMILY_MENUS + (
     GP2M_PT_layers,
 ) + VIEW_LAYER_PANELS + (
     VIEW3D_MT_gp2m_add,
+    GP2M_PT_sequencer_group,
 )
 
 

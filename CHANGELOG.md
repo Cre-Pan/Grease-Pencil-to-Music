@@ -355,6 +355,31 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.27
+
+Gruppi nel Sequencer, come i gruppi di Blender
+
+- **Ctrl+G sulle clip di più composizioni**: diventano un **gruppo**. Sul tavolo restano
+  composizioni separate, ognuna con i suoi livelli; nel Sequencer si muovono insieme, su un
+  solo canale. Un gruppo può stare dentro un altro gruppo.
+- **Alt+G su un gruppo** lo scioglie: le composizioni tornano fuori. **Alt+G sulla clip di una
+  composizione** invece non si fa: la clip torna com'era, con un avviso.
+- **Il gruppo è un bus**: volume, pan e muto del gruppo valgono per tutte le sue composizioni,
+  anche nell'export. Si cambiano nella barra laterale del Sequencer (scheda Musica, pannello
+  Gruppo); anche il Volume della meta-clip diventa il volume del gruppo. Un gruppo muto non
+  viene ricalcolato; togliendo il muto le sue composizioni si aggiornano.
+- **Ctrl+G sulle clip di alcuni livelli** (dentro la clip di una composizione): diventano un
+  **gruppo di livelli** nella stessa composizione. Ogni gruppo di livelli, anche quelli fatti
+  dalla lista dei livelli, è una meta-clip dentro la clip della composizione.
+- **Alt+G sulla clip di un gruppo di livelli** scioglie il gruppo; incollare la clip di un
+  livello dentro quella di un gruppo sposta il livello nel gruppo; eliminare la clip di un
+  gruppo mette il gruppo in muto; spostare le clip su altri canali riordina anche dentro il
+  gruppo.
+- Anche il gruppo di livelli è un bus: il suo "Volume clip" e il suo pan valgono per tutti i
+  suoi livelli (nel Sequencer e nell'export); muto e volume della sua meta-clip sono quelli
+  del gruppo.
+- Ctrl+Z riporta indietro gruppo e composizioni insieme.
+
 ## 0.0.26
 
 Le clip delle composizioni nel Sequencer: cosa succede

@@ -74,6 +74,13 @@ def _check_clips(scene, obj):
     st = engine.state(obj)
     metas = _owned_metas(scene, obj)
     if not metas:
+        loose = [strip for strip in engine._top_strips(scene.sequence_editor, obj)
+                 if strip.get(engine.LAYER_KEY) is not None]
+        if loose and st.get("had_meta"):  # Alt+G on the composition's meta-clip
+            rebuild_clips(scene, obj)
+            notify("La clip di una composizione non si separa: per raggruppare dei "
+                   "livelli usa Ctrl+G dentro la clip")
+            return True
         if st.pop("had_meta", None) and not obj.gp2m.mute:
             obj.gp2m.mute = True  # the meta-clip was deleted: the composition is muted
             notify(f"Clip eliminata: {obj.name} ora è muta (togli il muto per riaverla)")
@@ -92,16 +99,18 @@ def _check_clips(scene, obj):
         from . import table
         fps = scene.render.fps / scene.render.fps_base
         for copy_strip in others:
-            inner = [s for s in copy_strip.strips if s.type == "SOUND"]
+            inner = engine.meta_sounds(copy_strip)
             start = min((s.content_start for s in inner), default=copy_strip.content_start)
             base = st.get("offset_frames", 0) - st.get("delay_frames", 0)
             delay = max(0.0, (start - scene.frame_start - base) / fps)
             channel = copy_strip.channel
+            parent = copy_strip.parent_meta()
+            group = parent.get(engine.GROUP_KEY) if parent is not None else None
             engine._remove_strip(scene.sequence_editor, copy_strip)
-            table.duplicate(scene, obj, channel=channel, delay=round(delay, 4))
+            table.duplicate(scene, obj, channel=channel, delay=round(delay, 4), group=group)
         notify("Clip duplicata: è una nuova composizione")
         return True
-    inner = [s for s in main.strips if s.type == "SOUND" and engine._owned(s, obj)]
+    inner = [s for s in engine.meta_sounds(main) if engine._owned(s, obj)]
     names = [s.get(engine.LAYER_KEY) for s in inner]
     sped = any(len(s.retiming_keys) for s in inner if hasattr(s, "retiming_keys"))
     if len(names) != len(set(names)) or sped:
@@ -111,6 +120,95 @@ def _check_clips(scene, obj):
                "Le clip di una composizione non si tagliano: la composizione è intera")
         return True
     return False
+
+
+def _new_group_name(editor):
+    names = {meta.name for meta in engine.group_metas(editor)}
+    index = 1
+    while f"Gruppo {index}" in names:
+        index += 1
+    return f"Gruppo {index}"
+
+
+def _new_group_key(editor):
+    keys = {meta[engine.GROUP_KEY] for meta in engine.group_metas(editor)}
+    index = 1
+    while f"g{index}" in keys:
+        index += 1
+    return f"g{index}"
+
+
+def make_group(meta):
+    """``meta`` becomes a group of compositions, with its volume and pan."""
+    editor = meta.id_data.sequence_editor
+    meta[engine.GROUP_KEY] = _new_group_key(editor)
+    meta.name = _new_group_name(editor)
+    meta[engine.BUS_VOLUME] = 1.0
+    meta[engine.BUS_PAN] = 0.0
+    meta.id_properties_ui(engine.BUS_VOLUME).update(
+        min=0.0, max=10.0, soft_max=2.0, description="Volume di tutte le composizioni del gruppo")
+    meta.id_properties_ui(engine.BUS_PAN).update(
+        min=-1.0, max=1.0, description="Pan di tutte le composizioni del gruppo")
+
+
+def _sync_groups(scene):
+    """Groups of compositions: Ctrl+G on composition clips makes one (they stay apart
+    on the table, together in the Sequencer), Alt+G on it takes them out again; a
+    composition belongs to the group its clip is in. Returns True when it acted."""
+    editor = scene.sequence_editor
+    changed = False
+    for strips in engine._containers(editor):
+        for meta in list(strips):
+            if meta.type != "META" or meta.get(engine.OWNER_KEY) is not None \
+                    or engine.is_group_meta(meta):
+                continue
+            if any(engine._is_composition_strip(inner) or engine.is_group_meta(inner)
+                   for inner in meta.strips):
+                make_group(meta)  # Ctrl+G
+                notify(f"{meta.name}: le composizioni restano separate sul tavolo e "
+                       "si muovono insieme nel Sequencer")
+                changed = True
+    seen = set()
+    for meta in engine.group_metas(editor):
+        if meta[engine.GROUP_KEY] in seen:  # a copy of a group (Shift+D)
+            meta[engine.GROUP_KEY] = _new_group_key(editor)
+            changed = True
+        seen.add(meta[engine.GROUP_KEY])
+        if abs(meta.volume - 1.0) > 1e-4:
+            # The volume set on the meta-clip itself reaches only the strips right
+            # inside: it becomes the group's volume, for every composition in it.
+            meta[engine.BUS_VOLUME] = float(meta.get(engine.BUS_VOLUME, 1.0)) * meta.volume
+            meta.volume = 1.0
+            changed = True
+    for obj in engine.scene_compositions(scene):
+        top = engine.top_strip(scene, obj)
+        if top is None:
+            continue
+        parent = top.parent_meta()
+        key = parent.get(engine.GROUP_KEY) if parent is not None else None
+        if obj.get(engine.GROUP_KEY) != key:
+            if key is None:
+                del obj[engine.GROUP_KEY]
+            else:
+                obj[engine.GROUP_KEY] = key
+            if obj.gp2m.channel != top.channel:
+                obj.gp2m.channel = top.channel
+            changed = True
+    return changed
+
+
+def _sync_bus(scene, obj):
+    """The volume or pan of a group changed: every clip of the composition takes it.
+    Returns True when it did (the clips are then not read back this time)."""
+    st = engine.state(obj)
+    volume, pan, muted = engine.group_bus(scene, obj)
+    bus = (round(volume, 5), round(pan, 5))
+    if st.get("bus", (1.0, 0.0)) == bus:
+        return False
+    st["bus"] = bus
+    for name, strip in engine.layer_strips(scene, obj).items():
+        engine.dress_strip(obj, strip, name)
+    return True
 
 
 def _sync_name(scene, obj):
@@ -173,7 +271,7 @@ def _sync_foreign_layers(scene, obj):
     if meta is None:
         return False
     moved = False
-    for strip in list(meta.strips):
+    for strip in engine.meta_sounds(meta):
         owner_name = strip.get(engine.OWNER_KEY)
         layer = strip.get(engine.LAYER_KEY)
         if owner_name in (None, obj.name) or layer is None:
@@ -221,11 +319,21 @@ def _sync_mix(scene, obj):
             item.color = strip.color_tag
             changed = True
         mixed = False
+        bus_volume, bus_pan = engine.strip_bus(scene, obj, name)
         for attr, prop, low, high in (("volume", "clip_volume", 0.0, 10.0),
                                       ("pan", "clip_pan", -1.0, 1.0)):
             if engine.is_animated(scene, strip, attr):
                 continue
-            value = min(max(getattr(strip, attr), low), high)
+            current = getattr(strip, attr)
+            if attr == "volume":
+                expected = item.clip_volume * bus_volume
+                value = current / bus_volume if bus_volume > 1e-6 else item.clip_volume
+            else:
+                expected = min(max(item.clip_pan + bus_pan, -1.0), 1.0)
+                value = current - bus_pan
+            if abs(current - expected) <= 1e-5:
+                continue
+            value = min(max(value, low), high)
             if abs(value - getattr(item, prop)) > 1e-5:
                 item[prop] = value  # both read before writing back (no update in between)
                 mixed = True
@@ -245,7 +353,7 @@ def _sync_time(scene, obj):
     if "offset_frames" not in st:
         return False  # never arranged yet
     if strip.type == "META":
-        inner = [s for s in strip.strips if s.type == "SOUND"]
+        inner = engine.meta_sounds(strip)
         if not inner:
             return False
         start = min(s.content_start for s in inner)
@@ -295,10 +403,15 @@ def _sync_length(scene, obj):
     return True
 
 
+def _node(gp, name):
+    layer = gp.layers.get(name)
+    return layer if layer is not None else gp.layer_groups.get(name)
+
+
 def _reorder(gp, wanted):
-    """Put the layers ``wanted`` (bottom first) in that order, the other layers and
-    groups keep their places. Only layers with the same parent group."""
-    layers = [gp.layers.get(name) for name in wanted]
+    """Put the layers and groups ``wanted`` (bottom first) in that order, the other
+    layers and groups keep their places. Only nodes with the same parent group."""
+    layers = [_node(gp, name) for name in wanted]
     if any(layer is None for layer in layers):
         return False
     parents = {layer.parent_group.name if layer.parent_group else "" for layer in layers}
@@ -307,13 +420,12 @@ def _reorder(gp, wanted):
     parent = layers[0].parent_group
     nodes = list(parent.children if parent is not None else gp.root_nodes)
     names = [node.name for node in nodes]
-    slots = [i for i, node in enumerate(nodes) if node.name in wanted
-             and not board.is_group(node)]
+    slots = [i for i, node in enumerate(nodes) if node.name in wanted]
     if [names[i] for i in slots] == list(wanted):
         return False
     order = list(nodes)
     for slot, name in zip(slots, wanted):
-        order[slot] = gp.layers[name]
+        order[slot] = _node(gp, name)
     for node in order:  # moving each to the top, in order, gives exactly that order
         if board.is_group(node):
             gp.layer_groups.move_top(node)
@@ -323,15 +435,153 @@ def _reorder(gp, wanted):
     return True
 
 
+def _node_name(strip):
+    return strip.get(engine.LAYER_KEY) or strip.get(engine.LAYER_GROUP_KEY)
+
+
 def _sync_order(scene, obj):
-    strips = engine.layer_strips(scene, obj)
-    if len(strips) < 2:
+    """Clips of layers (or of groups of layers) moved to other channels inside their
+    meta-clip: the layers and groups take that order."""
+    meta = engine.meta_strip(scene, obj)
+    if meta is None or engine.state(obj).get("tree") != engine.tree_signature(obj):
+        return False  # the layers changed on the board: the Sequencer follows them
+    gp = obj.data
+    changed = False
+    for container in [meta] + list(engine.layer_group_metas(meta).values()):
+        inside = [strip for strip in container.strips if _node_name(strip)]
+        if len(inside) < 2:
+            continue
+        by_channel = [_node_name(strip) for strip in
+                      sorted(inside, key=lambda strip: (strip.channel, _node_name(strip)))]
+        group = gp.layer_groups.get(container.get(engine.LAYER_GROUP_KEY) or "") \
+            if container != meta else None
+        siblings = list(group.children if group is not None else gp.root_nodes)
+        current = [node.name for node in siblings if node.name in by_channel]
+        if current != by_channel and len(current) == len(by_channel):
+            changed |= _reorder(gp, by_channel)
+    return changed
+
+
+def _move_node(gp, node, group):
+    if board.is_group(node):
+        gp.layer_groups.move_to_layer_group(node, group)
+    else:
+        gp.layers.move_to_layer_group(node, group)
+    if group is not None:
+        group.is_expanded = True
+
+
+def _sync_layer_groups(scene, obj):
+    """Groups of layers inside the composition's meta-clip: Ctrl+G on clips of layers
+    makes a group of those layers (in the same composition), Alt+G on a group's clip
+    breaks the group up, a clip pasted in a group's clip moves the layer into the
+    group; deleting a group's clip mutes the group. Returns True when it acted."""
+    meta = engine.meta_strip(scene, obj)
+    if meta is None:
         return False
-    by_channel = [name for name, _strip in
-                  sorted(strips.items(), key=lambda item: (item[1].channel, item[0]))]
-    if by_channel == engine.layer_channel_order(obj, list(strips)):
+    gp = obj.data
+    st = engine.state(obj)
+    from . import operators
+    changed = False
+    for container in [meta] + list(engine.layer_group_metas(meta).values()):
+        parent = gp.layer_groups.get(container.get(engine.LAYER_GROUP_KEY) or "") \
+            if container != meta else None
+        for strip in list(container.strips):
+            if strip.type != "META" or strip.get(engine.OWNER_KEY) is not None:
+                continue
+            members = sorted((inner for inner in strip.strips if _node_name(inner)
+                              and _node(gp, _node_name(inner)) is not None),
+                             key=lambda inner: inner.channel)
+            if not members:
+                continue
+            name = operators._unique_node_name(gp, "Gruppo")
+            group = gp.layer_groups.new(name, parent_group=parent)
+            group.is_expanded = True
+            first = _node(gp, _node_name(members[0]))
+            if (first.parent_group.name if first.parent_group else None) == \
+                    (parent.name if parent else None):
+                operators._place_next_to(gp, group, first, above=True)
+            for inner in members:  # bottom first: each on top gives the same order
+                node = _node(gp, _node_name(inner))
+                _move_node(gp, node, group)
+                if board.is_group(node):
+                    gp.layer_groups.move_top(node)
+                else:
+                    gp.layers.move_top(node)
+            strip[engine.OWNER_KEY] = obj.name
+            strip[engine.LAYER_GROUP_KEY] = name
+            strip.name = engine.strip_name(obj, name)
+            props.ensure_layer_settings(gp)
+            board.ensure_order(gp)
+            notify(f"Nuovo gruppo di livelli in {obj.name}: {name}")
+            changed = True
+    if changed or st.get("tree") != engine.tree_signature(obj):
+        return changed  # the layers changed on the board: the Sequencer follows them
+    metas = engine.layer_group_metas(meta)
+
+    def group_of(strip):
+        holder = strip.parent_meta()
+        if holder is None or holder.name == meta.name:
+            return None
+        return gp.layer_groups.get(holder.get(engine.LAYER_GROUP_KEY) or "")
+
+    clips = list(engine.layer_strips(scene, obj).items()) + list(metas.items())
+    for name, strip in clips:
+        node = _node(gp, name)
+        if node is None:
+            continue
+        target = group_of(strip)
+        if target is not None and target.name == name:
+            continue
+        current = node.parent_group
+        if (current.name if current else None) != (target.name if target else None):
+            _move_node(gp, node, target)  # pasted in another group, or Alt+G
+            changed = True
+    for name in st.get("layer_groups", ()):
+        group = gp.layer_groups.get(name)
+        if name in metas or group is None:
+            continue
+        if not len(group.children):  # Alt+G: the group is broken up
+            gp.layer_groups.remove(group)
+            notify(f"Gruppo di livelli sciolto: {name}")
+            changed = True
+            continue
+        strips = engine.layer_strips(scene, obj)
+        inside = [layer.name for layer in gp.layers if group in board.ancestors(layer)]
+        item = props.find_layer_settings(gp, name)
+        if item is not None and not item.mute and not any(n in strips for n in inside):
+            item.mute = True  # its clip was deleted
+            notify(f"Clip eliminata: il gruppo {name} ora è muto")
+            changed = True
+    if changed:
+        props.ensure_layer_settings(gp)
+        board.ensure_order(gp)
+    return changed
+
+
+def _sync_layer_group_clips(scene, obj):
+    """Mute and volume set on the clip of a group of layers: the group takes them
+    (the volume set on a meta-clip reaches only the strips right inside it, so it
+    becomes the group's "Volume clip", for every layer in it)."""
+    meta = engine.meta_strip(scene, obj)
+    if meta is None:
         return False
-    return _reorder(obj.data, by_channel)
+    changed = False
+    for name, group_meta in engine.layer_group_metas(meta).items():
+        item = props.find_layer_settings(obj.data, name)
+        if item is None:
+            continue
+        if engine.clip_mute_changed_by_hand(group_meta):
+            engine.set_clip_mute(group_meta, group_meta.mute)
+            if item.mute != group_meta.mute:
+                item.mute = group_meta.mute
+                changed = True
+        if abs(group_meta.volume - 1.0) > 1e-4:
+            volume = min(max(item.clip_volume * group_meta.volume, 0.0), 10.0)
+            group_meta.volume = 1.0
+            item.clip_volume = volume  # its update dresses the clips of the layers
+            changed = True
+    return changed
 
 
 def _sync_channel(scene, obj):
@@ -352,6 +602,7 @@ def sync_scene(scene):
     _busy[0] = True
     changed = False
     try:
+        changed |= _sync_groups(scene)
         for obj in engine.scene_compositions(scene):
             top = engine.top_strip(scene, obj)
             if top is not None and top.lock:
@@ -359,6 +610,11 @@ def sync_scene(scene):
             if obj.gp2m.layer_channels and _check_clips(scene, obj):
                 changed = True
                 continue
+            st = engine.state(obj)
+            if st.get("muted_stale") and not obj.gp2m.mute \
+                    and not engine.muted_by_group(scene, obj):
+                engine.regenerate_safe(obj, scene)  # its group is heard again
+                changed = True
             changed |= _sync_name(scene, obj)
             if obj.gp2m.layer_channels and _sync_foreign_layers(scene, obj):
                 changed = True
@@ -367,8 +623,15 @@ def sync_scene(scene):
                     changed |= _sync_channel(scene, obj)
                     changed |= _sync_time(scene, obj)
                 continue
+            if _sync_layer_groups(scene, obj):
+                changed = True
+                continue  # the clips follow the layers at the next arrangement
+            changed |= _sync_layer_group_clips(scene, obj)
             changed |= _sync_mutes(scene, obj)
-            changed |= _sync_mix(scene, obj)
+            if _sync_bus(scene, obj):
+                changed = True
+            else:
+                changed |= _sync_mix(scene, obj)
             changed |= _sync_order(scene, obj)
             changed |= _sync_channel(scene, obj)
             changed |= _sync_length(scene, obj)

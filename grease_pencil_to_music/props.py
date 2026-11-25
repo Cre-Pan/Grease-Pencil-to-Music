@@ -93,17 +93,16 @@ def apply_layer_color(gp_data, item):
 
 
 def apply_layer_mix(gp_data, item):
-    """The Sequencer clip of the layer takes its volume and pan right away."""
-    if item.is_group:
-        return
+    """The Sequencer clip of the layer takes its volume and pan right away (of a
+    group: the clips of every layer in it)."""
     from . import engine
     for obj in bpy.data.objects:
         if obj.type != "GREASEPENCIL" or obj.data != gp_data or not obj.gp2m.is_composition:
             continue
         for scene in obj.users_scene:
-            strip = engine.layer_strips(scene, obj).get(item.name)
-            if strip is not None:
-                engine.dress_strip(obj, strip, item.name)
+            for name, strip in engine.layer_strips(scene, obj).items():
+                if name == item.name or item.is_group:
+                    engine.dress_strip(obj, strip, name)
 
 
 def _color_changed(self, _context):

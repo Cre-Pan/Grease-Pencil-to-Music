@@ -327,12 +327,17 @@ class GP2M_OT_composition_duplicate(bpy.types.Operator):
         return {"FINISHED"}
 
 
-def duplicate(scene, source, channel=0, delay=None):
+def duplicate(scene, source, channel=0, delay=None, group=None):
     """A copy of the composition: its own data, instruments, grid and clip, placed above
-    the others on the table; on ``channel`` (or above the others) in the Sequencer."""
+    the others on the table; on ``channel`` (or above the others) in the Sequencer, in
+    the group of compositions ``group`` (its key) when given."""
     copy = source.copy()
     copy.data = source.data.copy()
     copy.gp2m.grid = None  # its own grid is built for it
+    if group:
+        copy[engine.GROUP_KEY] = group
+    elif copy.get(engine.GROUP_KEY) is not None:
+        del copy[engine.GROUP_KEY]
     for collection in source.users_collection or (scene.collection,):
         collection.objects.link(copy)
     copy.gp2m.channel = channel or engine.new_composition_channel(
