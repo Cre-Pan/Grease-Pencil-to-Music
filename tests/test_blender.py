@@ -1883,3 +1883,66 @@ def test_instrument_icons_are_loaded(addon):
     assert numbers == {inst.ident: n for n, inst in enumerate(synth.INSTRUMENTS)}
     order = [i.identifier for i in items]
     assert order.index("S_FLUTE") < order.index("SINE") < order.index("S_TRUMPET")
+
+
+def test_auto_active_layer_hears_edits_of_the_other_layers(comp):
+    """Edit and Sculpt Mode change the strokes of every layer: a partial render of the
+    active layer must not keep the old sound of a layer that was edited."""
+    engine = sub("engine")
+    scene = bpy.context.scene
+    comp.gp2m.layer_channels = True
+    comp.gp2m.auto_active_layer = True
+    add_stroke(comp, 0, line(comp, 0.5, 2.0, 60))
+    other = add_stroke(comp, 1, line(comp, 3.0, 4.0, 64))
+    comp.data.layers.active = comp.data.layers["Livello 1"]
+    before = {name: audio.copy() for name, audio in engine.regenerate(comp, scene, force=True).stems}
+    # Nothing changed: only the active layer is rendered again.
+    engine.regenerate(comp, scene, only_active=True)
+    assert engine.state(comp)["stats"]["only_active"]
+    for point in other.points:
+        x, y, z = point.position
+        point.position = (x, y, z + comp.gp2m.row_height * 5)
+    sub("board").user_layers(comp.data)[1].frames[0].drawing.tag_positions_changed()
+    after = dict(engine.regenerate(comp, scene, only_active=True).stems)
+    assert not engine.state(comp)["stats"]["only_active"]
+    assert not np.array_equal(before["Livello 2"], after["Livello 2"])
+
+
+def test_removing_the_layer_in_solo_lights_up_the_others(comp):
+    props = sub("props")
+    gp = comp.data
+    props.find_layer_settings(gp, "Livello 2").solo = True
+    assert gp.layers["Livello 1"].opacity == pytest.approx(props.SOLO_OPACITY)
+    gp.layers.active = gp.layers["Livello 2"]
+    assert bpy.ops.gp2m.remove_layer() == {"FINISHED"}
+    assert all(layer.opacity == pytest.approx(1.0) for layer in sub("board").user_layers(gp))
+    # Also when deleted with Blender's own layer list.
+    props.find_layer_settings(gp, "Livello 3").solo = True
+    assert gp.layers["Livello 1"].opacity == pytest.approx(props.SOLO_OPACITY)
+    gp.layers.remove(gp.layers["Livello 3"])
+    props.ensure_layer_settings(gp)
+    assert all(layer.opacity == pytest.approx(1.0) for layer in sub("board").user_layers(gp))
+
+
+@pytest.mark.parametrize("per_layer", [False, True])
+def test_strips_given_back_an_older_file_are_written_again(comp, tmp_path, per_layer):
+    """Undo gives the strips back the files of an earlier sound (deleted, or still on
+    disk on Windows): the sound is written again, also with automatic updates off."""
+    engine, handlers = sub("engine"), sub("handlers")
+    scene = bpy.context.scene
+    comp.gp2m.layer_channels = per_layer
+    add_stroke(comp, 0, line(comp, 0.5, 2.0, 60))
+    engine.regenerate(comp, scene, force=True)
+    assert engine.sound_files_ok(comp, scene)
+    stale = str(tmp_path / "older.wav")
+    engine.write_audio(stale, np.zeros((100, 2), np.float32), 44100)
+    strip = engine.find_strip(scene, comp)
+    strip.sound.filepath = stale  # what undo does
+    assert not engine.sound_files_ok(comp, scene)
+    comp.gp2m.auto_update = False
+    handlers.on_undo_redo()
+    handlers._last_change[0] = 0.0
+    handlers._tick()
+    assert engine.sound_files_ok(comp, scene)
+    assert bpy.path.abspath(engine.find_strip(scene, comp).sound.filepath) != stale
+    comp.gp2m.auto_update = True

@@ -51,7 +51,11 @@ def note_buffer(instrument, pitch, sample_rate=44100):
         amp=np.full(count, 0.8), vibrato=np.zeros(count),
         brightness=np.full(count, interpret.DEFAULT_BRIGHTNESS), pan=np.zeros(count),
         attack=0.005, instrument=instrument)
-    _offset, buffer = synth.render_voice(voice, sample_rate)
+    try:
+        _offset, buffer = synth.render_voice(voice, sample_rate)
+    except Exception as error:  # noqa: BLE001 - e.g. a recording that cannot be read
+        print(f"[Doodle Music] nota non suonata: {error!r}")
+        return np.zeros((1, 2), dtype=np.float32)  # not cached: tried again next time
     _sounds[key] = buffer
     while len(_sounds) > 128:
         _sounds.popitem(last=False)

@@ -467,12 +467,14 @@ class GP2M_OT_remove_layer(bpy.types.Operator):
                 break
         # Its instruments go too, unless strokes of other layers still use them.
         used = {stroke.material_index for other in board.user_layers(gp)
-                for frame in other.frames for stroke in frame.drawing.strokes}
+                for frame in other.frames if frame.drawing is not None
+                for stroke in frame.drawing.strokes}
         for index, material in sorted(board.layer_instruments(comp, name), reverse=True):
             if index in used:
                 material.gp2m_layer = ""
             else:
                 remove_material_slot(comp, index)
+        props.apply_solo(gp)  # the layer in Solo is gone: the others light up again
         layers = board.user_layers(gp)
         use_instrument(comp, layers[max(0, position - 1)].name)
         return {"FINISHED"}
@@ -819,6 +821,7 @@ class GP2M_OT_merge_layer(bpy.types.Operator):
             if item.name in gone and not item.is_group:
                 gp.gp2m_layers.remove(index)
         _after_tree_change(comp)
+        props.apply_solo(gp)  # a Solo of a merged layer or group no longer holds
         use_instrument(comp, merged)
         return {"FINISHED"}
 

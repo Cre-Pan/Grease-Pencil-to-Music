@@ -802,6 +802,11 @@ def ensure_layer_settings(gp_data):
     missing = [layer for layer in layers if layer.name not in known]
     missing_groups = [name for name in group_names if name not in known]
     if not missing and not missing_groups:
+        # A layer in Solo deleted with Blender's own list: light the others up again.
+        live_items = _live_settings(gp_data)
+        if (any(item.solo_saved_opacity >= 0.0 for item in live_items)
+                and not any(item.solo for item in live_items)):
+            apply_solo(gp_data)
         return
     live = set(layer_names) | set(group_names)
     # Duplicates first: read the source settings now, before the collection grows
