@@ -253,7 +253,8 @@ ROOM_ITEMS = (
 class GP2M_CompositionSettings(bpy.types.PropertyGroup):
     is_composition: BoolProperty(default=False)
     channel: IntProperty(name="Canale Sequencer", default=0, min=0, max=128,
-                         description="Canale del Video Sequencer della sua strip audio "
+                         description="Canale del Video Sequencer della sua strip audio, o "
+                         "del primo livello con 'Un canale per livello' "
                          "(0 = scegli automaticamente il primo libero)",
                          update=_arrangement_changed)
     order: IntProperty(name="Ordine", default=0, min=0, max=999,
@@ -323,6 +324,18 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
                                update=_sound_changed)
     auto_update: BoolProperty(name="Aggiornamento automatico", default=True,
                               description="Rigenera il suono a ogni modifica dei tratti")
+    auto_active_layer: BoolProperty(
+        name="Solo livello attivo", default=False,
+        description="L'aggiornamento automatico rigenera solo il livello attivo (quello "
+        "che stai disegnando o modificando in Edit / Sculpt Mode): gli altri livelli "
+        "tengono il loro suono. Cambi di livelli, strumenti ed effetti rigenerano tutto; "
+        "Rigenera aggiorna sempre tutti i livelli. Serve 'Un canale per livello'")
+    layer_channels: BoolProperty(
+        name="Un canale per livello", default=True,
+        description="Ogni livello suona su una sua strip nel Video Sequencer, su canali "
+        "consecutivi a partire da 'Canale', con i suoi effetti: puoi alzarlo, abbassarlo, "
+        "silenziarlo o spostarlo nel Sequencer. Insieme suonano come il mix",
+        update=_sound_changed)
     sample_rate: EnumProperty(name="Frequenza", items=SAMPLE_RATES, default="44100",
                               update=_sound_changed)
 

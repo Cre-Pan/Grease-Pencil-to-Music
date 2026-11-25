@@ -901,9 +901,9 @@ def test_sequencer_channels_auto_and_manual(comp):
     other = _fresh(None)
     assert comp.gp2m.channel > 0 and other.gp2m.channel > 0
     assert comp.gp2m.channel != other.gp2m.channel
-    other.gp2m.channel = 40
+    other.gp2m.channel = 120  # far from the strips (one per layer) of the other tests
     engine.arrange(scene)
-    assert engine.find_strip(scene, other).channel == 40
+    assert engine.find_strip(scene, other).channel == 120
     copy = other.copy()  # Shift+D copies the channel too
     copy.data = other.data.copy()
     bpy.context.collection.objects.link(copy)
@@ -1706,3 +1706,99 @@ def test_old_board_group_is_renamed(comp):
     assert gp.layer_groups.get(board.LEGACY_BOARD_GROUP) is None
     board.rebuild(comp)
     assert [g.name for g in gp.layer_groups] .count(board.BOARD_GROUP) == 1
+
+
+# --- One channel per layer, absolute volumes, Auto on the active layer only -----------
+
+def _two_layers(comp):
+    """Strokes on the first two layers of a new composition (it has three)."""
+    names = [layer.name for layer in sub("board").user_layers(comp.data)]
+    assert len(names) >= 2
+    add_stroke(comp, 0, line(comp, 0.5, 2.5, 60), radius=0.02)
+    add_stroke(comp, 1, line(comp, 3.0, 5.0, 67), radius=0.3)
+    return names
+
+
+def test_one_strip_per_layer_adds_up_to_the_mix(comp):
+    engine = sub("engine")
+    scene = bpy.context.scene
+    names = _two_layers(comp)
+    assert comp.gp2m.layer_channels
+    result = engine.regenerate(comp)
+    strips = engine.layer_strips(scene, comp)
+    assert set(strips) == set(names)
+    channels = sorted(strip.channel for strip in strips.values())
+    assert channels == list(range(comp.gp2m.channel, comp.gp2m.channel + len(names)))
+    order = [strips[name].channel for name in names]
+    assert order == sorted(order)  # the layers' order, bottom layer lowest
+    total = None
+    for name, strip in strips.items():
+        rate, samples = read_wav(strip.sound.filepath)
+        total = samples.astype(np.int64) if total is None else total + samples
+    mix = np.clip(result.audio, -1, 1) * 32767
+    assert np.abs(total - mix).max() < 8  # rounding of the 16-bit files only
+    # The first layer is heard only in its own strip.
+    _rate, first = read_wav(strips[names[0]].sound.filepath)
+    _rate, second = read_wav(strips[names[1]].sound.filepath)
+    assert np.abs(first[int(1.5 * rate)]).max() > 300
+    assert np.abs(second[int(1.5 * rate)]).max() < 30
+
+
+def test_mix_strip_when_layer_channels_are_off(comp):
+    engine = sub("engine")
+    scene = bpy.context.scene
+    _two_layers(comp)
+    engine.regenerate(comp)
+    comp.gp2m.layer_channels = False
+    engine.regenerate(comp)
+    assert not engine.layer_strips(scene, comp)
+    assert len(engine.composition_strips(scene, comp)) == 1
+    comp.gp2m.layer_channels = True
+    engine.regenerate(comp)
+    layers = len(sub("board").user_layers(comp.data))
+    assert len(engine.layer_strips(scene, comp)) == layers
+    assert len(engine.composition_strips(scene, comp)) == layers
+
+
+def test_sequencer_volume_of_a_layer_strip_is_kept(comp):
+    engine = sub("engine")
+    scene = bpy.context.scene
+    names = _two_layers(comp)
+    engine.regenerate(comp)
+    engine.layer_strips(scene, comp)[names[0]].volume = 0.3
+    add_stroke(comp, 0, line(comp, 6.0, 7.5, 64))  # longer sound: strips may be recreated
+    engine.regenerate(comp)
+    assert engine.layer_strips(scene, comp)[names[0]].volume == pytest.approx(0.3)
+
+
+def test_a_thick_stroke_does_not_turn_the_others_down(comp):
+    engine = sub("engine")
+    add_stroke(comp, 0, line(comp, 0.5, 2.5, 60), radius=0.02)
+    alone = engine.regenerate(comp)
+    add_stroke(comp, 0, line(comp, 4.0, 6.0, 72), radius=0.5)  # very thick, elsewhere
+    both = engine.regenerate(comp)
+    rate = alone.sample_rate
+    window = slice(int(1.0 * rate), int(2.0 * rate))
+    a = float(np.abs(alone.audio[window]).max())
+    b = float(np.abs(both.audio[window]).max())
+    assert b == pytest.approx(a, rel=0.25)  # the glue compressor may move it a little
+
+
+def test_auto_on_the_active_layer_only(comp):
+    engine = sub("engine")
+    scene = bpy.context.scene
+    names = _two_layers(comp)
+    engine.regenerate(comp)
+    comp.gp2m.auto_active_layer = True
+    comp.data.layers.active = comp.data.layers[names[1]]
+    add_stroke(comp, 1, line(comp, 6.0, 7.0, 69))
+    result = engine.regenerate(comp, only_active=True)
+    assert engine.state(comp)["stats"]["only_active"]
+    assert sorted(n.pitch for n in result.notes) == [60, 67, 69]
+    full = engine.regenerate(comp, force=True)
+    assert full.key == result.key  # same sound as rendering everything
+    # A layer muted meanwhile cannot keep its old sound: everything is rendered.
+    sub("props").find_layer_settings(comp.data, names[0]).mute = True
+    result = engine.regenerate(comp, only_active=True)
+    assert not engine.state(comp)["stats"]["only_active"]
+    assert set(engine.layer_strips(scene, comp)) == set(names[1:])

@@ -6,12 +6,14 @@ folder and (re)places it as a sound strip in the Video Sequencer, so pressing
 Play in Blender plays the drawing.
 """
 
+import hashlib
 import os
 import re
 import tempfile
 import time
 import traceback
 import wave
+from dataclasses import astuple
 
 import aud
 import bpy
@@ -97,15 +99,18 @@ def _layer_inputs(obj, reads):
     return layers
 
 
-def render_composition(obj, scene):
-    """Render the loop drawn at the scene start, or every keyframe section."""
+def render_composition(obj, scene, stems=False):
+    """Render the loop drawn at the scene start, or every keyframe section.
+
+    ``stems``: also render every layer on its own (``result.stems``)."""
     s = obj.gp2m
     spec, mapping, rate = board_spec(s), prefs.get_mapping(), int(s.sample_rate)
     frames = section_frames(obj, scene) if s.use_sections else [scene.frame_start]
     if len(frames) == 1:
         reads = reader.read_composition(obj, frames[0], use_modifiers=s.use_modifiers)
         result = mixer.render(_layer_inputs(obj, reads), spec, mapping, rate, loop=s.loop,
-                              master_volume=s.master_volume, master_fx=master_fx(s))
+                              master_volume=s.master_volume, master_fx=master_fx(s),
+                              stems=stems)
         result.duration = s.length
         return result, reads
     times = [(frame - scene.frame_start) / _fps(scene) for frame in frames]
@@ -116,9 +121,71 @@ def render_composition(obj, scene):
         end = times[i + 1] if i + 1 < len(times) else times[i] + s.length
         parts.append((times[i], end, mixer.render(
             _layer_inputs(obj, reads), spec, mapping, rate, loop=False,
-            master_volume=s.master_volume)))
+            master_volume=s.master_volume, stems=stems)))
     return mixer.sequence(parts, s.length, rate, loop=s.loop,
-                          master_fx=master_fx(s)), first_reads
+                          master_fx=master_fx(s), stems=stems), first_reads
+
+
+def _context_signature(obj, scene):
+    """What every layer of the composition depends on (besides its own settings)."""
+    s = obj.gp2m
+    return repr((astuple(board_spec(s)), astuple(prefs.get_mapping()), s.sample_rate, s.loop,
+                 round(s.master_volume, 4), astuple(master_fx(s)), s.use_modifiers,
+                 scene.frame_start))
+
+
+def _layer_signatures(obj, layers):
+    """Settings of each audible layer (volume, reading, effects...), without its strokes."""
+    stubs = [reader.LayerRead(name=layer.name, opacity=props.layer_volume(obj.data, layer))
+             for layer in layers]
+    return {item.name: repr(item) for item in _layer_inputs(obj, stubs)}
+
+
+def render_active_layer(obj, scene):
+    """Render only the active layer and mix it with the sound the other layers had.
+
+    Returns ``(result, reads)``, or ``(None, None)`` when everything must be
+    rendered again: keyframe sections, no sound kept yet, a layer added, removed,
+    muted, or with other settings, or a change of the whole composition."""
+    s = obj.gp2m
+    st = state(obj)
+    kept = st.get("layers")
+    active = obj.data.layers.active
+    if s.use_sections or not kept or active is None:
+        return None, None
+    layers = reader.audible_layers(obj.data)
+    names = [layer.name for layer in layers]
+    if active.name not in names or names != list(kept):
+        return None, None
+    if st.get("context") != _context_signature(obj, scene):
+        return None, None
+    signatures = _layer_signatures(obj, layers)
+    previous = st.get("signatures") or {}
+    if any(signatures[name] != previous.get(name) for name in names if name != active.name):
+        return None, None
+    reads = reader.read_composition(obj, scene.frame_start, use_modifiers=s.use_modifiers,
+                                    only={active.name})
+    spec, mapping, rate = board_spec(s), prefs.get_mapping(), int(s.sample_rate)
+    fx = master_fx(s)
+    fresh = mixer.render_layers(_layer_inputs(obj, reads), spec, mapping, rate, s.loop,
+                                s.master_volume, fx.room)
+    if len(fresh) != 1:
+        return None, None
+    sounds = [fresh[0] if name == active.name else kept[name] for name in names]
+    result = mixer.mix_layers(sounds, spec, mapping, rate, s.loop, fx, stems=True)
+    result.duration = s.length
+    return result, reads
+
+
+def _keep_layers(obj, scene, result):
+    """Remember each layer's sound, for :func:`render_active_layer`."""
+    st = state(obj)
+    if obj.gp2m.use_sections or not result.layers:
+        st["layers"] = None
+        return
+    st["layers"] = {sound.name: sound for sound in result.layers}
+    st["context"] = _context_signature(obj, scene)
+    st["signatures"] = _layer_signatures(obj, reader.audible_layers(obj.data))
 
 
 def duration(obj):
@@ -243,7 +310,8 @@ def cleanup_orphans():
         for strip in list(editor.strips):
             if not strip.name.startswith(STRIP_PREFIX):
                 continue
-            owner = bpy.data.objects.get(strip.name[len(STRIP_PREFIX):])
+            owner = bpy.data.objects.get(strip.get(OWNER_KEY)
+                                         or strip.name[len(STRIP_PREFIX):])
             if owner is None or not owner.gp2m.is_composition or scene not in owner.users_scene:
                 sound = strip.sound
                 editor.strips.remove(strip)
@@ -260,15 +328,44 @@ def cleanup_orphans():
                     bpy.data.curves.remove(data)
 
 
-def strip_name(obj):
-    return STRIP_PREFIX + obj.name
+OWNER_KEY = "gp2m_composition"  # custom properties of the strips (names get cut at 63 bytes)
+LAYER_KEY = "gp2m_layer"
+
+
+def strip_name(obj, layer=None):
+    """Name of the composition's mix strip, or of the strip of one of its layers."""
+    return STRIP_PREFIX + obj.name if layer is None else f"{STRIP_PREFIX}{obj.name} · {layer}"
+
+
+def _owned(strip, obj):
+    owner = strip.get(OWNER_KEY)
+    if owner is not None:
+        return owner == obj.name
+    return strip.name == strip_name(obj)  # strips of 0.0.12 and earlier
+
+
+def composition_strips(scene, obj):
+    """Every strip of a composition: its mix, or one per layer."""
+    editor = scene.sequence_editor
+    if editor is None:
+        return []
+    return [strip for strip in editor.strips
+            if strip.name.startswith(STRIP_PREFIX) and _owned(strip, obj)]
+
+
+def layer_strips(scene, obj):
+    """``{layer name: strip}`` of a composition with 'Un canale per livello'."""
+    return {strip[LAYER_KEY]: strip for strip in composition_strips(scene, obj)
+            if strip.get(LAYER_KEY) is not None}
 
 
 def find_strip(scene, obj):
-    editor = scene.sequence_editor
-    if editor is None:
-        return None
-    return editor.strips.get(strip_name(obj))
+    """The composition's mix strip, or the strip of its first layer."""
+    strips = composition_strips(scene, obj)
+    for strip in strips:
+        if strip.get(LAYER_KEY) is None:
+            return strip
+    return min(strips, key=lambda strip: strip.channel) if strips else None
 
 
 def _free_channel(editor, exclude=None):
@@ -280,6 +377,53 @@ def _free_channel(editor, exclude=None):
     return channel
 
 
+MAX_CHANNEL = 128
+
+
+def _channel_block(editor, obj, count):
+    """First of ``count`` consecutive channels for the composition: its 'Canale'
+    when set (as for the mix strip), otherwise the first block with no strips."""
+    if obj.gp2m.channel > 0:
+        return obj.gp2m.channel
+    used = {strip.channel for strip in editor.strips_all
+            if not (strip.name.startswith(STRIP_PREFIX) and _owned(strip, obj))}
+    count = max(1, count)
+    base = 1
+    while base + count - 1 < MAX_CHANNEL and any(
+            channel in used for channel in range(base, base + count)):
+        base += 1
+    return base
+
+
+def _remove_strip(editor, strip):
+    sound = strip.sound
+    editor.strips.remove(strip)
+    if sound is not None and sound.users == 0:
+        bpy.data.sounds.remove(sound)
+
+
+def _new_strip(scene, name, path, channel, old=None, tags=None):
+    """A new sound strip; the volume, pan and mute of ``old`` (removed) are kept."""
+    editor = scene.sequence_editor or scene.sequence_editor_create()
+    keep = {}
+    if old is not None:
+        for attr in ("volume", "pan", "mute"):
+            if hasattr(old, attr):
+                keep[attr] = getattr(old, attr)
+        _remove_strip(editor, old)
+    strip = editor.strips.new_sound(name, path, channel, scene.frame_start)
+    strip.sound.name = name
+    strip.sound.use_memory_cache = True  # play from RAM: smoother playback
+    for key, value in (tags or {}).items():
+        strip[key] = value
+    for attr, value in keep.items():
+        try:
+            setattr(strip, attr, value)
+        except (AttributeError, TypeError, ValueError):
+            pass
+    return strip
+
+
 def _place_strip(scene, obj, path, frames):
     """Point the composition's strip to a new sound file.
 
@@ -288,7 +432,9 @@ def _place_strip(scene, obj, path, frames):
     strip is recreated with the new length.
     """
     editor = scene.sequence_editor or scene.sequence_editor_create()
-    old = editor.strips.get(strip_name(obj))
+    old = find_strip(scene, obj)
+    if old is not None and old.get(LAYER_KEY) is not None:
+        old = None
     if (old is not None and old.sound is not None and old.sound.users == 1
             and old.duration == frames):
         old.sound.filepath = path  # reloads the audio
@@ -299,15 +445,71 @@ def _place_strip(scene, obj, path, frames):
         channel = old.channel
     else:
         channel = _free_channel(editor, strip_name(obj))
-    old_sound = old.sound if old is not None else None
     if old is not None:
-        editor.strips.remove(old)
-    if old_sound is not None and old_sound.users == 0:
-        bpy.data.sounds.remove(old_sound)
-    strip = editor.strips.new_sound(strip_name(obj), path, channel, scene.frame_start)
-    strip.sound.name = strip_name(obj)
-    strip.sound.use_memory_cache = True  # play from RAM: smoother playback
-    return strip
+        _remove_strip(editor, old)
+    return _new_strip(scene, strip_name(obj), path, channel, tags={OWNER_KEY: obj.name})
+
+
+def _remove_layer_strips(scene, obj, keep=()):
+    editor = scene.sequence_editor
+    for strip in composition_strips(scene, obj):
+        if strip.get(LAYER_KEY) is not None and strip[LAYER_KEY] not in keep:
+            _remove_strip(editor, strip)
+
+
+def _digest(audio):
+    return hashlib.blake2b(np.ascontiguousarray(audio).tobytes(), digest_size=16).hexdigest()
+
+
+def _forget_file(path):
+    if path:
+        try:
+            os.remove(path)
+        except OSError:
+            pass  # still in use (Windows) or already gone
+
+
+def _place_layer_strips(scene, obj, result):
+    """One strip per layer on consecutive channels: a file is written only for the
+    layers whose sound changed, a strip is recreated only when its length or
+    channel changed (volume, pan and mute set in the Sequencer are kept)."""
+    editor = scene.sequence_editor or scene.sequence_editor_create()
+    st = state(obj)
+    names = [name for name, _audio in result.stems]
+    for strip in composition_strips(scene, obj):  # the mix strip, layers gone
+        if strip.get(LAYER_KEY) is None or strip[LAYER_KEY] not in names:
+            _remove_strip(editor, strip)
+    strips = layer_strips(scene, obj)
+    paths, digests = st.setdefault("layer_paths", {}), st.setdefault("layer_digests", {})
+    base = _channel_block(editor, obj, len(names))
+    fps = scene.render.fps / scene.render.fps_base
+    for index, (name, audio) in enumerate(result.stems):
+        strip, channel = strips.get(name), base + index
+        frames = max(1, int(round(len(audio) / result.sample_rate * fps)))
+        digest = _digest(audio)
+        same_sound = digest == digests.get(name) and _strip_file_ok(strip)
+        if same_sound and strip.channel == channel and strip.duration == frames:
+            continue
+        path = paths.get(name)
+        if not same_sound:
+            path = os.path.join(cache_dir(),
+                                f"{_safe(obj.name)}_{_safe(name)}_{time.time_ns()}.wav")
+            write_audio(path, audio, result.sample_rate, "WAV")
+        if (strip is not None and strip.sound is not None and strip.sound.users == 1
+                and strip.duration == frames and strip.channel == channel):
+            strip.sound.filepath = path  # reloads the audio, playback goes on
+        else:
+            strip = _new_strip(scene, strip_name(obj, name), path, channel, old=strip,
+                               tags={OWNER_KEY: obj.name, LAYER_KEY: name})
+            strip.mute = strip.mute or bool(st.get("muted"))
+        if paths.get(name) != path:
+            _forget_file(paths.get(name))
+        paths[name], digests[name] = path, digest
+    for name in [name for name in paths if name not in names]:
+        _forget_file(paths.pop(name))
+        digests.pop(name, None)
+    if obj.gp2m.channel != base:
+        obj.gp2m.channel = base
 
 
 def _strip_file_ok(strip):
@@ -334,16 +536,28 @@ def _active_composition(scene):
     return None
 
 
+def _channel_count(scene, obj):
+    """How many channels the composition uses (one per layer, or its mix)."""
+    return max(1, len(layer_strips(scene, obj)))
+
+
 def resolve_channels(scene):
-    """Duplicated compositions copy the channel: give the copies a free one."""
-    seen = set()
+    """Duplicated compositions copy the channel: give the copies free ones (with
+    'Un canale per livello' a composition takes one channel per layer)."""
+    taken = set()
+    editor = scene.sequence_editor
     for obj in sorted(scene_compositions(scene), key=lambda o: o.name):
-        if obj.gp2m.channel and obj.gp2m.channel in seen:
-            editor = scene.sequence_editor
-            obj.gp2m.channel = _free_channel(editor, strip_name(obj)) if editor else 0
-            while obj.gp2m.channel in seen:
-                obj.gp2m.channel += 1
-        seen.add(obj.gp2m.channel)
+        count = _channel_count(scene, obj)
+        span = set(range(obj.gp2m.channel, obj.gp2m.channel + count))
+        if obj.gp2m.channel and span & taken:
+            channel = _free_channel(editor, strip_name(obj)) if editor else 0
+            channel = max(channel, 1)
+            while set(range(channel, channel + count)) & taken:
+                channel += 1
+            obj.gp2m.channel = channel
+            span = set(range(channel, channel + count))
+        if obj.gp2m.channel:
+            taken |= span
 
 
 def arrange(scene):
@@ -386,17 +600,22 @@ def _arrange(scene):
         st["offset_frames"] = start_offset
         board.set_playhead_offset(obj, start_offset, st.get("sections"))
         board.update_preview_shade(obj, scene)
-        strip = find_strip(scene, obj)
-        if strip is None:
+        strips = composition_strips(scene, obj)
+        if not strips:
             continue
         target = scene.frame_start + start_offset
+        mute = obj.gp2m.mute or (solo is not None and obj != solo)
+        layered = [strip for strip in strips if strip.get(LAYER_KEY) is not None]
+        if layered:
+            _arrange_layers(scene, obj, layered, target, mute)
+            continue
+        strip = strips[0]
         if strip.content_start != target:
             strip.content_start = target
         if obj.gp2m.channel == 0:
             obj.gp2m.channel = strip.channel  # show the automatic choice
         elif strip.channel != obj.gp2m.channel:
             strip.channel = obj.gp2m.channel
-        mute = obj.gp2m.mute or (solo is not None and obj != solo)
         if strip.mute != mute:
             strip.mute = mute
 
@@ -410,6 +629,38 @@ def _arrange(scene):
         end = scene.frame_start + total - 1
         if scene.frame_end != end:
             scene.frame_end = end
+
+
+def _arrange_layers(scene, obj, strips, target, mute):
+    """Layer strips: same start, consecutive channels from 'Canale' (in the order
+    of the layers), muted with the composition. A layer muted in the Sequencer
+    stays muted until the composition itself is muted or unmuted."""
+    st = state(obj)
+    if obj.gp2m.channel == 0:
+        obj.gp2m.channel = min(strip.channel for strip in strips)  # the automatic choice
+    order = [layer.name for layer in obj.data.layers]
+    strips = sorted(strips, key=lambda strip: order.index(strip[LAYER_KEY])
+                    if strip[LAYER_KEY] in order else len(order))
+    wrong = [(strip, obj.gp2m.channel + index) for index, strip in enumerate(strips)
+             if strip.channel != obj.gp2m.channel + index]
+    for strip, channel in wrong:
+        # Setting .channel shuffles a strip that would overlap another one: the
+        # strip is created again on its channel (temporary overlaps are allowed).
+        if strip.sound is not None:
+            _new_strip(scene, strip.name, strip.sound.filepath, channel, old=strip,
+                       tags={OWNER_KEY: obj.name, LAYER_KEY: strip[LAYER_KEY]})
+    if wrong:
+        strips = [strip for strip in composition_strips(scene, obj)
+                  if strip.get(LAYER_KEY) is not None]
+    for strip in strips:
+        if strip.content_start != target:
+            strip.content_start = target
+    previous = st.get("muted")
+    st["muted"] = mute
+    if previous != mute and (previous is not None or mute):
+        for strip in strips:
+            if strip.mute != mute:
+                strip.mute = mute
 
 
 _last_solo = {}
@@ -447,11 +698,13 @@ def timeline_data(result, settings):
             "length": result.duration or settings.length}
 
 
-def regenerate(obj, scene=None, force=False):
-    """Render the composition and update its sound strip.
+def regenerate(obj, scene=None, force=False, only_active=False):
+    """Render the composition and update its sound strip(s).
 
     Writes nothing when the sound did not change, so it is safe to call from
-    depsgraph handlers without creating update loops.
+    depsgraph handlers without creating update loops. ``only_active``: render
+    only the active layer when the others can keep their sound (with
+    'Un canale per livello'; otherwise, or when not possible, everything).
     """
     scene = scene or scene_of(obj)
     s = obj.gp2m
@@ -459,45 +712,72 @@ def regenerate(obj, scene=None, force=False):
         return None
     props.ensure_layer_settings(obj.data)
     began = time.perf_counter()
-    result, reads = render_composition(obj, scene)
+    per_layer = s.layer_channels
+    result = reads = None
+    partial = False
+    if only_active and per_layer and not force:
+        result, reads = render_active_layer(obj, scene)
+        partial = result is not None
+    if result is None:
+        result, reads = render_composition(obj, scene, stems=per_layer)
     st = state(obj)
-    strip = find_strip(scene, obj)
-    if force or st.get("key") != result.key or not _strip_file_ok(strip):
-        path = os.path.join(cache_dir(), f"{_safe(obj.name)}_{time.time_ns()}.wav")
-        write_audio(path, result.audio, result.sample_rate, "WAV")
-        fps = scene.render.fps / scene.render.fps_base
-        frames = max(1, int(round(len(result.audio) / result.sample_rate * fps)))
-        strip = _place_strip(scene, obj, path, frames)
-        old_path = st.get("path")
-        if old_path and old_path != path:
-            try:
-                os.remove(old_path)
-            except OSError:
-                pass  # still in use (Windows) or already gone
-        st["key"] = result.key
-        st["path"] = path
+    key = (result.key, per_layer)
+    if per_layer:
+        strips = layer_strips(scene, obj)
+        files_ok = (set(strips) == {name for name, _audio in result.stems}
+                    and all(_strip_file_ok(strip) for strip in strips.values())
+                    and len(composition_strips(scene, obj)) == len(strips))
+    else:
+        strip = find_strip(scene, obj)
+        files_ok = (_strip_file_ok(strip) and strip.get(LAYER_KEY) is None
+                    and len(composition_strips(scene, obj)) == 1)
+    if force or st.get("key") != key or not files_ok:
+        if per_layer:
+            _place_layer_strips(scene, obj, result)
+            _forget_file(st.pop("path", None))
+        else:
+            path = os.path.join(cache_dir(), f"{_safe(obj.name)}_{time.time_ns()}.wav")
+            write_audio(path, result.audio, result.sample_rate, "WAV")
+            fps = scene.render.fps / scene.render.fps_base
+            frames = max(1, int(round(len(result.audio) / result.sample_rate * fps)))
+            _remove_layer_strips(scene, obj)
+            _place_strip(scene, obj, path, frames)
+            old_path = st.get("path")
+            if old_path and old_path != path:
+                _forget_file(old_path)
+            st["path"] = path
+            for name in list(st.get("layer_paths", {})):
+                _forget_file(st["layer_paths"].pop(name))
+            st.get("layer_digests", {}).clear()
+        st["key"] = key
         st["sections"] = result.sections
         st["duration"] = result.duration or s.length
         st["timeline"] = timeline_data(result, s)
         from . import timeline
         timeline.tag_redraw()
+    if per_layer:
+        _keep_layers(obj, scene, result)
+    else:
+        st["layers"] = None
     arrange(scene)
     st["stats"] = {
         "notes": len(result.notes),
         "voices": result.voice_count,
         "seconds": time.perf_counter() - began,
-        "multi_keyframes": [] if s.use_sections else [r.name for r in reads
-                                                       if r.keyframes > 1],
+        "multi_keyframes": [] if s.use_sections else [
+            layer.name for layer in reader.audible_layers(obj.data) if len(layer.frames) > 1],
         "sections": len(result.sections),
         "skipped": result.errors,
+        "layers": len(result.stems),
+        "only_active": partial,
     }
     st["error"] = None
     return result
 
 
-def regenerate_safe(obj, scene=None, force=False):
+def regenerate_safe(obj, scene=None, force=False, only_active=False):
     try:
-        return regenerate(obj, scene, force)
+        return regenerate(obj, scene, force, only_active)
     except Exception as error:
         traceback.print_exc()
         state(obj)["error"] = f"{type(error).__name__}: {error}"

@@ -15,6 +15,7 @@ from bpy.app.handlers import persistent
 from . import board, engine, feedback, prefs, props
 
 _dirty = set()
+_full = set()  # dirty compositions that need every layer rendered again
 _last_change = [0.0]
 _stack_counts = {}  # composition name -> number of modifiers + shader effects
 _popup_queue = []
@@ -44,12 +45,22 @@ def _ensure_timer():
         bpy.app.timers.register(_tick, first_interval=prefs.get_prefs().debounce)
 
 
-def mark_dirty(obj):
+def mark_dirty(obj, strokes_only=False):
+    """Regenerate ``obj`` after the pause. ``strokes_only``: only strokes changed
+    (drawing, Edit or Sculpt Mode), so 'Solo livello attivo' may render only the
+    active layer; any other change renders every layer."""
     if obj is None or not obj.gp2m.is_composition or not obj.gp2m.auto_update:
         return
+    if not strokes_only:
+        _full.add(obj.name)
     _dirty.add(obj.name)
     _last_change[0] = time.monotonic()
     _ensure_timer()
+
+
+def _mark_full(name):
+    _dirty.add(name)
+    _full.add(name)
 
 
 def mark_data_dirty(gp_data):
@@ -72,7 +83,9 @@ def mark_all_dirty():
 def flush():
     """Regenerate every pending composition now."""
     names = list(_dirty)
+    full = set(_full)
     _dirty.clear()
+    _full.clear()
     for name in names:
         obj = bpy.data.objects.get(name)
         if obj is not None and obj.gp2m.is_composition:
@@ -80,7 +93,8 @@ def flush():
                 board.rebuild(obj, engine.scene_of(obj))
             board.ensure_order(obj.data)  # layers added with Blender's own "+"
             feedback.sync(obj)  # also keeps every modifier off the board
-            engine.regenerate_safe(obj)
+            engine.regenerate_safe(obj, only_active=(
+                name not in full and obj.gp2m.auto_active_layer))
 
 
 def _signature():
@@ -155,7 +169,7 @@ def _scale_pending():
             continue
         _scaled.discard(name)
         if apply_scale(obj):
-            _dirty.add(name)
+            _mark_full(name)
     return SCALE_SETTLE / 2 if waiting else None
 
 
@@ -179,13 +193,13 @@ def _tick():
             engine.cleanup_orphans()
             # Shift+D / Alt+D: every composition keeps its own rules.
             for obj in board.make_independent(compositions()):
-                _dirty.add(obj.name)
+                _mark_full(obj.name)
         except Exception as error:
             print(f"[Doodle Music] cleanup failed: {error!r}")
         # Duplicated (Shift+D) or renamed compositions need their own strip.
         for obj in compositions():
             if engine.find_strip(engine.scene_of(obj), obj) is None:
-                _dirty.add(obj.name)
+                _mark_full(obj.name)
         for scene in bpy.data.scenes:
             engine.resolve_channels(scene)
             engine.arrange_safe(scene)
@@ -230,7 +244,7 @@ def _check_stack(obj):
     previous = _stack_counts.get(obj.name, 0)
     _stack_counts[obj.name] = count
     if count > previous:
-        _dirty.add(obj.name)  # the timer keeps new modifiers off the board
+        _mark_full(obj.name)  # the timer keeps new modifiers off the board
         _ensure_timer()
     if count > previous and not obj.gp2m.use_modifiers:
         _popup_queue.append(obj.name)
@@ -269,13 +283,13 @@ def on_depsgraph_update(_scene, depsgraph):
             comps = comps if comps is not None else compositions()
             for obj in comps:
                 if obj.data == original:
-                    mark_dirty(obj)
+                    mark_dirty(obj, strokes_only=True)
                     request_layer_sync(original)
         elif isinstance(original, bpy.types.Object):
             if original.type == "GREASEPENCIL" and original.gp2m.is_composition:
                 _check_stack(original)
                 if update.is_updated_geometry or update.is_updated_shading:
-                    mark_dirty(original)
+                    mark_dirty(original, strokes_only=True)
                 if update.is_updated_transform and _scale_of(original) != (1.0, 1.0, 1.0):
                     if original.name not in _scale_base:
                         _scale_base[original.name] = (original.gp2m.length,
@@ -355,6 +369,7 @@ def _check_scene_timing(scene):
 @persistent
 def on_load_post(*_args):
     _dirty.clear()
+    _full.clear()
     _stack_counts.clear()
     _scaled.clear()
     _scale_base.clear()
@@ -370,7 +385,7 @@ def on_load_post(*_args):
         _stack_counts[obj.name] = _stack_count(obj)
         # Sound files live in a temporary folder: recreate them for this session,
         # even when automatic updates are off.
-        _dirty.add(obj.name)
+        _mark_full(obj.name)
     _cleanup_needed[0] = True  # also makes shared data independent
     subscribe()
     _ensure_timer()

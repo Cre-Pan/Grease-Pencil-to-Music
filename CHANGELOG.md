@@ -355,6 +355,31 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.14
+
+Un canale per livello e volumi giusti
+
+- **Volumi**: lo spessore ora è un volume assoluto, come nella web app (un tratto largo 0,8
+  righe suona al massimo, i più sottili più piano). Prima il tratto più spesso di tutta la
+  composizione diventava il "100%" e tutti gli altri tratti, di ogni livello e strumento,
+  venivano abbassati di conseguenza: aggiungere un tratto spesso abbassava il resto del mix.
+  Ora ogni strumento tiene il suo volume, qualunque cosa ci sia negli altri livelli. Anche il
+  suono mentre disegni usa la stessa scala.
+- **Un canale per livello** (Proprietà → Musica → Riproduzione, attivo di base): ogni livello
+  suona su una sua strip nel Video Sequencer, su canali consecutivi a partire da *Canale*
+  (il livello più in basso sul canale più basso), con le sue letture ed effetti. Nel Sequencer
+  si può cambiare volume, pan o silenziare un singolo livello: le rigenerazioni lo mantengono.
+  Ambiente, compressore e limiter del *Suono finito* sono calcolati sul mix e applicati uguali a
+  ogni livello, così le strip insieme suonano esattamente come l'export. I livelli dentro i
+  gruppi hanno ciascuno la loro strip; un gruppo muto, nascosto o fuori dal Solo toglie le strip
+  dei suoi livelli. Spento, torna una strip unica con il mix.
+- **Auto solo sul livello attivo** (il pulsante con il livello accanto ad *Auto*): mentre
+  disegni, modifichi in Edit Mode o scolpisci, viene rigenerato solo il livello attivo e gli
+  altri tengono il suono che avevano. Se cambia qualcos'altro (livelli aggiunti o tolti, muto,
+  Solo, volume o lettura di un altro livello, strumenti, tavola) si rigenera tutto, e
+  *Rigenera* aggiorna sempre tutti i livelli. Viene scritto un file solo per le strip il cui
+  suono è cambiato.
+
 ## 0.0.13
 
 Duplicare i livelli, gruppi di livelli, lista come quella di Blender

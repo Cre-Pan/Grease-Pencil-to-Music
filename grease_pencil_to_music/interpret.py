@@ -30,6 +30,24 @@ from . import music
 
 CONTROL_RATE = 200.0  # control curves are sampled at this rate (Hz)
 
+# Thickness is an absolute volume, as in the web app: a stroke 0.8 rows wide
+# (radius 0.4 rows) plays at full volume, thinner strokes are softer. It never
+# depends on the other strokes, so a thick stroke does not turn the rest down.
+FULL_VOLUME_RADIUS = 0.4  # rows
+THICKNESS_FLOOR = 0.06  # the thinnest stroke is still heard
+THICKNESS_CURVE = 0.9
+
+
+def full_radius(row_height):
+    """Radius (board units) of a stroke at full volume."""
+    return FULL_VOLUME_RADIUS * max(float(row_height), 1e-9)
+
+
+def thickness_level(radius, ref):
+    """Volume (0..1) of a radius, with ``ref`` the radius at full volume."""
+    ratio = np.asarray(radius, dtype=np.float64) / max(float(ref), 1e-9)
+    return np.clip(np.maximum(ratio, 0.0) ** THICKNESS_CURVE, THICKNESS_FLOOR, 1.0)
+
 
 @dataclass
 class StrokeData:
@@ -168,14 +186,14 @@ def _point_channels(stroke, x_keep, arrays, mapping, radius_ref):
         brightness = value if brightness is None else brightness * value
 
     if mapping.thickness == "VOLUME_VIBRATO":
-        amp *= radius_slow / ref
+        amp *= thickness_level(radius_slow, ref)
         vibrato = jitter
     elif mapping.thickness == "VOLUME":
-        amp *= radius / ref
+        amp *= thickness_level(radius, ref)
     elif mapping.thickness == "VIBRATO":
         vibrato = jitter
     elif mapping.thickness == "BRIGHTNESS":
-        add_brightness(radius_slow / ref)
+        add_brightness(np.clip(radius_slow / ref, 0.0, 1.0))
 
     if mapping.opacity == "VOLUME":
         amp *= opacity
@@ -317,7 +335,7 @@ def _interpret_fill(stroke, spec, mapping, fill_mode, radius_ref):
     ref = radius_ref if radius_ref > 0 else max(float(np.max(stroke.radius)), 1e-9)
     level = float(stroke.gain)
     if mapping.thickness in ("VOLUME", "VOLUME_VIBRATO"):
-        level *= float(np.clip(np.mean(stroke.radius) / ref, 0.0, 1.5))
+        level *= float(thickness_level(np.mean(stroke.radius), ref))
     if mapping.opacity == "VOLUME":
         level *= float(np.mean(stroke.opacity))
     attack = 0.005 + float(stroke.softness) * 0.4 if mapping.softness == "ATTACK" else 0.005

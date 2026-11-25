@@ -142,11 +142,18 @@ def read_drawing(drawing, materials, layer_name, matrix=None, radius_divisors=No
     return strokes
 
 
-def read_composition(obj, frame_number, use_modifiers=False, depsgraph=None):
+def audible_layers(gp):
+    """The user layers that are heard: visible, not muted, not silenced by a Solo."""
+    return [layer for layer in gp.layers
+            if not (is_hidden(layer) or is_board_layer(layer) or layer_silent(gp, layer.name))]
+
+
+def read_composition(obj, frame_number, use_modifiers=False, depsgraph=None, only=None):
     """Read every visible user layer of a composition object.
 
     With ``use_modifiers`` the evaluated strokes (after modifiers such as
     Noise or Array) of the current frame are read instead of the originals.
+    ``only``: a set of layer names to read (the others are skipped).
     """
     materials = [slot.material for slot in obj.material_slots]
     gp = obj.data
@@ -159,6 +166,8 @@ def read_composition(obj, frame_number, use_modifiers=False, depsgraph=None):
     result = []
     for layer in gp.layers:
         if is_hidden(layer) or is_board_layer(layer) or layer_silent(obj.data, layer.name):
+            continue
+        if only is not None and layer.name not in only:
             continue
         read = LayerRead(name=layer.name, opacity=layer_volume(obj.data, layer),
                          keyframes=len(layer.frames))

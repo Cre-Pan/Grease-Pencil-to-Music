@@ -34,12 +34,53 @@ class MasterFx:
 
 def _finish(master, sample_rate, settings, loop):
     """Master bus, or (without it) just a peak guard."""
+    return finish_stems([master], sample_rate, settings, loop)[0]
+
+
+def finish_stems(stems, sample_rate, settings, loop, want_stems=False, keys=None):
+    """``(mix, processed stems)`` of a list of layer buffers.
+
+    The master bus (or the peak guard) is computed on their sum and the same
+    processing reaches every stem, so the processed stems add up to the mix.
+    ``keys`` (one per stem, or None) cache the linear part of each stem."""
+    length = max((len(stem) for stem in stems), default=0)
+    stems = [_pad(stem, length) for stem in stems]
     if settings is not None and settings.enabled:
-        return effects.master(master, sample_rate, settings.ambience, loop, room=settings.room)
-    peak = float(np.max(np.abs(master))) if len(master) else 0.0
-    if peak > 0.98:
-        master = master * (0.98 / peak)
-    return master
+        if not want_stems:
+            total = _total(stems, length)
+            linear = effects.master_linear(total, sample_rate, settings.ambience, loop,
+                                           settings.room)
+            return effects.master_dynamics([linear], sample_rate, loop)[0], None
+        linears = []
+        for index, stem in enumerate(stems):
+            key = None if keys is None or keys[index] is None else (
+                keys[index], length, settings.ambience, settings.room, loop, sample_rate)
+            linear = _linear_cache.get(key) if key is not None else None
+            if linear is None:
+                linear = effects.master_linear(stem, sample_rate, settings.ambience, loop,
+                                               settings.room)
+                if key is not None:
+                    _linear_cache.put(key, linear)
+            linears.append(linear)
+        return effects.master_dynamics(linears, sample_rate, loop, want_stems=True)
+    total = _total(stems, length)
+    peak = float(np.max(np.abs(total))) if len(total) else 0.0
+    scale = 0.98 / peak if peak > 0.98 else 1.0
+    outs = [(stem * scale).astype(np.float32) for stem in stems] if want_stems else None
+    return (total * scale).astype(np.float32), outs
+
+
+def _pad(buffer, length):
+    if len(buffer) >= length:
+        return buffer
+    return np.concatenate((buffer, np.zeros((length - len(buffer), 2), dtype=buffer.dtype)))
+
+
+def _total(stems, length):
+    total = np.zeros((length, 2), dtype=np.float32)
+    for stem in stems:
+        total[:len(stem)] += stem
+    return total
 
 
 def _master_key(settings):
@@ -73,6 +114,21 @@ class RenderResult:
     duration: float = 0.0  # seconds of music (without tails); 0 = one loop
     sections: tuple = ()  # start seconds of the keyframe sections (empty = one loop)
     errors: int = 0  # strokes / voices skipped because they could not be rendered
+    stems: list = field(default_factory=list)  # [(layer name, audio)] when asked: they add up to audio
+    layers: list = field(default_factory=list)  # [LayerSound] before the master bus (render only)
+
+
+@dataclass
+class LayerSound:
+    """One layer rendered before the master bus (layer and master volume included)."""
+
+    name: str
+    audio: np.ndarray  # (n, 2) float32: one loop with folded tails, or the whole piece
+    key: str  # changes whenever this audio would change
+    notes: list = field(default_factory=list)
+    curves: list = field(default_factory=list)
+    voices: int = 0
+    errors: int = 0
 
 
 def _nbytes(value):
@@ -118,12 +174,14 @@ MB = 1024 * 1024
 _interp_cache = _LRU(4096)
 _stroke_cache = _LRU(2048, 512 * MB)
 _layer_cache = _LRU(64, 256 * MB)
+_linear_cache = _LRU(64, 256 * MB)  # layers through the room of the master bus
 
 
 def clear_cache():
     _interp_cache.clear()
     _stroke_cache.clear()
     _layer_cache.clear()
+    _linear_cache.clear()
 
 
 class _Errors:
@@ -315,27 +373,26 @@ def _add(a, b):
     return a
 
 
-def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.8,
-           master_fx=None):
-    """Render a list of :class:`LayerInput` into a :class:`RenderResult`.
+def context_key(spec, mapping, sample_rate):
+    """What every stroke of a render depends on besides its own data."""
+    return (astuple(spec), astuple(mapping), sample_rate)
 
-    ``master_fx``: :class:`MasterFx` of the finished mix, or None (peak guard only)."""
+
+def render_layers(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.8,
+                  room="HALL"):
+    """Render each :class:`LayerInput` on its own: a list of :class:`LayerSound`.
+
+    A layer never depends on the others (thickness is an absolute volume), so
+    one layer can be rendered again while the others keep their sound."""
     loop_n = max(1, int(round(spec.length * sample_rate)))
-    all_strokes = [s for layer in layers for s in layer.strokes]
-    radius_ref = max((float(np.max(s.radius)) for s in all_strokes if len(s.radius)),
-                     default=0.0)
-    context_key = (astuple(spec), astuple(mapping), round(radius_ref, 6), sample_rate)
-    room = master_fx.room if master_fx is not None else "HALL"
-
-    master = np.zeros((loop_n, 2), dtype=np.float32)
-    notes = []
-    curves = []
-    layer_keys = []
-    voice_count = 0
+    radius_ref = interpret.full_radius(spec.row_height)
+    ctx_key = context_key(spec, mapping, sample_rate)
     errors = _Errors()
+    sounds = []
     for layer in layers:
         stroke_keys = []
         stroke_results = []  # (instrument fx, rendered voices)
+        notes, curves, voice_count = [], [], 0
         copies = [(k * layer.canon_transpose, int(round(k * layer.canon_delay * sample_rate)))
                   for k in range(max(1, layer.canon_voices))]
         legato = layer.mode in interpret.LEGATO_MODES
@@ -356,7 +413,7 @@ def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.
         for transpose, shift in copies:
             if legato:
                 keys, parts, part_notes, part_curves, _count = _render_legato(
-                    layer, spec, mapping, radius_ref, sample_rate, context_key, transpose,
+                    layer, spec, mapping, radius_ref, sample_rate, ctx_key, transpose,
                     errors)
                 stroke_keys.extend((key, shift) for key in keys)
                 for index, (fx, rendered) in enumerate(parts):
@@ -368,7 +425,7 @@ def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.
             for stroke in layer.strokes:
                 key, (rendered, stroke_notes, stroke_curves) = _render_stroke(
                     stroke, spec, mapping, layer.mode, layer.fill_mode, radius_ref,
-                    sample_rate, context_key, layer.glide, transpose, errors, layer.harmony)
+                    sample_rate, ctx_key, layer.glide, transpose, errors, layer.harmony)
                 stroke_keys.append((key, shift))
                 add(stroke.fx, rendered, stroke_notes, stroke_curves, shift)
 
@@ -392,48 +449,90 @@ def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.
             buffer = effects.apply_chain(buffer, sample_rate, layer.fx, spec.bpm, room)
             if errors.count == errors_before:  # incomplete layers are rendered again
                 _layer_cache.put(layer_key, buffer)
-        layer_keys.append((layer_key, round(layer.gain, 4)))
 
-        scaled = buffer * layer.gain
+        scaled = buffer * np.float32(layer.gain * master_volume)
         if loop:
             # Fold echo/reverb/release tails back onto the start of the loop.
+            audio = np.zeros((loop_n, 2), dtype=np.float32)
             for begin in range(0, len(scaled), loop_n):
                 chunk = scaled[begin:begin + loop_n]
-                master[:len(chunk)] += chunk
+                audio[:len(chunk)] += chunk
         else:
-            if len(scaled) > len(master):
-                master = np.concatenate(
-                    (master, np.zeros((len(scaled) - len(master), 2), dtype=np.float32)))
-            master[:len(scaled)] += scaled
+            audio = scaled.astype(np.float32)
+        sound_key = hashlib.blake2b(
+            repr((layer_key, round(layer.gain, 4), round(master_volume, 4), loop,
+                  layer.name)).encode(), digest_size=16).hexdigest()
+        sounds.append(LayerSound(layer.name, audio, sound_key, notes, curves, voice_count,
+                                 errors.count - errors_before))
+    return sounds
 
-    master *= master_volume
-    master = _finish(master, sample_rate, master_fx, loop)
 
+def mix_layers(sounds, spec, mapping, sample_rate=44100, loop=True, master_fx=None,
+               stems=False):
+    """Mix :class:`LayerSound` (from :func:`render_layers`) into a :class:`RenderResult`.
+
+    With ``stems`` the result also has every layer after the master bus
+    (``result.stems``): played together they are the mix."""
+    loop_n = max(1, int(round(spec.length * sample_rate)))
+    buffers = [sound.audio for sound in sounds] or [np.zeros((loop_n, 2), np.float32)]
+    buffers = [_pad(buffer, loop_n) for buffer in buffers]
+    keys = [sound.key for sound in sounds] if sounds else None
+    mix, outs = finish_stems(buffers, sample_rate, master_fx, loop, stems, keys)
     key = hashlib.blake2b(
-        repr((layer_keys, loop, round(master_volume, 4), context_key,
+        repr(([sound.key for sound in sounds], loop, context_key(spec, mapping, sample_rate),
               _master_key(master_fx))).encode(),
         digest_size=16).hexdigest()
-    return RenderResult(master.astype(np.float32), sample_rate, notes, key, voice_count,
-                        curves, errors=errors.count)
+    notes = [note for sound in sounds for note in sound.notes]
+    curves = [curve for sound in sounds for curve in sound.curves]
+    return RenderResult(
+        mix.astype(np.float32), sample_rate, notes, key,
+        sum(sound.voices for sound in sounds), curves,
+        errors=sum(sound.errors for sound in sounds),
+        stems=[(sound.name, out) for sound, out in zip(sounds, outs)] if stems else [],
+        layers=list(sounds))
+
+
+def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.8,
+           master_fx=None, stems=False):
+    """Render a list of :class:`LayerInput` into a :class:`RenderResult`.
+
+    ``master_fx``: :class:`MasterFx` of the finished mix, or None (peak guard only).
+    ``stems``: also return each layer after the master bus (``result.stems``)."""
+    room = master_fx.room if master_fx is not None else "HALL"
+    sounds = render_layers(layers, spec, mapping, sample_rate, loop, master_volume, room)
+    return mix_layers(sounds, spec, mapping, sample_rate, loop, master_fx, stems)
 
 
 SECTION_FADE = 0.01  # seconds of fade where a section cuts a repetition short
 
 
-def sequence(parts, length, sample_rate, loop=True, master_fx=None):
+def sequence(parts, length, sample_rate, loop=True, master_fx=None, stems=False):
     """Join keyframe sections into one piece.
 
     ``parts``: ``[(start, end, RenderResult)]`` sorted by start, each rendered
     with ``loop=False`` (one loop of ``length`` seconds plus its tails). Every
     section repeats its loop from ``start`` until ``end``; a repetition cut by
     the next section fades out quickly, a whole one keeps its tail.
+
+    With ``stems`` the parts must have been rendered with ``stems=True``: every
+    layer is joined on its own track and goes through the master bus as a stem.
     """
     loop_n = max(1, int(round(length * sample_rate)))
     total = max((end for _start, end, _r in parts), default=length)
     total_n = max(1, int(round(total * sample_rate)))
-    master = np.zeros((total_n, 2), dtype=np.float32)
+    tracks = {}  # layer name (None = the mix) -> audio
     notes, curves, keys, voices, errors = [], [], [], 0, 0
     fade_n = max(1, int(SECTION_FADE * sample_rate))
+
+    def place(name, offset, chunk):
+        track = tracks.get(name)
+        if track is None:
+            track = tracks[name] = np.zeros((total_n, 2), dtype=np.float32)
+        if offset + len(chunk) > len(track):
+            track = tracks[name] = np.concatenate(
+                (track, np.zeros((offset + len(chunk) - len(track), 2), np.float32)))
+        track[offset:offset + len(chunk)] += chunk
+
     for start, end, result in parts:
         keys.append((round(start, 6), round(end, 6), result.key))
         voices += result.voice_count
@@ -441,18 +540,17 @@ def sequence(parts, length, sample_rate, loop=True, master_fx=None):
         begin, stop = int(round(start * sample_rate)), int(round(end * sample_rate))
         span = end - start
         repeats = max(1, int(np.ceil(span / length - 1e-9)))
+        sources = result.stems if stems else [(None, result.audio)]
         for k in range(repeats):
             offset = begin + k * loop_n
-            chunk = result.audio
-            if offset + loop_n > stop:  # cut short by the next section
-                chunk = chunk[:max(stop - offset, 0)].copy()
-                ramp = min(fade_n, len(chunk))
-                if ramp:
-                    chunk[-ramp:] *= np.linspace(1.0, 0.0, ramp, dtype=np.float32)[:, None]
-            if offset + len(chunk) > len(master):
-                master = np.concatenate(
-                    (master, np.zeros((offset + len(chunk) - len(master), 2), np.float32)))
-            master[offset:offset + len(chunk)] += chunk
+            for name, audio in sources:
+                chunk = audio
+                if offset + loop_n > stop:  # cut short by the next section
+                    chunk = chunk[:max(stop - offset, 0)].copy()
+                    ramp = min(fade_n, len(chunk))
+                    if ramp:
+                        chunk[-ramp:] *= np.linspace(1.0, 0.0, ramp, dtype=np.float32)[:, None]
+                place(name, offset, chunk)
             shift, limit = start + k * length, end
             for note in result.notes:
                 if shift + note.start < limit:
@@ -461,15 +559,23 @@ def sequence(parts, length, sample_rate, loop=True, master_fx=None):
             for c_start, pitch, ident in result.curves:
                 if shift + c_start < limit:
                     curves.append((shift + c_start, pitch, ident))
-    if loop and len(master) > total_n:
-        tail, master = master[total_n:], master[:total_n].copy()
-        for begin in range(0, len(tail), total_n):
-            chunk = tail[begin:begin + total_n]
-            master[:len(chunk)] += chunk
-    master = _finish(master, sample_rate, master_fx, loop)
+    if not tracks:
+        tracks[None] = np.zeros((total_n, 2), dtype=np.float32)
+    for name, track in list(tracks.items()):
+        if loop and len(track) > total_n:
+            tail, track = track[total_n:], track[:total_n].copy()
+            for begin in range(0, len(tail), total_n):
+                chunk = tail[begin:begin + total_n]
+                track[:len(chunk)] += chunk
+            tracks[name] = track
+    names = list(tracks)
+    master, outs = finish_stems([tracks[name] for name in names], sample_rate, master_fx,
+                                loop, stems)
     key = hashlib.blake2b(repr((keys, round(length, 6), loop, sample_rate,
                                 _master_key(master_fx))).encode(),
                           digest_size=16).hexdigest()
     notes.sort(key=lambda n: (n.start, n.pitch))
     return RenderResult(master, sample_rate, notes, key, voices, curves, duration=total,
-                        sections=tuple(start for start, _end, _r in parts), errors=errors)
+                        sections=tuple(start for start, _end, _r in parts), errors=errors,
+                        stems=[(name, out) for name, out in zip(names, outs)
+                               if name is not None] if stems else [])
