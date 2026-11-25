@@ -30,10 +30,14 @@ disegna su una tavola, e la tavola suona.
    La composizione parte **vuota**: un livello con un solo strumento (Flauto). La vista
    passa a frontale, *Solid → Texture*; si resta in Object Mode (passa a **Draw Mode** per
    disegnare).
-2. In *Proprietà → Dati oggetto → Livelli e strumenti*: **Nuovo livello** aggiunge un
-   livello; dentro ogni livello ci sono i suoi strumenti e **+ Strumento** ne aggiunge
-   altri (sintetizzati, percussioni, Campione, Libreria). Il pulsante accanto a uno
-   strumento lo rende quello con cui disegni.
+2. In *Proprietà → Dati oggetto → Livelli e strumenti* c'è la lista dei livelli, come quella
+   dei livelli Grease Pencil (**+** / **−**, ↑ / ↓, doppio clic per rinominare). A destra di
+   ogni livello: **♪** per cambiare lo strumento, **muto** (si vede ma non suona),
+   **cuffie** per il *Solo* (gli altri livelli tacciono e scendono al 10% di opacità),
+   onion skin, occhio e lucchetto. Sotto la lista ci sono lettura, volume e gli strumenti del
+   livello attivo: **+ Strumento** ne aggiunge altri (sintetizzati, percussioni, Campione,
+   Libreria), **♪** accanto a uno strumento lo cambia (i tratti restano), il pulsante col nome
+   lo rende quello con cui disegni.
 3. Disegna. Appena stacchi la penna il suono viene rigenerato.
 4. Premi **Spazio**: la testina rossa scorre e senti il disegno, in loop.
    Nella **Timeline** vedi la forma d'onda e i blocchetti delle note (vedi sotto).
@@ -80,7 +84,7 @@ Lo stesso disegno passa dall'iPad a Blender e viceversa con il progetto `.json` 
   morbidezza (attacco lento), *Matita* → opacità più bassa (suono più scuro). I **suoni
   registrati** nella web app diventano strumenti *Campione* (impacchettati nel .blend), il
   **Beat** diventa un livello *Beat* con un colpo per ogni passo (swing e pattern A/B
-  compresi). Un livello silenziato nella web app è nascosto in Blender.
+  compresi). Un livello silenziato nella web app è muto in Blender (visibile, non suona).
 - **Tornare sull'iPad**: *File → Export → Progetto Doodle Music web (.json)* o il pulsante
   *Web app (.json)* in *Proprietà → Output*, poi nella web app *File → Apri*. Viene salvato il
   keyframe all'inizio della scena; gli strumenti Campione entrano nel file come suoni.
@@ -121,7 +125,7 @@ Tutto si controlla dalla barra laterale **N → Musica**:
 | Doodle Music | stato, muto, avvisi, *Auto* (aggiornamento automatico), *Genera suono*, **Ascolto** (insieme / solo l'attiva / una dopo l'altra) |
 | Tavola e tempo | BPM, durata del loop, nota più bassa, ottave, **etichette dei tasti** (solo Do, tasti bianchi, tutte, nessuna), griglia |
 | Lettura | scala e tonica, quantizzazione ritmica, **swing**, nota minima, volume, **Suono finito** con *Ambiente*, **Usa modificatori** |
-| Livelli e strumenti | **Nuovo livello**, ↑ / ↓; ogni livello è un riquadro con lettura, occhio (nascosto e muto), cestino e i suoi **strumenti** (colore, nome, **volume**, occhio); **+ Strumento**; volume, forme piene, canone ed effetti del livello |
+| Livelli e strumenti | lista dei livelli come in Grease Pencil (+ / −, ↑ / ↓) con **♪ cambia strumento**, **muto**, **Solo** (cuffie: gli altri al 10%), onion skin, occhio, lucchetto; sotto, lettura, volume e **strumenti** del livello attivo (colore, nome, ♪, **volume**, occhio); **+ Strumento**; forme piene, canone ed effetti del livello |
 | Esporta | **WAV**, **MP3**, **MIDI** |
 
 ### Come viene letto un tratto
