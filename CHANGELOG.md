@@ -371,6 +371,19 @@ Pannelli più ordinati, a tendine come in Blender
 - **Effetti dello strumento** (Materiale) ha un sottopannello per effetto, come gli effetti del
   livello: *Eco*, *Riverbero* e *Lo-fi*, con l'elenco di quelli accesi in cima.
 
+Livelli e icone
+- **Solo di gruppo e livelli insieme**: le cuffie di un gruppo accendono (e spengono) quelle di
+  tutti i livelli dentro, e un gruppo si accende da solo quando tutti i suoi livelli sono in Solo.
+  Spegnendo il Solo di un livello dentro un gruppo in Solo, si spegne quello del gruppo e gli
+  altri livelli restano in Solo.
+- **Muto**: l'altoparlante con le onde (`MUTE_IPO_ON`) è il suono acceso, quello vuoto
+  (`MUTE_IPO_OFF`) il muto, nella lista dei livelli, nelle composizioni e nel pannello Musica.
+- *Aggiungi strumento* ha l'icona dell'altoparlante (`SPEAKER`).
+- **Icone delle composizioni**: un piano roll per la Composizione Musicale e una griglia di passi
+  per la Composizione Ritmica, in *Shift+A → Doodle Music*, nella lista Composizioni e nei pannelli.
+- Nella tendina delle categorie, la categoria in uso tiene la sua icona (prima diventava una
+  spunta, che sui Piatti sembrava una "v").
+
 ## 0.0.35
 
 Tutto insieme: le novità di 0.0.31, 0.0.32, 0.0.33 e 0.0.34 (qui sotto) e i modificatori sul tratto.

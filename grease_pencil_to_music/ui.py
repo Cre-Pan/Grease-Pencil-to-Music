@@ -11,7 +11,7 @@
 import bpy
 
 from . import beat, board, engine, families, help, music, prefs, props, reader
-from .icons import family_icon, icon, icon_kwargs, instrument_icon
+from .icons import composition_icon, family_icon, icon, icon_kwargs, instrument_icon
 from .operators import active_composition
 
 
@@ -100,9 +100,9 @@ def _draw_sections(layout, context, change):
             idents = families.idents(family)
             if not idents:
                 continue
-            if family is mine:
+            if family is mine:  # keeps its own icon (a check mark read as a "v")
                 _instrument_button(col, context, current, target, text=family.title,
-                                   kwargs={"icon": "CHECKMARK"})
+                                   kwargs=icon_kwargs(*family_icon(family)))
             else:
                 _instrument_button(col, context, idents[0], target, text=family.title,
                                    kwargs=icon_kwargs(*family_icon(family)))
@@ -269,19 +269,19 @@ def _solo_prop(layout, item):
                     icon="SOLO_ON" if item.solo else "SOLO_OFF")
 
 
+def mute_icon(muted):
+    """Blender's speaker icons: MUTE_IPO_ON while the sound is on, MUTE_IPO_OFF when muted."""
+    return "MUTE_IPO_OFF" if muted else "MUTE_IPO_ON"
+
+
 def _audio_prop(layout, gp, item):
     """Audio on/off (the inverse of mute): shown off and greyed while another
     layer or group is in Solo."""
     silent = props.layer_silent(gp, item.name)
     sub = layout.row(align=True)
     sub.active = item.mute or not silent
-    on = not silent
-    value = icon("audio_on" if on else "audio_off")
-    if value:
-        sub.prop(item, "mute", text="", emboss=False, icon_value=value, invert_checkbox=True)
-    else:
-        sub.prop(item, "mute", text="", emboss=False, invert_checkbox=True,
-                 icon="OUTLINER_DATA_SPEAKER" if on else "MUTE_IPO_ON")
+    sub.prop(item, "mute", text="", emboss=False, invert_checkbox=True,
+             icon=mute_icon(item.mute or silent))
 
 
 def _indent(layout, depth):
@@ -456,7 +456,7 @@ def draw_layer_instruments(layout, comp, layer, settings):
     add = layout.row()
     if settings is not None:
         add.context_pointer_set("gp2m_layer", settings)
-    add.menu("GP2M_MT_add_instrument", text="Aggiungi strumento", icon="ADD")
+    add.menu("GP2M_MT_add_instrument", text="Aggiungi strumento", icon="SPEAKER")
     loose = board.loose_instruments(comp)
     if loose:
         layout.label(text="Senza livello", icon="MATERIAL")
@@ -691,7 +691,7 @@ def draw_actions(layout, comp):
     sub.prop(comp.gp2m, "auto_active_layer", text="", toggle=True,
              icon="OUTLINER_DATA_GP_LAYER")
     row.operator("gp2m.regenerate", icon="PLAY_SOUND")
-    row.prop(comp.gp2m, "mute", text="", icon="MUTE_IPO_ON" if comp.gp2m.mute else "MUTE_IPO_OFF")
+    row.prop(comp.gp2m, "mute", text="", icon=mute_icon(comp.gp2m.mute))
     row.separator()
     row.operator("gp2m.play_keyboard", text="", icon="KEYTYPE_KEYFRAME_VEC")
     p = prefs.get_prefs()
@@ -784,8 +784,8 @@ def _octave_buttons(layout, beat_lanes=False):
         left.alignment = "RIGHT"
         left.label(text=f"{what} {where}")
         right = split.row(align=True)
-        for delta, icon, text in ((1, "ADD", add), (-1, "REMOVE", remove)):
-            op = right.operator("gp2m.board_octaves", text=text, icon=icon)
+        for delta, sign, text in ((1, "ADD", add), (-1, "REMOVE", remove)):
+            op = right.operator("gp2m.board_octaves", text=text, icon=sign)
             op.edge, op.delta = edge, delta
 
 
@@ -1145,7 +1145,7 @@ class GP2M_PT_output(bpy.types.Panel):
         if comp is None:
             layout.label(text="Seleziona una composizione per esportarla.", icon="INFO")
         else:
-            layout.label(text=comp.name, icon="OUTLINER_OB_GREASEPENCIL")
+            layout.label(text=comp.name, **composition_icon(comp))
             draw_export(layout)
         layout.operator("sound.mixdown", text="Mix di tutta la scena…", icon="SOUND")
 
@@ -1169,7 +1169,7 @@ class GP2M_PT_scene(bpy.types.Panel):
         col = layout.column(align=True)
         for obj in engine.scene_compositions(context.scene):
             row = col.row(align=True)
-            row.label(text=obj.name, icon="OUTLINER_OB_GREASEPENCIL")
+            row.label(text=obj.name, **composition_icon(obj))
             sub = row.row(align=True)
             sub.ui_units_x = 4
             sub.prop(obj.gp2m, "channel", text="Canale")
@@ -1177,8 +1177,7 @@ class GP2M_PT_scene(bpy.types.Panel):
                 sub = row.row(align=True)
                 sub.ui_units_x = 4
                 sub.prop(obj.gp2m, "order", text="Ordine")
-            row.prop(obj.gp2m, "mute", text="", icon="MUTE_IPO_ON" if obj.gp2m.mute
-                     else "MUTE_IPO_OFF")
+            row.prop(obj.gp2m, "mute", text="", icon=mute_icon(obj.gp2m.mute))
 
 
 # --- 3D View sidebar (compact, for drawing) --------------------------------------------------
@@ -1239,9 +1238,9 @@ class VIEW3D_MT_gp2m_add(bpy.types.Menu):
 
     def draw(self, _context):
         self.layout.operator("gp2m.add_composition", text="Composizione Musicale",
-                             icon="OUTLINER_OB_GREASEPENCIL")
+                             **composition_icon())
         self.layout.operator("gp2m.add_composition", text="Composizione Ritmica",
-                             icon="SEQ_HISTOGRAM").kind = "BEAT"
+                             **composition_icon(beat=True)).kind = "BEAT"
         self.layout.operator("gp2m.import_midi", text="Composizione da MIDI…", icon="IMPORT")
         self.layout.operator("gp2m.import_web", text="Composizione dalla web app…", icon="URL")
 
@@ -1300,7 +1299,7 @@ class GP2M_PT_sequencer_group(bpy.types.Panel):
                 col.prop(strip, f'["{engine.BUS_PAN}"]', text="Pan", slider=True)
             col.prop(strip, "mute", text="Muto")
         elif settings is not None:
-            col.label(text=comp.name, icon="OUTLINER_OB_GREASEPENCIL")
+            col.label(text=comp.name, **composition_icon(comp))
             col.prop(settings, "clip_volume", text="Volume", slider=True)
             col.prop(settings, "pan_percent", text="Pan", slider=True)
             col.prop(settings, "mute", text="Muto")
