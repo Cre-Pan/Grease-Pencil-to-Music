@@ -120,6 +120,9 @@ def board_palette(context=None):
         "GP2M Etichetta tasti neri": (rgba(mix(d["black_key"], (1.0, 1.0, 1.0), 0.55)), None),
         "GP2M Testina": (rgba(d["playhead"]), None),
         "GP2M Fuori anteprima": (None, (0.0, 0.0, 0.0, 0.65)),
+        "GP2M Presa": (None, (0.0, 0.0, 0.0, 0.0)),
+        "GP2M Linguetta": (rgba(d["window_rim"]), rgba(d["tab"])),
+        "GP2M Puntino grip": (None, rgba(mix(d["tab"], d["grip_dot"], 0.14))),
         # Composizione Bit
         "GP2M Fondo corsie": (rgba(d["mask_rim"]), rgba(d["panel"])),
         "GP2M Corsia": (None, rgba(d["lane"])),

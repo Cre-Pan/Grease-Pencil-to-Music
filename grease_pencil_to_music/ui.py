@@ -1135,7 +1135,7 @@ class VIEW3D_MT_gp2m_add(bpy.types.Menu):
     def draw(self, _context):
         self.layout.operator("gp2m.add_composition", text="Composizione Musicale",
                              icon="OUTLINER_OB_GREASEPENCIL")
-        self.layout.operator("gp2m.add_composition", text="Composizione Bit",
+        self.layout.operator("gp2m.add_composition", text="Composizione Ritmica",
                              icon="SEQ_HISTOGRAM").kind = "BEAT"
         self.layout.operator("gp2m.import_midi", text="Composizione da MIDI…", icon="IMPORT")
         self.layout.operator("gp2m.import_web", text="Composizione dalla web app…", icon="URL")

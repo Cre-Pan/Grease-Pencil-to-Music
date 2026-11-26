@@ -261,7 +261,7 @@ def board_point(context, comp, mouse, world=None):
         return None
     origin = view3d_utils.region_2d_to_origin_3d(region, rv3d, mouse)
     direction = view3d_utils.region_2d_to_vector_3d(region, rv3d, mouse)
-    world = comp.matrix_world if world is None else world
+    world = board.board_matrix(comp) if world is None else world
     normal = (world.to_3x3() @ Vector((0.0, 1.0, 0.0))).normalized()
     hit = intersect_line_plane(origin, origin + direction, world.translation, normal)
     if hit is None:
@@ -343,7 +343,7 @@ class _HandleMove:
         mouse = (event.mouse_region_x, event.mouse_region_y)
         # The keys below move the board origin while dragging: measure on the board
         # as it was when the drag started.
-        self.world = comp.matrix_world.copy()
+        self.world = board.board_matrix(comp).copy()
         point = board_point(context, comp, mouse, self.world)
         if point is None:
             return {"CANCELLED"}
@@ -635,10 +635,16 @@ class GP2M_GT_handle(_FlatText, bpy.types.Gizmo):
 
     bl_idname = "GP2M_GT_handle"
     __slots__ = ("gp2m_body", "gp2m_rim", "gp2m_glyphs", "gp2m_handle", "gp2m_comp",
-                 "gp2m_digits", "gp2m_px")
+                 "gp2m_digits", "gp2m_px", "gp2m_stem", "gp2m_stem_size")
 
     def setup(self):
         self.gp2m_body = self.gp2m_rim = self.gp2m_glyphs = None
+        # The playhead's stem from the window's edge up to the box: a unit square
+        # drawn stretched (its size in pixels comes from draw_prepare).
+        self.gp2m_stem = self.new_custom_shape(
+            "TRIS", [(-0.5, 0.0, -1.0), (0.5, 0.0, -1.0), (0.5, 0.0, 0.0),
+                     (-0.5, 0.0, -1.0), (0.5, 0.0, 0.0), (-0.5, 0.0, 0.0)])
+        self.gp2m_stem_size = (0.0, 0.0)
         self.gp2m_handle = ""
         self.gp2m_comp = ""
         self.gp2m_digits = 0
@@ -671,16 +677,22 @@ class GP2M_GT_handle(_FlatText, bpy.types.Gizmo):
             if chosen or self.is_highlight:
                 rim = colors["active"] if chosen else colors["hover_rim"]
                 self._part(self.gp2m_rim, rim[:3], 1.0 if chosen else 0.9)
+            width, length = self.gp2m_stem_size
+            if length > 0.0:
+                self.color = self.color_highlight = colors["playhead"][:3]
+                self.alpha = self.alpha_highlight = 1.0
+                self.draw_custom_shape(self.gp2m_stem, matrix=self.matrix_world
+                                       @ Matrix.Diagonal((max(width, 1.0), 1.0, length, 1.0)))
             self._part(self.gp2m_body, colors["playhead"])
             self._draw_text(context, str(context.scene.frame_current), colors["text"],
                             (0.0, HEAD_BOX_HH), "CENTER", alpha=0.85)
             return
-        self._part(self.gp2m_rim, colors["tab_rim"])
-        self._part(self.gp2m_body, colors["tab"])
+        # The tab itself is drawn by the board, behind the window: here only its dots
+        # light up under the mouse (and while it is dragged).
         if chosen:
             self._part(self.gp2m_glyphs, colors["playhead"])
-        else:  # quiet until the mouse comes
-            self._part(self.gp2m_glyphs, colors["grip_dot"], 0.5 if self.is_highlight else 0.14)
+        elif self.is_highlight:
+            self._part(self.gp2m_glyphs, colors["grip_dot"], 0.6)
         if dragged and _drag[key][2]:
             self._draw_text(context, _drag[key][2], colors["text"],
                             LABEL_OFFSET[self.gp2m_handle], "LEFT", size=18.0, alpha=0.85)
@@ -713,13 +725,15 @@ class GP2M_GT_name(_FlatText, bpy.types.Gizmo):
         self.gp2m_rim = self.new_custom_shape("TRIS", rim)
 
     def draw(self, context):
+        # The tab is drawn by the board, behind the window: here only the name, smaller
+        # when it is too long for the 200 px of the tab.
         colors = theme.handle_colors(context)
         blf.size(0, 20.0)
-        self._shape(max(NAME_HW, blf.dimensions(0, self.gp2m_comp)[0] / 2.0 + 30.0))
-        self._part(self.gp2m_rim, colors["tab_rim"])
-        self._part(self.gp2m_body, colors["tab"])
+        width = blf.dimensions(0, self.gp2m_comp)[0]
+        room = 2.0 * (NAME_HW - 18.0)
+        size = 20.0 * min(1.0, room / width) if width > 0 else 20.0
         self._draw_text(context, self.gp2m_comp, colors["text"],
-                        (0.0, -board.NAME_TAB_OUT / 2.0 + 1.5), "CENTER", size=20.0,
+                        (0.0, -board.NAME_TAB_OUT / 2.0 + 1.5), "CENTER", size=size,
                         alpha=0.5)
 
 
@@ -800,29 +814,32 @@ class GP2M_GGT_rig(bpy.types.GizmoGroup):
             x, z = handle_point(comp, handle, playhead_x(comp, depsgraph)
                                 if handle == HEAD else 0.0)
             dx, dz, _label = _drag.get((name, handle), (0.0, 0.0, ""))
-            world = comp.matrix_world
+            world = board.board_matrix(comp)
             location = world @ Vector((x + dx, RIG_DEPTH, z + dz))
             rotation = world.to_quaternion().to_matrix().to_4x4()
             if handle == HEAD:
                 gz.matrix_basis = Matrix.Translation(location) @ rotation
                 gz.scale_basis = scale
+                # The stem between the window's edge and the box, in the box's pixels.
+                u = board.unit(comp.gp2m)
+                axis = world.to_3x3() @ Vector((1.0, 0.0, 0.0))
+                px = _pixels_per_unit(context, location, axis) * u / max(ui, 1e-6)
+                gz.gp2m_stem_size = (5.0 * px, (head_lift(comp.gp2m) / u
+                                                - board.MARGIN_TOP) * px)
                 gz.gp2m_px = ui
                 gz.set_handle(HEAD, len(str(context.scene.frame_current)))
                 continue
             if handle == NAME and gz.gp2m_comp != name:
                 gz.gp2m_comp = name
-            # Grips and name tab: design px of the board, never smaller on screen
-            # than MIN_GRIP_PX for a grip.
+            # Grips and name: design px of the board, as big as the tabs drawn under
+            # the window (they grow and shrink with the board, like the drawing).
             u = board.unit(comp.gp2m)
             axis = world.to_3x3() @ Vector((1.0, 0.0, 0.0))
             px = _pixels_per_unit(context, location, axis) * u  # screen px per design px
-            grow = 1.0
-            if handle != NAME and px > 0.0:
-                grow = min(max(1.0, MIN_GRIP_PX / (2.0 * GRIP_HW * px)), 50.0)
             gz.matrix_basis = Matrix.Translation(location) @ rotation \
-                @ Matrix.Scale(u * grow * world.to_scale().x, 4)
+                @ Matrix.Scale(u * world.to_scale().x, 4)
             gz.scale_basis = 1.0
-            gz.gp2m_px = px * grow
+            gz.gp2m_px = px
 
 
 classes = (GP2M_OT_rig_drag, GP2M_OT_rig_grab, GP2M_OT_rig_deselect, GP2M_GT_handle,

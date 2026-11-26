@@ -547,6 +547,14 @@ def _drum_items():
 DRUM_ITEMS = _drum_items()  # kept here: Blender keeps no copy of the items
 
 
+def _range_changed(self, context):
+    """Lowest note and octaves: C4 to C5 (the origin's octave) always stays."""
+    from . import beat, board
+    if self.origin_version >= board.ORIGIN_VERSION and not beat.is_beat(self):
+        board._fit_anchor(self)
+    _board_changed(self, context)
+
+
 def _lanes_changed(self, _context):
     from . import beat
     if self.kind == beat.BEAT:
@@ -606,12 +614,16 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
         "scena. Con le sezioni da keyframe l'ultima sezione arriva fino all'End. "
         "Ascoltando 'Una dopo l'altra' ogni composizione tiene la sua durata")
     low_note: IntProperty(name="Nota più bassa", default=48, min=12, max=96,
-                          description="Nota MIDI della riga più bassa (48 = C3)",
-                          update=_board_changed)
-    octaves: IntProperty(name="Ottave", default=3, min=1, max=7, update=_board_changed)
+                          description="Nota MIDI della riga più bassa (48 = C3). L'ottava "
+                          "del Do centrale (C4), dove sta l'origine, resta sempre: cambiando "
+                          "la nota più bassa la tavola cresce o cala in basso e il disegno "
+                          "suona le stesse note", update=_range_changed)
+    octaves: IntProperty(name="Ottave", default=3, min=1, max=7, update=_range_changed)
     extra_keys: IntProperty(name="Tasti in più", default=0, min=0, max=11,
                             description="Semitoni sopra le ottave intere (le maniglie delle "
-                            "ottave si fermano su ogni tasto)", update=_board_changed)
+                            "ottave si fermano su ogni tasto)", update=_range_changed)
+    origin_version: IntProperty(default=0, options={"HIDDEN"},
+                                description="1: l'origine è sul pallino del Do centrale")
     grid_opacity: FloatProperty(name="Opacità griglia", default=1.0, min=0.0, max=1.0,
                                 subtype="FACTOR", update=_grid_opacity_changed,
                                 description="Opacità della tavola: sfondo, righe, tastiera "
@@ -626,12 +638,14 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
     key_labels: EnumProperty(name="Etichette tasti", items=KEY_LABEL_ITEMS, default="C",
                              update=_board_changed)
     kind: EnumProperty(name="Tipo", items=KIND_ITEMS, default="NOTES", update=_lanes_changed,
-                       description="Note: la tavola con la tastiera. Bit: la tavola del ritmo, "
+                       description="Note: la tavola con la tastiera. Ritmica: la tavola del ritmo, "
                        "una percussione per corsia")
     lanes: IntProperty(name="Corsie", default=8, min=1, max=16, update=_lanes_changed,
                        description="Corsie della composizione Bit, una percussione ciascuna "
                        "(le maniglie sopra e sotto ne aggiungono o tolgono una alla volta)")
     lane_drums: CollectionProperty(type=GP2M_Lane, options={"HIDDEN"})
+    lane_anchor: IntProperty(default=0, min=0, max=15, options={"HIDDEN"},
+                             description="La corsia dell'origine (non si può togliere)")
 
     scale: EnumProperty(name="Scala", items=[(i, l, "") for i, l, _ in music.SCALES],
                         default="CHROMATIC", update=_sound_changed)

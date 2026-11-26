@@ -355,10 +355,34 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.34
+
+Tavola
+- **Si sposta e si ruota dove vuoi**: un clic sulla tavola prende la composizione (prima prendeva
+  la griglia, che è bloccata: trascinando con Tweak o con lo strumento Move non si muoveva nulla e
+  sembrava tornare indietro). La lettura usa le coordinate locali della composizione: spostata o
+  ruotata suona uguale, e il disegno resta sul suo piano anche ruotata.
+- **Origine sul pallino del Do centrale (C4)**: l'origine della composizione è al centro del
+  pallino. L'ottava di C4 resta sempre (maniglie, pulsanti e *Nota più bassa* non la tolgono).
+  Nella Composizione Ritmica l'origine è nello stesso punto, nella corsia in basso (che resta).
+- **Il grip in basso fa crescere solo verso il basso**: la composizione e il disegno non si
+  spostano, scende solo il bordo della tavola. Le composizioni salvate prima prendono la nuova
+  origine all'apertura, senza muoversi.
+- **Linguette dietro la finestra**: i tre grip e la linguetta del nome sono disegnati sotto la
+  finestra (escono da dietro), grandi come nel Figma e non si ingrandiscono più allontanandosi.
+  Sotto il mouse si accendono i puntini. Il nome rimpicciolisce se non ci sta.
+- **Selezione**: selezionata, diventa arancione solo il bordo della finestra (non cursore, tratti
+  o linguette).
+- *Shift+A → Doodle Music → Composizione Ritmica* (era "Composizione Bit").
+
+Anteprima degli strumenti
+- Le percussioni nelle tendine si sentono ripetute: tre volte i colpi corti, due quelli lunghi,
+  una volta gong e piatti.
+
 ## 0.0.33
 
-Composizione Bit (dal Figma "Composizione Bit")
-- **Nuovo tipo di composizione**: *Shift+A → Doodle Music → Composizione Bit*. Stessa finestra,
+Composizione Ritmica (dal Figma "Composizione Bit")
+- **Nuovo tipo di composizione**: *Shift+A → Doodle Music → Composizione Ritmica*. Stessa finestra,
   maniglie, cursore blu e anteprima della tavola delle note; al posto di tastiera e righe ci sono
   **8 corsie**, una percussione ciascuna (dal basso: Cassa, Rullante, Battimani, Tom, Rimshot,
   Charleston, Charleston aperto, Piatto).

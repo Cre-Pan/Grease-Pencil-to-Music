@@ -50,7 +50,14 @@ def by_channel(scene):
 def _top_point(obj):
     """World point just above the board of ``obj`` (its left edge)."""
     _z0, z1 = board.vertical_extent(obj.gp2m)
-    return obj.matrix_world @ Vector((0.0, 0.0, z1 + GAP))
+    return board.board_matrix(obj) @ Vector((0.0, 0.0, z1 + GAP))
+
+
+def _corner(obj, rotation):
+    """From the board's corner (board coordinates 0, 0) to the object's origin, in the
+    world, for an object with ``rotation``."""
+    ox, oz = board.origin(obj.gp2m)
+    return rotation @ Vector((ox, 0.0, oz))
 
 
 def place_new(obj, scene):
@@ -64,9 +71,10 @@ def place_new(obj, scene):
     z0, _z1 = board.vertical_extent(obj.gp2m)
     obj.rotation_euler = top.matrix_world.to_euler()
     point = _top_point(top)
-    # The bottom of the new board (z0, below its origin) sits on the point.
-    up = top.matrix_world.to_3x3().normalized() @ Vector((0.0, 0.0, 1.0))
-    obj.location = point - up * z0
+    # The bottom of the new board (z0, below its corner) sits on the point.
+    rotation = top.matrix_world.to_3x3().normalized()
+    up = rotation @ Vector((0.0, 0.0, 1.0))
+    obj.location = point - up * z0 + _corner(obj, rotation)
 
 
 def stack(scene, comps=None):
@@ -78,13 +86,13 @@ def stack(scene, comps=None):
     base = comps[0]
     rotation = base.matrix_world.to_3x3().normalized()
     up = rotation @ Vector((0.0, 0.0, 1.0))
-    origin = base.matrix_world.translation.copy()
+    origin = board.board_matrix(base).translation.copy()
     _z0, z1 = board.vertical_extent(base.gp2m)
     level = z1 + GAP
     for obj in comps[1:]:
         z0, z1 = board.vertical_extent(obj.gp2m)
         world = rotation.to_4x4()
-        world.translation = origin + up * (level - z0)
+        world.translation = origin + up * (level - z0) + _corner(obj, rotation)
         obj.matrix_world = world
         level += (z1 - z0) + GAP
 

@@ -16,7 +16,7 @@ from . import synth
 NOTES, BEAT = "NOTES", "BEAT"
 KIND_ITEMS = (
     (NOTES, "Note", "Tavola con la tastiera: l'altezza del tratto è la nota"),
-    (BEAT, "Bit", "Tavola del ritmo: una percussione per corsia"),
+    (BEAT, "Ritmica", "Tavola del ritmo: una percussione per corsia"),
 )
 
 # Figma "Composizione Bit": 8 lanes in the 630 px of the window (3 octaves of the

@@ -106,7 +106,16 @@ def preview(ident, sample_rate=44100):
     if ident == _preview["ident"] and now - _preview["time"] < PREVIEW_SECONDS:
         return
     note_off(_preview["handle"])
-    handle = note_on(ident, PREVIEW_PITCH, sample_rate, 0.7)
+    seconds = PREVIEW_SECONDS
+    if synth.get_instrument(ident).percussive:  # a hit: heard 2-3 times in a row
+        out = device()
+        handle = None
+        if out is not None:
+            import aud
+            buffer, seconds = hits_buffer(ident, sample_rate)
+            handle = out.play(aud.Sound.buffer(buffer, float(sample_rate)).volume(0.7))
+    else:
+        handle = note_on(ident, PREVIEW_PITCH, sample_rate, 0.7)
     _preview.update(handle=handle, ident=ident, time=now)
     if handle is not None:
         def stop():
@@ -114,7 +123,30 @@ def preview(ident, sample_rate=44100):
                 note_off(handle)
                 _preview["handle"] = None
             return None
-        bpy.app.timers.register(stop, first_interval=PREVIEW_SECONDS)
+        bpy.app.timers.register(stop, first_interval=seconds)
+
+
+def preview_hits(length):
+    """(hits, seconds between them) of a percussion's preview: short hits three times,
+    long ones twice, a very long one (gong, cymbal) once."""
+    if length <= 0.6:
+        return 3, max(length, 0.3)
+    if length <= 2.0:
+        return 2, length
+    return 1, min(length, 3.0)
+
+
+def hits_buffer(ident, sample_rate=44100):
+    """The preview of a percussion: its hit repeated (see :func:`preview_hits`).
+    Returns (stereo buffer, seconds)."""
+    hit = note_buffer(ident, PREVIEW_PITCH, sample_rate)
+    count, every = preview_hits(synth.get_instrument(ident).length)
+    step = int(every * sample_rate)
+    total = step * (count - 1) + len(hit)
+    out = np.zeros((total, 2), dtype=np.float32)
+    for i in range(count):
+        out[i * step:i * step + len(hit)] += hit
+    return out, total / sample_rate
 
 
 def velocity_volume(velocity):
@@ -169,7 +201,7 @@ def record_stroke(comp, scene, pitch, t0, t1, material_index):
     x = np.linspace(t0 * s.seconds_width, t1 * s.seconds_width, count)
     z = np.full(count, (pitch - s.low_note + 0.5) * s.row_height)
     radius = np.full(count, s.row_height * prefs.get_prefs().record_thickness)
-    board.add_strokes_bulk(drawing, [(x, z, radius, material_index)])
+    board.add_strokes_bulk(drawing, [(x, z, radius, material_index)], board.local_offset(s))
     return 1
 
 

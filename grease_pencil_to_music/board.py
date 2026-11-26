@@ -36,7 +36,8 @@ BOARD_PASS = 77  # layer pass index of board layers, excluded from modifiers
 GRID_ROLE = "gp2m_grid"  # custom property on the grid object
 GRID_SUFFIX = " · Tavola"
 GRID_DEPTH = 0.005  # the grid sits just behind the drawing (+Y, away from the front view)
-HEAD_MATERIALS = ("GP2M Testina",)  # the only board material left in the composition
+HEAD_MATERIALS = ("GP2M Testina", "GP2M Presa")
+CATCH_LAYER = "GP2M Presa"  # invisible fill over the window: a click picks the composition  # the only board material left in the composition
 
 # The board materials take their colors from the Blender theme: see theme.board_palette.
 SHADE_LAYER = "GP2M Fuori anteprima"
@@ -269,10 +270,12 @@ def _add_strokes(drawing, specs):
     drawing.tag_positions_changed()
 
 
-def add_strokes_bulk(drawing, strokes):
+def add_strokes_bulk(drawing, strokes, offset=(0.0, 0.0)):
     """Add many strokes at once (MIDI import, keyboard recording).
 
-    ``strokes``: list of (x array, z array, radius array, material_index).
+    ``strokes``: list of (x array, z array, radius array, material_index), in board
+    coordinates; ``offset``: added to them (:func:`local_offset`, for the strokes of
+    a composition).
     """
     if not strokes:
         return
@@ -286,8 +289,8 @@ def add_strokes_bulk(drawing, strokes):
     radii = np.empty(len(positions), dtype=np.float32)
     cursor = 0
     for x, z, r, _m in strokes:
-        positions[cursor:cursor + len(x), 0] = x
-        positions[cursor:cursor + len(x), 2] = z
+        positions[cursor:cursor + len(x), 0] = np.asarray(x) + offset[0]
+        positions[cursor:cursor + len(x), 2] = np.asarray(z) + offset[1]
         radii[cursor:cursor + len(x)] = r
         cursor += len(x)
     all_pos = np.empty(len(attrs["position"].data) * 3, dtype=np.float32)
@@ -345,24 +348,112 @@ def vertical_extent(settings):
         z1 + HEAD_BOX_UP * u + rig.handle_room(settings)
 
 
-MIN_LOW_NOTE, MAX_LOW_NOTE, MAX_OCTAVES = 12, 96, 7
+MIN_LOW_NOTE, MAX_OCTAVES = 12, 7
+ANCHOR_NOTE = 60  # C4: the composition's origin is on its dot, its octave always shown
+MAX_LOW_NOTE = ANCHOR_NOTE
 
 
 def key_steps(settings, edge, delta):
     """How many keys (semitones, signed) can really be added (+) or hidden (-) at
-    ``edge``: the board shows from 1 to 7 octaves. A Bit composition counts lanes
-    (from 1 to 16)."""
+    ``edge``: the board shows from 1 to 7 octaves and always the octave of C4 (the
+    origin). A Bit composition counts lanes (from 1 to 16; the lane of the origin
+    stays)."""
     if beat.is_beat(settings):
         now = beat.lane_count(settings)
-        return max(beat.MIN_LANES, min(beat.MAX_LANES, now + delta)) - now
+        anchor = lane_anchor(settings)
+        if edge == "TOP":
+            low = beat.MIN_LANES + anchor
+            return max(min(now, low), min(beat.MAX_LANES, now + delta)) - now
+        if delta > 0:
+            return max(0, min(delta, beat.MAX_LANES - now))
+        return -max(0, min(-delta, anchor))
     now = span(settings)
+    low = settings.low_note
     if edge == "TOP":
-        return max(12, min(MAX_OCTAVES * 12, now + delta)) - now
+        least = min(now, max(12, ANCHOR_NOTE + 12 - low))  # C4 to C5 stays
+        return max(least, min(MAX_OCTAVES * 12, now + delta)) - now
     if delta > 0:  # show more below: the lowest note goes down, the board grows
-        room = min(settings.low_note - MIN_LOW_NOTE, MAX_OCTAVES * 12 - now)
+        room = min(low - MIN_LOW_NOTE, MAX_OCTAVES * 12 - now)
         return max(0, min(delta, room))
-    room = min(MAX_LOW_NOTE - settings.low_note, now - 12)
+    room = min(MAX_LOW_NOTE - low, now - 12)  # C4 stays the lowest it can be
     return -max(0, min(-delta, room))
+
+
+def lane_anchor(settings):
+    """The lane of a Bit composition the origin sits in (it cannot be taken away)."""
+    return max(0, min(beat.lane_count(settings) - 1, int(getattr(settings, "lane_anchor", 0))))
+
+
+# --- The origin ----------------------------------------------------------------------
+# The board is drawn in "board" coordinates: x = 0 where the composition starts,
+# z = 0 at the bottom of the lowest row. The object's origin sits on the dot of C4
+# (on a Bit composition: the same place on the left panel, in the middle of its
+# anchor lane): adding or hiding keys below changes the board coordinates of the
+# origin, never the object or its strokes.
+
+ORIGIN_VERSION = 1  # 0: the origin was the bottom-left corner of the grid (up to 0.0.33)
+
+
+def origin(settings):
+    """Board coordinates (x, z) of the object's origin."""
+    if getattr(settings, "origin_version", ORIGIN_VERSION) < ORIGIN_VERSION:
+        return 0.0, 0.0
+    u = unit(settings)
+    x = -(KEYBOARD_W + KEY_GAP) * u + DOT_X * u
+    if beat.is_beat(settings):
+        return x, (lane_anchor(settings) + 0.5) * beat.lane_height(settings)
+    return x, (ANCHOR_NOTE - settings.low_note + WHITE_KEYS[0][1] / 2.0) * settings.row_height
+
+
+def board_matrix(comp):
+    """World matrix of the board coordinates (the object's, moved to the board's
+    corner)."""
+    from mathutils import Matrix
+    ox, oz = origin(comp.gp2m)
+    return comp.matrix_world @ Matrix.Translation((-ox, 0.0, -oz))
+
+
+def local_offset(settings):
+    """Add to board coordinates to get the object's (local) coordinates."""
+    ox, oz = origin(settings)
+    return -ox, -oz
+
+
+def adopt_origin(comp):
+    """A composition of an older version: its origin goes on the dot of C4, without
+    moving anything in the world (the strokes move the other way inside the object).
+    Returns True when it changed."""
+    s = comp.gp2m
+    if s.origin_version >= ORIGIN_VERSION:
+        return False
+    if not beat.is_beat(s):
+        _fit_anchor(s)
+    s.origin_version = ORIGIN_VERSION
+    ox, oz = origin(s)
+    if abs(ox) > 1e-9 or abs(oz) > 1e-9:
+        _move_drawing(comp, -ox, -oz)
+    return True
+
+
+def _fit_anchor(settings):
+    """The lowest note and the octaves of a note board so that C4 to C5 is shown."""
+    s = settings
+    if s.low_note > ANCHOR_NOTE:
+        top = s.low_note + span(s)
+        s.low_note = ANCHOR_NOTE
+        _set_span(s, max(top, ANCHOR_NOTE + 12) - ANCHOR_NOTE)
+    if s.low_note + span(s) < ANCHOR_NOTE + 12:
+        _set_span(s, ANCHOR_NOTE + 12 - s.low_note)
+
+
+def fit_range(settings, low, semitones):
+    """Set lowest note and span (imports), widened to keep C4 to C5 on the board."""
+    top = min(low + semitones, 127)
+    low = max(MIN_LOW_NOTE, min(low, ANCHOR_NOTE))
+    top = max(top, ANCHOR_NOTE + 12)
+    low = max(low, top - MAX_OCTAVES * 12)
+    settings.low_note = low
+    _set_span(settings, top - low)
 
 
 def octave_steps(settings, edge, delta):
@@ -397,20 +488,22 @@ def shift_keys(comp, edge, delta):
     if edge == "TOP":
         _set_span(s, span(s) + steps)
         return steps  # the top edge: the origin stays, the deferred rebuild is enough
-    _move_drawing(comp, steps * s.row_height)
+    old = s.origin_version < ORIGIN_VERSION
+    if old:  # the origin was the board's corner: it moves down with the keys
+        _move_drawing(comp, 0.0, steps * s.row_height)
     _set_span(s, span(s) + steps)
     s.low_note -= steps
-    # The board at once, with the object that just moved: a board drawn for a moment
-    # with the old rows on the new origin jumped up or down. The sound is deferred.
+    # The board grows downwards at once: the object and its strokes do not move (the
+    # origin is on C4), the board's corner goes down. The sound is deferred.
     scene = bpy.context.scene
     build_grid(comp, scene)
     _build_playhead(comp, scene)
     return steps
 
 
-def _move_drawing(comp, dz):
-    """Move the strokes up by ``dz`` inside the object and the object down by as much:
-    in the world nothing moves, the board origin (z = 0) goes down."""
+def _move_drawing(comp, dx, dz):
+    """Move the strokes by (dx, dz) inside the object and the object back by as much:
+    in the world nothing moves."""
     import numpy as np
     for layer in user_layers(comp.data):
         for frame in layer.frames:
@@ -419,12 +512,13 @@ def _move_drawing(comp, dz):
                 continue
             positions = np.empty(len(attr.data) * 3, dtype=np.float32)
             attr.data.foreach_get("vector", positions)
+            positions[0::3] += dx
             positions[2::3] += dz
             attr.data.foreach_set("vector", positions)
             frame.drawing.tag_positions_changed()
     from mathutils import Vector
     world = comp.matrix_world.copy()
-    world.translation = world @ Vector((0.0, 0.0, -dz))
+    world.translation = world @ Vector((-dx, 0.0, -dz))
     comp.matrix_world = world
 
 
@@ -443,6 +537,7 @@ def _shift_lanes(comp, edge, steps):
         s.lanes = s.lanes + steps
         return steps
     stash = list(comp.get(LANE_STASH_KEY, []))  # drums of the lanes hidden below
+    old = s.origin_version < ORIGIN_VERSION
     if steps > 0:  # new lanes below: their items go first
         for _ in range(steps):
             used = {item.drum for item in items}
@@ -454,7 +549,9 @@ def _shift_lanes(comp, edge, steps):
             stash.append(items[0].drum)
             items.remove(0)
     comp[LANE_STASH_KEY] = stash[-beat.MAX_LANES:]
-    _move_drawing(comp, steps * beat.lane_height(s))
+    if old:
+        _move_drawing(comp, 0.0, steps * beat.lane_height(s))
+    s.lane_anchor = max(0, s.lane_anchor + steps)  # the origin stays on its lane
     s.lanes = s.lanes + steps
     scene = bpy.context.scene
     build_grid(comp, scene)
@@ -735,6 +832,64 @@ def _labels(s, index, rows, top):
     return specs
 
 
+# --- The tabs behind the window (GRIP UP / DOWN / RIGHT, Nome Composizione) ---------
+# Drawn under the window (it covers their inner part), as big as the board: they
+# come out from behind it. The gizmos of the rig only catch the mouse (and light the
+# dots of a grip under it).
+
+GRIP_HW, GRIP_IN, GRIP_RADIUS = 46.5, 20.0, 25.0  # 93 x 60 px, 20 of them under the window
+GRIP_DOTS = ((-15.0, 15.0), (-5.0, 15.0), (5.0, 15.0), (15.0, 15.0),
+             (-15.0, 25.0), (-5.0, 25.0), (5.0, 25.0), (15.0, 25.0))  # (along, out)
+GRIP_DOT_R = 2.0
+NAME_HW, NAME_IN = 100.0, 10.0  # Nome Composizione: 200 x 60 px, 10 under the window
+
+
+def tab_anchors(settings):
+    """{handle: (x, z, direction)} of the tabs: middle of their window edge."""
+    x0, z0, x1, z1 = window_box(settings)
+    kx0, _kz0, kx1, _kz1 = keyboard_box(settings)
+    kx = (kx0 + kx1) / 2.0
+    return {"OCT_TOP": (kx, z1, "UP"), "OCT_BOTTOM": (kx, z0, "DOWN"),
+            "LENGTH": (x1, (z0 + z1) / 2.0, "RIGHT"),
+            "NAME": (dimensions(settings)[1] / 2.0, z0, "DOWN")}
+
+
+def _tab_point(anchor, along, out):
+    x, z, direction = anchor
+    if direction == "UP":
+        return x + along, z + out
+    if direction == "DOWN":
+        return x + along, z - out
+    return x + out, z + along  # RIGHT
+
+
+def _tab_box(anchor, hw, inside, outside):
+    a = _tab_point(anchor, -hw, -inside)
+    b = _tab_point(anchor, hw, outside)
+    corners = {"UP": (False, False, True, True), "DOWN": (True, True, False, False),
+               "RIGHT": (False, True, True, False)}[anchor[2]]
+    return (min(a[0], b[0]), min(a[1], b[1]), max(a[0], b[0]), max(a[1], b[1])), corners
+
+
+def _tabs(s, index):
+    u = unit(s)
+    specs = []
+    for handle, anchor in tab_anchors(s).items():
+        if handle == "NAME":
+            box, corners = _tab_box(anchor, NAME_HW * u, NAME_IN * u, NAME_TAB_OUT * u)
+        else:
+            box, corners = _tab_box(anchor, GRIP_HW * u, GRIP_IN * u, TAB_OUT * u)
+        shape = _rounded_rect(*box, GRIP_RADIUS * u, _arc_steps(GRIP_RADIUS, 1.0), corners)
+        specs.append((shape, u, index["GP2M Linguetta"], "both"))
+        if handle == "NAME":
+            continue
+        for along, out in GRIP_DOTS:
+            cx, cz = _tab_point(anchor, along * u, out * u)
+            specs.append((_dot(cx, cz, GRIP_DOT_R * u, 8), 0.001, index["GP2M Puntino grip"],
+                          "fill"))
+    return specs
+
+
 # --- Composizione Bit (Figma "Composizione Bit": lanes instead of keys) -------------
 
 LANE_LABEL = 14.0  # design px, height of the drum names
@@ -978,6 +1133,10 @@ def ensure_grid(comp):
         comp.gp2m.grid = grid
     elif grid.data is None or grid.data.users > 1:
         grid.data = bpy.data.grease_pencils.new(name)
+    # Clicks go through the board to the composition (which has a catch area): a
+    # board picked by a click could not be moved (Tweak, Move tool).
+    if not grid.hide_select:
+        grid.hide_select = True
     if grid.name != name:
         grid.name = name
     if grid.data.name != grid.name:
@@ -1157,6 +1316,8 @@ _LAYER_MATERIALS = {
                        "GP2M Etichetta tasti neri", "GP2M Etichetta corsia"},
     SHADE_LAYER: {"GP2M Fuori anteprima"},
     HEAD_LAYER: {"GP2M Testina"},
+    CATCH_LAYER: {"GP2M Presa"},
+    "GP2M Linguette": {"GP2M Linguetta", "GP2M Puntino grip"},
 }
 
 
@@ -1202,7 +1363,8 @@ def board_signature(settings):
     """The settings the grid and the playhead are drawn from."""
     s = settings
     lanes = f"|{s.kind}|{','.join(beat.lane_drums(s))}" if beat.is_beat(s) else ""
-    return (f"{s.bpm:.4f}|{s.length:.4f}|{s.low_note}|{s.octaves}|{s.extra_keys}|"
+    return (f"{s.origin_version}|{s.bpm:.4f}|{s.length:.4f}|{s.low_note}|{s.octaves}|"
+            f"{s.extra_keys}|"
             f"{s.row_height:.5f}|{s.seconds_width:.5f}|{int(s.show_beats)}|{s.key_labels}"
             + lanes)
 
@@ -1221,6 +1383,7 @@ def rebuild(comp, scene=None):
     scene = scene or bpy.context.scene
     _remove_legacy_children(comp)
     _strip_inner_board(comp)
+    adopt_origin(comp)
     build_grid(comp, scene)
     _build_playhead(comp, scene)
 
@@ -1264,8 +1427,11 @@ def build_grid(comp, scene=None):
                   ("GP2M Righe", _rows(s, index, rows, width)),
                   ("GP2M Tasti", _keys(s, index, rows)),
                   ("GP2M Etichette", _labels(s, index, rows, top)))
+    pieces = (("GP2M Linguette", _tabs(s, index)),) + pieces  # under the window
+    dx, dz = local_offset(s)
     for name, specs in pieces + ((SHADE_LAYER, _shade(s, index, lit, top)),):
         layer = grid_gp.layers.new(name, set_active=False, layer_group=board_group)
+        layer.translation = (dx, 0.0, dz)  # board coordinates -> the object's (C4 dot)
         layer.use_lights = False
         layer.pass_index = BOARD_PASS
         _add_strokes(layer.frames.new(frame).drawing, specs)
@@ -1283,14 +1449,26 @@ def _build_playhead(comp, scene):
     for layer in [layer for layer in gp.layers if is_board_layer(layer)]:
         gp.layers.remove(layer)  # the playhead
     head_group = _ensure_group(gp, HEAD_GROUP, bottom=False)
+    head_index = _ensure_materials(gp, HEAD_MATERIALS)
+    u = unit(s)
+    dx, dz = local_offset(s)  # the composition's strokes are relative to the C4 dot
+    catch = gp.layers.new(CATCH_LAYER, set_active=False, layer_group=head_group)
+    catch.use_lights = False
+    catch.pass_index = BOARD_PASS
+    # The window's shape: selected, the composition's orange outline is the window's.
+    window = _rounded_rect(*window_box(s), WINDOW_RADIUS * u, _arc_steps(WINDOW_RADIUS, 1.0))
+    _add_strokes(catch.frames.new(frame).drawing,
+                 [([(x + dx, z + dz) for x, z in window], 0.001, head_index["GP2M Presa"],
+                   "fill")])
+    catch.lock = True
     head = gp.layers.new(HEAD_LAYER, set_active=False, layer_group=head_group)
     head.use_lights = False
     head.pass_index = BOARD_PASS
-    head_index = _ensure_materials(gp, HEAD_MATERIALS)
-    u = unit(s)
-    # CURSORE BLU: 5 px, across the grid and up to the box above the window.
+    # CURSORE BLU: 5 px, across the grid up to the window's edge (the rest of the stem,
+    # up to the box, is drawn with the box by the rig: outside the window the
+    # selection outline would go round it).
     _add_strokes(head.frames.new(frame).drawing,
-                 [([(0.0, 0.0), (0.0, top + rig_lift(s))], 2.5 * u,
+                 [([(dx, dz), (dx, top + MARGIN_TOP * u + dz)], 2.5 * u,
                    head_index["GP2M Testina"], "line")])
     head.lock = True
     from . import engine

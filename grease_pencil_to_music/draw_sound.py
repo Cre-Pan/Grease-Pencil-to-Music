@@ -162,6 +162,7 @@ def _play(obj, tip, event):
     if z is None:
         return
     s = obj.gp2m
+    z += board.origin(s)[1]  # object local -> board (the origin is on C4)
     slots = obj.material_slots
     material = (slots[material_index].material
                 if 0 <= material_index < len(slots) else None)

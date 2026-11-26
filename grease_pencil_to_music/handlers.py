@@ -569,6 +569,8 @@ def on_load_post(*_args):
             if item.settings_version < props.SETTINGS_VERSION:
                 props.migrate_layer_settings(item)
         _stack_counts[obj.name] = _stack_count(obj)
+        if obj.gp2m.origin_version < board.ORIGIN_VERSION:
+            board.request_rebuild(obj)  # the origin goes on the dot of C4
         # Sound files live in a temporary folder: recreate them for this session,
         # even when automatic updates are off.
         _mark_full(obj.name)

@@ -38,7 +38,7 @@ def frame_view(context, comp):
     s = comp.gp2m
     _rows, width, top = board.dimensions(s)
     kw = board.key_width(s)
-    center = comp.matrix_world @ Vector(((width - kw) / 2.0, 0.0, top / 2.0))
+    center = board.board_matrix(comp) @ Vector(((width - kw) / 2.0, 0.0, top / 2.0))
     for area in screen.areas:
         if area.type != "VIEW_3D":
             continue
@@ -80,7 +80,7 @@ class GP2M_OT_add_composition(bpy.types.Operator):
                 pass
         scene = context.scene
         bit = self.kind == beat.BEAT
-        name = _next_name("Composizione Bit" if bit else "Composizione Musicale")
+        name = _next_name("Composizione Ritmica" if bit else "Composizione Musicale")
         gp = bpy.data.grease_pencils.new(name)
         obj = bpy.data.objects.new(name, gp)
         collection = getattr(context, "collection", None) or scene.collection
@@ -94,6 +94,9 @@ class GP2M_OT_add_composition(bpy.types.Operator):
         for attr in ("bpm", "length", "low_note", "octaves", "row_height", "seconds_width",
                      "scale", "time_grid", "key_labels", "sample_rate"):
             setattr(s, attr, getattr(p, "new_" + attr))
+        s.origin_version = board.ORIGIN_VERSION  # the origin on the dot of C4
+        if not bit:
+            board._fit_anchor(s)
         if bit:
             s.kind = beat.BEAT
             s.lanes = beat.DEFAULT_LANES

@@ -62,6 +62,12 @@ def _grid(comp):
     return sub("board").grid_object(comp).data
 
 
+def local(obj, x, z):
+    """Board coordinates -> the composition's own (its origin is on the C4 dot)."""
+    ox, oz = sub("board").local_offset(obj.gp2m)
+    return (x + ox, 0.0, z + oz)
+
+
 def add_stroke(obj, layer_index, points, radius=0.02, material_index=0, frame=None):
     """``points``: (x, z) pairs in board coordinates; ``layer_index`` counts the
     user layers only (0 = "Livello 1"); ``frame``: keyframe number (new if missing)."""
@@ -74,8 +80,9 @@ def add_stroke(obj, layer_index, points, radius=0.02, material_index=0, frame=No
     drawing.add_strokes([len(points)])
     stroke = drawing.strokes[len(drawing.strokes) - 1]
     stroke.material_index = material_index
+    ox, oz = sub("board").local_offset(obj.gp2m)  # board -> the object's coordinates
     for point, (x, z) in zip(stroke.points, points):
-        point.position = (x, 0.0, z)
+        point.position = (x + ox, 0.0, z + oz)
         point.radius = radius
         point.opacity = 1.0
     drawing.tag_positions_changed()
@@ -117,14 +124,14 @@ def test_add_composition_has_its_grid_apart(comp):
     names = [layer.name for layer in comp.data.layers]
     assert [l.name for l in board.user_layers(comp.data)] == ["Livello 1", "Livello 2",
                                                               "Livello 3"]
-    # The drawing has only the user layers and the playhead on top.
-    assert names[-1] == board.HEAD_LAYER and names[:-1] == ["Livello 1", "Livello 2",
-                                                           "Livello 3"]
+    # The drawing has only the user layers, the window's catch area and the playhead.
+    assert names[-2:] == [board.CATCH_LAYER, board.HEAD_LAYER]
+    assert names[:-2] == ["Livello 1", "Livello 2", "Livello 3"]
     assert comp.data.layer_groups.get(board.BOARD_GROUP) is None
     assert all(board.is_board_layer(layer) and layer.lock for layer in grid.data.layers)
     assert comp.data.layers.active.name == "Livello 1"
     board_materials = [m.name for m in comp.data.materials if board.is_board_material(m)]
-    assert board_materials == ["GP2M Testina"]
+    assert board_materials == ["GP2M Testina", "GP2M Presa"]
     instruments = [slot.material.gp2m_instrument for slot in comp.material_slots
                    if not board.is_board_material(slot.material)]
     assert len(instruments) == 25 and {"PLUCK", "KICK", "SNARE", "HIHAT"} <= set(instruments)
@@ -1200,12 +1207,12 @@ def test_gesture_mode_reads_drawing_time(comp):
     settings = props.find_layer_settings(comp.data, "Livello 1")
     settings.mode = "GESTURE"
     result = engine.regenerate(comp)  # no drawing time: read like "Quantizzata"
-    assert [(n.start, round(n.end, 2)) for n in result.notes] == [(1.0, 1.25)]
+    assert [(round(n.start, 4), round(n.end, 2)) for n in result.notes] == [(1.0, 1.25)]
     attr = drawing.attributes.new("delta_time", "FLOAT", "POINT")
     attr.data.foreach_set("value", np.linspace(0.0, 1.5, 50, dtype=np.float32))
     drawing.tag_positions_changed()
     result = engine.regenerate(comp)  # drawn in 1.5 s: the note lasts 1.5 s
-    assert [(n.start, round(n.end, 2)) for n in result.notes] == [(1.0, 2.5)]
+    assert [(round(n.start, 4), round(n.end, 2)) for n in result.notes] == [(1.0, 2.5)]
 
 
 def test_midi_keyboard_plays_and_records(comp):
@@ -1444,7 +1451,7 @@ def test_sound_while_drawing_follows_the_stroke_being_drawn(comp, monkeypatch):
     for i, midi in enumerate((64, 65, 67), start=2):
         drawing.resize_strokes([i], indices=[index])
         stroke = drawing.strokes[index]
-        stroke.points[i - 1].position = (0.5 + 0.1 * i, 0.0, row_z(comp, midi))
+        stroke.points[i - 1].position = local(comp, 0.5 + 0.1 * i, row_z(comp, midi))
         stroke.points[i - 1].radius = 0.02
         assert draw_sound.step(comp, scene, 0.01 * (i + 1)) == "move"
     instrument = keyboard.instrument_of(comp)[0]
@@ -1458,7 +1465,7 @@ def test_sound_while_drawing_follows_the_stroke_being_drawn(comp, monkeypatch):
     assert draw_sound.step(comp, scene, 6.0) == "start"
     index = len(drawing.strokes) - 1
     drawing.resize_strokes([2], indices=[index])
-    drawing.strokes[index].points[1].position = (2.2, 0.0, row_z(comp, 62))
+    drawing.strokes[index].points[1].position = local(comp, 2.2, row_z(comp, 62))
     assert draw_sound.step(comp, scene, 6.01) == "move"
     assert played == [(instrument, 60)]
     assert draw_sound._Live.handle.pitch == pytest.approx(2 ** (2 / 12))
@@ -1528,9 +1535,11 @@ def test_web_project_opens_as_composition(addon, tmp_path):
         assert len(drawing.strokes) == 3
         first = drawing.strokes[0]
         # Beat 0..2 at 120 BPM = 0..1 s; pitch 72.5 = the middle of the C5 row.
-        xs = [p.position.x for p in first.points]
-        assert xs[0] == pytest.approx(0.0) and xs[-1] == pytest.approx(1.0 * s.seconds_width)
-        assert first.points[0].position.z == pytest.approx(row_z(comp, 72))
+        ox, oz = board.origin(s)  # the composition's coordinates -> the board's
+        xs = [p.position.x + ox for p in first.points]
+        assert xs[0] == pytest.approx(0.0, abs=1e-5)
+        assert xs[-1] == pytest.approx(1.0 * s.seconds_width)
+        assert first.points[0].position.z + oz == pytest.approx(row_z(comp, 72))
         assert first.points[0].radius == pytest.approx(0.3 * s.row_height)
         assert drawing.attributes["delta_time"].data[20].value == pytest.approx(1.2)
         mats = gp.materials
@@ -1848,7 +1857,8 @@ def test_grid_inside_the_composition_moves_out(comp):
     assert board.has_board(comp)
     assert gp.layer_groups.get(board.LEGACY_BOARD_GROUP) is None
     assert gp.layer_groups.get(board.BOARD_GROUP) is None
-    assert [m.name for m in gp.materials if board.is_board_material(m)] == ["GP2M Testina"]
+    assert [m.name for m in gp.materials if board.is_board_material(m)] == ["GP2M Testina",
+                                                                            "GP2M Presa"]
     stroke = board.user_layers(gp)[0].frames[0].drawing.strokes[0]
     assert gp.materials[stroke.material_index].name == instrument  # same instrument
     assert board.board_materials_ok(comp)
@@ -3389,7 +3399,7 @@ def _lane_z(obj, lane, where=0.5):
 def test_bit_composition_has_eight_lanes_of_percussion(bit):
     beat, board = sub("beat"), sub("board")
     s = bit.gp2m
-    assert bit.name.startswith("Composizione Bit")
+    assert bit.name.startswith("Composizione Ritmica")
     assert s.kind == "BEAT" and s.lanes == 8 and len(s.lane_drums) == 8
     drums = beat.lane_drums(s)
     assert drums[0] == "KICK" and len(set(drums)) == 8
@@ -3450,3 +3460,87 @@ def test_bit_lanes_grow_and_shrink_without_moving_the_drawing(bit):
     assert beat.lane_drums(s) == drums  # hidden lanes come back with their drum
     assert board.key_steps(s, "TOP", 20) == beat.MAX_LANES - s.lanes
     assert board.shift_octaves(bit, "TOP", 1) == 1 and s.lanes == 9  # the + button
+
+
+# --- Origin on the C4 dot, tabs behind the window --------------------------------------
+
+def test_origin_is_on_the_c4_dot_and_keys_below_do_not_move_anything(comp):
+    from mathutils import Vector
+    board, engine = sub("board"), sub("engine")
+    s = comp.gp2m
+    assert s.origin_version == board.ORIGIN_VERSION
+    u = board.unit(s)
+    kx0 = board.keyboard_box(s)[0]
+    dot = [(z0 + z1) / 2.0 for z0, z1, midi in board.white_keys(s) if midi == 60][0]
+    assert board.origin(s) == pytest.approx((kx0 + board.DOT_X * u, dot))
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 64))
+    stroke = board.user_layers(comp.data)[0].frames[0].drawing.strokes[0]
+    before_world = comp.matrix_world.copy()
+    before = [tuple(p.position) for p in stroke.points]
+    assert board.shift_keys(comp, "BOTTOM", 5) == 5  # the board grows downwards only
+    assert comp.matrix_world == before_world
+    assert [tuple(p.position) for p in stroke.points] == before
+    assert [n.pitch for n in engine.regenerate(comp).notes] == [64]
+    # The octave of C4 cannot be hidden, from below or from above.
+    assert board.shift_keys(comp, "BOTTOM", -100) == -(60 - 43)
+    assert s.low_note == 60
+    assert board.shift_keys(comp, "TOP", -100) <= 0 and s.low_note + board.span(s) >= 72
+    s.low_note = 72  # the slider too: back to C4
+    assert s.low_note == 60
+    ox, oz = board.origin(s)
+    assert (board.board_matrix(comp) @ Vector((ox, 0.0, oz))
+            - comp.matrix_world.translation).length < 1e-5
+
+
+def test_reading_follows_the_composition_wherever_it_is(comp):
+    engine = sub("engine")
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 67))
+    notes = [(round(n.start, 3), n.pitch) for n in engine.regenerate(comp).notes]
+    comp.location = (12.0, -3.0, 40.0)
+    comp.rotation_euler = (0.4, 0.3, 1.2)
+    bpy.context.view_layer.update()
+    assert [(round(n.start, 3), n.pitch) for n in engine.regenerate(comp).notes] == notes
+
+
+def test_old_composition_takes_the_new_origin_without_moving(comp):
+    board, engine = sub("board"), sub("engine")
+    s = comp.gp2m
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 62))
+    notes = [n.pitch for n in engine.regenerate(comp).notes]
+    # As a file of 0.0.33: origin on the board's corner.
+    ox, oz = board.origin(s)
+    board._move_drawing(comp, ox, oz)
+    s.origin_version = 0
+    bpy.context.view_layer.update()
+    point = board.user_layers(comp.data)[0].frames[0].drawing.strokes[0].points[0]
+    world = comp.matrix_world @ point.position
+    assert [n.pitch for n in engine.regenerate(comp).notes] == notes
+    board.rebuild(comp)
+    bpy.context.view_layer.update()
+    assert s.origin_version == board.ORIGIN_VERSION
+    assert (comp.matrix_world @ point.position - world).length < 1e-3
+    assert [n.pitch for n in engine.regenerate(comp).notes] == notes
+
+
+def test_tabs_are_drawn_behind_the_window_and_the_board_lets_clicks_through(comp):
+    board = sub("board")
+    grid = board.grid_object(comp)
+    assert grid.hide_select  # a click picks the composition (its catch area)
+    names = [layer.name for layer in grid.data.layers]
+    assert names.index("GP2M Linguette") < names.index("GP2M Sfondo")  # under the window
+    tabs = grid.data.layers["GP2M Linguette"].frames[0].drawing
+    assert len(tabs.strokes) == 4 + 3 * 8  # 3 grips with 8 dots, the name's tab
+    catch = comp.data.layers[board.CATCH_LAYER].frames[0].drawing
+    assert len(catch.strokes) == 1
+
+
+def test_percussion_preview_repeats_the_hit(addon):
+    keyboard, synth = sub("keyboard"), sub("synth")
+    assert keyboard.preview_hits(0.3) == (3, 0.3) and keyboard.preview_hits(1.2)[0] == 2
+    assert keyboard.preview_hits(6.0)[0] == 1
+    buffer, seconds = keyboard.hits_buffer("KICK")
+    count, every = keyboard.preview_hits(synth.get_instrument("KICK").length)
+    assert count == 3 and seconds == pytest.approx(len(buffer) / 44100)
+    step = int(every * 44100)
+    for i in range(count):  # a hit at the start of every step
+        assert np.abs(buffer[i * step:i * step + 2000]).max() > 0.1
