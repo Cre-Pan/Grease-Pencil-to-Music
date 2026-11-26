@@ -55,15 +55,67 @@ def _arrangement_changed(self, context):
         engine.arrange_safe(scene)
 
 
-def _own_clip_changed(self, _context):
-    """A group of layers gets (or leaves) a clip of its own: the Sequencer is laid out
-    again, the sound does not change."""
+def _clip_scene(settings):
+    """``(composition, scene)`` of a composition's settings (scene None without one)."""
     from . import engine
-    for obj in bpy.data.objects:
-        if obj.type == "GREASEPENCIL" and obj.data == self.id_data and obj.gp2m.is_composition:
-            scene = engine.scene_of(obj)
-            if scene is not None:
-                engine.arrange_safe(scene)
+    obj = settings.id_data
+    if not isinstance(obj, bpy.types.Object):
+        return obj, None
+    return obj, engine.scene_of(obj)
+
+
+def _get_frame_in(self):
+    """First frame of the composition's clip in the Video Sequencer (its In)."""
+    from . import engine
+    obj, scene = _clip_scene(self)
+    if scene is None:
+        return 1
+    st = engine.state(obj)
+    offset = st.get("offset_frames")
+    if offset is None:
+        offset = engine.delay_frames(obj, scene)
+    return int(scene.frame_start + offset)
+
+
+def _set_frame_in(self, value):
+    """Moving the In moves the whole clip (as dragging it in the Sequencer): only
+    'Parte dopo' changes, the sound is not made again."""
+    from . import engine
+    obj, scene = _clip_scene(self)
+    if scene is None:
+        return
+    st = engine.state(obj)
+    base = st.get("offset_frames", 0) - st.get("delay_frames", 0)  # 'Una dopo l'altra'
+    fps = scene.render.fps / scene.render.fps_base
+    self.start_delay = round(max(0.0, (int(value) - scene.frame_start - base) / fps), 4)
+
+
+def _get_frame_out(self):
+    """Last frame of the composition's clip (its Out)."""
+    from . import engine
+    obj, scene = _clip_scene(self)
+    if scene is None:
+        return 1
+    fps = scene.render.fps / scene.render.fps_base
+    seconds = engine.duration(obj) if self.use_sections else self.length  # sound may lag
+    return _get_frame_in(self) + max(1, int(round(seconds * fps))) - 1
+
+
+def _set_frame_out(self, value):
+    """Moving the Out makes the composition longer or shorter (as dragging the end of
+    its clip); following the scene it moves the scene End, with sections it stays."""
+    from . import engine
+    obj, scene = _clip_scene(self)
+    if scene is None or self.use_sections:
+        return
+    if engine.follows_scene(obj, scene):
+        scene.frame_end = max(scene.frame_start + 1, int(value))
+        return
+    fps = scene.render.fps / scene.render.fps_base
+    frames = max(1, int(value) - _get_frame_in(self) + 1)
+    length = round(min(max(frames / fps, 1.0), 300.0), 4)
+    if abs(length - self.length) > 1e-6:
+        self.length = length
 
 
 def _follow_changed(self, _context):
@@ -102,10 +154,41 @@ LAYER_COLOR_ITEMS = (
 )
 AUTO_COLORS = ("COLOR_05", "COLOR_01", "COLOR_04", "COLOR_03", "COLOR_06", "COLOR_02",
                "COLOR_07", "COLOR_08")  # gray only by hand
+# Colors a Grease Pencil group has (its icon in the lists): the first eight of the
+# Sequencer, in the same order; gray has none.
+GROUP_ICON_COLORS = ("COLOR_01", "COLOR_02", "COLOR_03", "COLOR_04", "COLOR_05",
+                     "COLOR_06", "COLOR_07", "COLOR_08")
+
+
+def group_color_tag(color):
+    """Sequencer color -> color tag of a Grease Pencil group (COLOR_05 -> COLOR5)."""
+    return "COLOR" + color[-1] if color in GROUP_ICON_COLORS else "NONE"
+
+
+def apply_group_color(gp_data, item):
+    """A group of layers: its Grease Pencil group and its clip in the Sequencer take
+    its color."""
+    from . import engine
+    group = gp_data.layer_groups.get(item.name)
+    if group is not None:
+        tag = group_color_tag(item.color)
+        if group.color_tag != tag:
+            group.color_tag = tag
+    for obj in bpy.data.objects:
+        if obj.type != "GREASEPENCIL" or obj.data != gp_data or not obj.gp2m.is_composition:
+            continue
+        for scene in obj.users_scene:
+            meta = engine.meta_strip(scene, obj) if scene.sequence_editor else None
+            clip = engine.layer_group_metas(meta).get(item.name) if meta is not None else None
+            if clip is not None and clip.color_tag != item.color:
+                clip.color_tag = item.color
+
+
 def apply_layer_color(gp_data, item):
     """The Sequencer strips of the layer take its color (Grease Pencil layers have no
     writable channel color in Blender 5: the color is shown in the layer list)."""
     if item.is_group:
+        apply_group_color(gp_data, item)
         return
     from . import engine
     for obj in bpy.data.objects:
@@ -138,16 +221,21 @@ def _color_changed(self, _context):
 def assign_layer_colors(gp_data):
     """Layers without a color yet (new, or from files before 0.0.20) get the least
     used one, so that every layer has its own color."""
-    pending = [item for item in gp_data.gp2m_layers
-               if not item.is_group and not item.color_assigned]
+    pending = [item for item in gp_data.gp2m_layers if not item.color_assigned]
     if not pending:
         return
     order = {layer.name: index for index, layer in enumerate(gp_data.layers)}
+    order.update({group.name: len(order) + index
+                  for index, group in enumerate(gp_data.layer_groups)})
     pending.sort(key=lambda item: order.get(item.name, len(order)))
-    used = [item.color for item in gp_data.gp2m_layers
-            if not item.is_group and item.color_assigned]
+    used = [item.color for item in gp_data.gp2m_layers if item.color_assigned]
     for item in pending:
-        color = min(AUTO_COLORS, key=lambda tag: (used.count(tag), AUTO_COLORS.index(tag)))
+        group = gp_data.layer_groups.get(item.name) if item.is_group else None
+        if group is not None and group.color_tag != "NONE":  # colored in Blender's list
+            color = "COLOR_0" + group.color_tag[-1]
+        else:
+            color = min(AUTO_COLORS, key=lambda tag: (used.count(tag),
+                                                      AUTO_COLORS.index(tag)))
         item["color"] = int(color[-2:])
         item.color_assigned = True
         used.append(color)
@@ -439,11 +527,6 @@ class GP2M_LayerSettings(bpy.types.PropertyGroup):
     hidden: BoolProperty(name="Nascosto", get=_get_hidden, set=_set_hidden,
                          description="Mostra o nascondi il livello; l'occhio di un gruppo "
                          "e quelli dei suoi livelli vanno insieme, come il Solo")
-    own_clip: BoolProperty(
-        name="Clip propria", default=False, update=_own_clip_changed,
-        description="Il gruppo esce dalla meta-clip della composizione e ha una clip tutta "
-        "sua nel Video Sequencer, sul canale sopra (con 'Un canale per livello'). Si muove "
-        "nel tempo con la composizione e tace con lei")
     solo_saved_opacity: FloatProperty(default=-1.0, options={"HIDDEN"},
                                       description="Opacità del livello prima del Solo "
                                       "(-1 = non attenuato)")
@@ -694,6 +777,15 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
         unit="TIME_ABSOLUTE", update=_arrangement_changed,
         description="La composizione parte dopo questi secondi (anche spostando la sua "
         "clip nel Video Sequencer): testina e suono la seguono")
+    frame_in: IntProperty(
+        name="In", get=_get_frame_in, set=_set_frame_in, options={"SKIP_SAVE"},
+        description="Primo fotogramma della composizione nel Video Sequencer: cambiandolo "
+        "(o trascinando la sua clip) la composizione si sposta nel tempo, libera come una "
+        "clip, senza rifare il suono. Non va prima dell'inizio della scena")
+    frame_out: IntProperty(
+        name="Out", get=_get_frame_out, set=_set_frame_out, options={"SKIP_SAVE"},
+        description="Ultimo fotogramma della composizione: cambiandolo (o trascinando la "
+        "fine della clip) la composizione si allunga o si accorcia")
     order: IntProperty(name="Ordine", default=0, min=0, max=999,
                        description="Posizione nella riproduzione 'Una dopo l'altra'",
                        update=_arrangement_changed)
@@ -1056,7 +1148,7 @@ _COPY_SKIP = {"rna_type", "name", "is_group", "solo", "hidden", "color", "color_
 
 # What "Copia impostazioni" carries from a layer to another: reading, modifiers,
 # effects... but not its name, its audio switches or what the interface shows.
-_PASTE_SKIP = _COPY_SKIP | {"mute", "own_clip", "solo_saved_opacity", "expanded", "show_fx",
+_PASTE_SKIP = _COPY_SKIP | {"mute", "solo_saved_opacity", "expanded", "show_fx",
                             "settings_version"}
 
 
