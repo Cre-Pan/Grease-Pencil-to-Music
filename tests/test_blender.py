@@ -451,7 +451,7 @@ def test_panels_menus_and_preferences_draw(comp):
     ui.GP2M_MT_add_instrument.draw(menu, bpy.context)
     ui.GP2M_MT_change_instrument.draw(_Drawer(log), bpy.context)
     ui.GP2M_MT_instrument_category.draw(_Drawer(log), bpy.context)
-    for family in ui.ADD_FAMILY_MENUS + ui.CHANGE_FAMILY_MENUS:  # one submenu per family
+    for family in ui.CHANGE_FAMILY_MENUS:  # one submenu per family
         family.draw(_Drawer(log), bpy.context)
     ui.VIEW3D_MT_gp2m_add.draw(_Drawer(log), bpy.context)
     ui.draw_export_menu(_Drawer(log), bpy.context)

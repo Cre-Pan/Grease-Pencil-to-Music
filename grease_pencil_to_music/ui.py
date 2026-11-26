@@ -76,32 +76,36 @@ def _family_menu(family, change):
                                              "draw": draw})
 
 
-ADD_FAMILY_MENUS = tuple(_family_menu(f, False) for f in families.ALL if f not in families.OWN)
 CHANGE_FAMILY_MENUS = tuple(_family_menu(f, True) for f in families.ALL)
 
 
 def _draw_sections(layout, context, change):
-    """One column per section (melodic, percussion, own sounds): a submenu per family,
-    the own sounds as buttons."""
+    """One column per section (melodic, percussion, own sounds), one button per category:
+    a category gives its first instrument (or keeps the one in use); the instrument itself
+    is chosen in the second dropdown, beside the category."""
+    target = None
     current = None
     if change:
-        _comp, _index, material, _layer = _change_target(context)
-        if _comp is None:
+        target = _change_target(context)
+        if target[0] is None:
             return
+        material = target[2]
         current = material.gp2m_instrument if material is not None else None
+    mine = families.family_of(current) if current else None
     row = layout.row()
     for title, section in families.SECTIONS:
         col = row.column()
         col.label(text=title)
         for family in section:
-            if family in families.OWN:
-                _family_buttons(col, context, family, change)
+            idents = families.idents(family)
+            if not idents:
                 continue
-            if current is not None and current in families.idents(family):
-                kwargs = {"icon": "CHECKMARK"}
+            if family is mine:
+                _instrument_button(col, context, current, target, text=family.title,
+                                   kwargs={"icon": "CHECKMARK"})
             else:
-                kwargs = icon_kwargs(*family_icon(family))
-            col.menu(_family_menu_id(family, change), text=family.title, **kwargs)
+                _instrument_button(col, context, idents[0], target, text=family.title,
+                                   kwargs=icon_kwargs(*family_icon(family)))
 
 
 class GP2M_MT_add_instrument(bpy.types.Menu):
@@ -132,26 +136,7 @@ class GP2M_MT_instrument_category(bpy.types.Menu):
     bl_label = "Categoria"
 
     def draw(self, context):
-        target = _change_target(context)
-        if target[0] is None:
-            return
-        material = target[2]
-        current = material.gp2m_instrument if material is not None else None
-        mine = families.family_of(current) if current else None
-        row = self.layout.row()
-        for title, section in families.SECTIONS:
-            col = row.column()
-            col.label(text=title)
-            for family in section:
-                idents = families.idents(family)
-                if not idents:
-                    continue
-                if family is mine:
-                    _instrument_button(col, context, current, target, text=family.title,
-                                       kwargs={"icon": "CHECKMARK"})
-                else:
-                    _instrument_button(col, context, idents[0], target, text=family.title,
-                                       kwargs=icon_kwargs(*family_icon(family)))
+        _draw_sections(self.layout, context, change=True)
 
 
 def draw_instrument_pickers(layout, material, label=True, icon_only=False):
@@ -1182,7 +1167,7 @@ class GP2M_PT_sequencer_group(bpy.types.Panel):
             col.prop(settings, "mute", text="Muto")
 
 
-classes = ADD_FAMILY_MENUS + CHANGE_FAMILY_MENUS + (
+classes = CHANGE_FAMILY_MENUS + (
     GP2M_MT_add_instrument,
     GP2M_MT_change_instrument,
     GP2M_MT_instrument_category,
