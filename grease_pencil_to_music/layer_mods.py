@@ -118,15 +118,20 @@ def _arc(stroke, board):
 
 
 def _shift_z(z, steps, unit, board):
-    """Z moved by ``steps`` scale degrees or semitones."""
-    if not steps:
+    """Z of a stroke moved by ``steps`` scale degrees or semitones.
+
+    The whole stroke moves by the same amount, so it keeps its shape: in the scale
+    its first point goes up (or down) by ``steps`` degrees and every other point
+    follows by as many semitones. Moving each point to its own degree turned glides
+    into zigzags (two points a few cents apart could land a whole tone apart)."""
+    if not steps or not len(z):
         return z
     rh = max(board.row_height, 1e-9)
     if unit == "SEMITONES" or board.scale == "CHROMATIC":
         return z + steps * rh
-    pitch = board.low_note + z / rh - 0.5  # the middle of a row is a whole note
-    moved = music.diatonic_shift(pitch, steps, board.scale, board.root)
-    return (moved + 0.5 - board.low_note) * rh
+    first = board.low_note + float(z[0]) / rh - 0.5  # the middle of a row is a whole note
+    moved = float(music.diatonic_shift([first], steps, board.scale, board.root)[0])
+    return z + (moved - first) * rh
 
 
 def _copy(stroke, **changes):
