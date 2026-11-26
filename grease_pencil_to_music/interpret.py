@@ -607,19 +607,37 @@ def _interpret_run(stroke, x, arrays, spec, mapping, mode, radius_ref, glide=0.1
 _CURVES = ("pitch", "amp", "vibrato", "brightness", "pan")
 
 
+LEGATO_OVERLAP = 0.05  # seconds: a stroke that overlaps the previous one less still joins it
+
+
 def legato_groups(voices, gap):
     """Indices of ``voices`` (one instrument) grouped for legato: a voice that
     starts less than ``gap`` seconds after the previous ones have ended joins
-    them. Groups are sorted by start."""
+    them. Groups are sorted by start.
+
+    A joined group is one voice, so it plays one pitch at a time: a voice that
+    overlaps the ones of a group (by more than :data:`LEGATO_OVERLAP`) does not
+    join it, it starts or continues another group and sounds together with it
+    (a high and a low stroke drawn over each other are both heard). When it could
+    continue more than one group it takes the one whose last pitch is closest."""
     order = sorted(range(len(voices)), key=lambda i: voices[i].start)
-    groups, end = [], -np.inf
+    groups, ends, lasts = [], [], []
     for i in order:
         voice = voices[i]
-        if not groups or voice.start - end > gap:
+        first = float(voice.pitch[0]) if len(voice.pitch) else 0.0
+        free = [k for k in range(len(groups))
+                if ends[k] - LEGATO_OVERLAP <= voice.start <= ends[k] + gap]
+        if free:
+            k = min(free, key=lambda k: (abs(lasts[k] - first), -ends[k]))
+        else:
+            k = len(groups)
             groups.append([])
-            end = -np.inf
-        groups[-1].append(i)
-        end = max(end, voice.start + voice.duration)
+            ends.append(-np.inf)
+            lasts.append(first)
+        groups[k].append(i)
+        if voice.start + voice.duration >= ends[k]:
+            ends[k] = voice.start + voice.duration
+            lasts[k] = float(voice.pitch[-1]) if len(voice.pitch) else first
     return groups
 
 
