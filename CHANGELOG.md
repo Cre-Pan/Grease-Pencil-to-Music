@@ -2,6 +2,9 @@
 
 ## Web app (iPad)
 
+- Ottica legata e Quantizzata legata: due tratti dello stesso strumento sovrapposti nel tempo
+  (per esempio una nota molto alta sopra una molto bassa) suonano tutti e due. Prima si univano in
+  una sola voce e quello iniziato dopo interrompeva l'altro.
 - Isola delle sezioni più fluida: cambiando sezione, o quando i nomi si chiudono mentre disegni,
   i nomi e la pillola si muovono insieme sulla stessa curva (prima i nomi scattavano e la pillola li
   rincorreva). Le isole in alto hanno tutte la stessa altezza; quelle che arrivano con una sezione
@@ -354,6 +357,59 @@
 - **Lista strumenti per famiglie** richiudibili (con i colori della famiglia in anteprima);
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
+
+## 0.0.41
+
+- **L'occhio segue i gruppi, come le cuffie**: nella lista dei livelli, chiudendo l'occhio di un
+  gruppo si chiudono quelli di tutti i suoi livelli (e sottogruppi), e riaprendolo si riaprono;
+  quando tutti i livelli di un gruppo sono nascosti si chiude anche l'occhio del gruppo, e
+  mostrando di nuovo un livello il gruppo torna visibile.
+- **Clip propria per un gruppo di livelli** (opzione, icona clip sulla riga del gruppo o
+  *Clip propria* nel pannello *Gruppo* del Sequencer): con *Un canale per livello* il gruppo
+  esce dalla meta-clip della composizione e diventa una clip a sé nel Video Sequencer, sul
+  canale sopra, con i suoi livelli dentro. Parte e si sposta con la composizione, tace quando
+  la composizione o il gruppo sono muti; spegnendo l'opzione torna dentro la meta-clip.
+- Questa versione contiene anche la 0.0.38, la 0.0.39 e la 0.0.40 insieme.
+
+## 0.0.40
+
+- **Copia, Incolla e Applica in ogni modificatore** (Array, Simmetria, Trasponi, Fade, Noise),
+  sotto le sue impostazioni. *Copia* prende le impostazioni del modificatore; *Incolla* le mette
+  nello stesso modificatore del livello attivo, anche di un'altra composizione, e lo accende
+  (dal pannello *Ultima operazione* si può incollare in tutti i livelli). *Applica*, come in
+  Blender, rende il modificatore parte dei tratti in tutti i keyframe e lo spegne: le copie di
+  Array diventano tratti veri, Fade e Noise cambiano spessore e punti, il suono resta lo stesso
+  (Noise prende la forma che si vede sul tratto). Va anche da Edit Mode e su un livello bloccato.
+
+## 0.0.39
+
+- Tratti sovrapposti: nelle letture *Quantizzata legata* e *Ottica legata* due tratti dello stesso
+  strumento che si sovrappongono nel tempo (una nota molto alta sopra una molto bassa, o le copie di
+  Array e Simmetria) ora suonano ognuno per conto suo. Prima il legato li univa in una sola voce,
+  che suona una nota alla volta: quello iniziato dopo copriva l'altro, che si interrompeva. I tratti
+  uno dopo l'altro (anche sovrapposti di meno di 50 ms) si uniscono come prima, e dove più linee
+  continuano insieme ogni tratto prosegue quella con l'altezza più vicina. Le altre letture
+  suonavano già i tratti separati. Stessa correzione nella web app.
+
+## 0.0.38
+
+- **Testi "fisici" sulla tavola.** Il nome della composizione (sulla linguetta sotto la
+  tavola), il fotogramma nel riquadro blu della testina e i nomi di tasti e corsie non sono
+  più disegnati sopra il viewport: sono riempimenti Grease Pencil della tavola, col font di
+  Blender (anche i buchi di o, e, 8). Si muovono, ruotano e scalano con la composizione,
+  si vedono anche in Draw Mode e compaiono nei render. Il riquadro della testina è grande
+  quanto la tavola (come le linguette) e si allarga col numero; il numero si aggiorna a ogni
+  fotogramma, anche nel render di un'animazione. Rinominando la composizione, il nome sulla
+  tavola cambia da solo. Le tavole dei file salvati prima si rifanno all'apertura.
+- **Use Preview Range aggiorna subito la tavola**: attivandolo o spegnendolo (o cambiandone
+  inizio e fine) la zona fuori anteprima si scurisce o si schiarisce subito, senza aspettare
+  il prossimo aggiornamento della scena.
+- **Lista dei livelli a scaletta**: i livelli e i gruppi dentro un gruppo sono rientrati di due
+  icone vuote per livello; i gruppi si aprono e chiudono con le frecce ▾ / ▸
+  (`DOWNARROW_HLT` / `RIGHTARROW`).
+- **Grip**: sotto il mouse e mentre li trascini (o selezionati) i pallini si illuminano del
+  giallo-arancio dell'oggetto attivo del tema di Blender, come il bordo del riquadro della
+  testina.
 
 ## 0.0.37
 

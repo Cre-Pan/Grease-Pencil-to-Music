@@ -482,7 +482,8 @@ def test_panels_menus_and_preferences_draw(comp):
             "gp2m.copy_layer_settings", "gp2m.paste_layer_settings",
             "GP2M_PT_help_modifiers", "GP2M_PT_help_table", "GP2M_UL_compositions",
             "gp2m.composition_move", "gp2m.composition_toggle", "gp2m.table_stack",
-            "gp2m.board_octaves"} <= drawn
+            "gp2m.board_octaves", "gp2m.mod_copy", "gp2m.mod_paste",
+            "gp2m.mod_apply"} <= drawn
     assert sum(1 for entry in log if entry[0] == "markdown") == len(sub("help").classes)
 
 
@@ -724,6 +725,107 @@ def test_preview_range_darkens_the_grid_only(comp):
         scene.use_preview_range = False
     assert board.update_preview_shade(comp, scene)
     assert len(_grid(comp).layers.get(board.SHADE_LAYER).frames[0].drawing.strokes) == 0
+
+
+def test_use_preview_button_darkens_the_board_at_once(comp):
+    """Use Preview Range only redraws the Timeline (no depsgraph update): a message bus
+    subscription asks for the shade at once."""
+    board, handlers = sub("board"), sub("handlers")
+    scene = bpy.context.scene
+    fps = scene.render.fps / scene.render.fps_base
+    scene.frame_preview_start = scene.frame_start + int(round(1.0 * fps))
+    scene.frame_preview_end = scene.frame_start + int(round(2.0 * fps)) - 1
+    handlers._on_preview_range()
+    handlers._shade_tick()
+    scene.use_preview_range = True
+    try:
+        handlers._on_preview_range()  # what the message bus calls
+        assert scene.name in handlers._shade_scenes
+        handlers._shade_tick()
+        shade = _grid(comp).layers.get(board.SHADE_LAYER)
+        assert len(shade.frames[0].drawing.strokes) >= 1
+    finally:
+        scene.use_preview_range = False
+    handlers._on_preview_range()
+    handlers._shade_tick()
+    assert len(_grid(comp).layers.get(board.SHADE_LAYER).frames[0].drawing.strokes) == 0
+
+
+def _text_strokes(comp, layer_name, material):
+    gp = _grid(comp)
+    names = [m.name for m in gp.materials]
+    drawing = gp.layers.get(layer_name).frames[0].drawing
+    return [stroke for stroke in drawing.strokes
+            if names[stroke.material_index] == material]
+
+
+def test_board_texts_are_filled_strokes_of_the_grid(comp):
+    """Name, frame number and key names are part of the board (they show in renders):
+    each text is one fill with its holes, in Blender's font."""
+    board, handlers = sub("board"), sub("handlers")
+    scene = bpy.context.scene
+    assert board.has_texts(comp)
+    name = _text_strokes(comp, board.NAME_LAYER, "GP2M Nome composizione")
+    assert len(name) > len(comp.name.replace(" ", ""))  # o, e... have holes
+    assert all(stroke.hide_stroke and stroke.cyclic for stroke in name)
+    assert len({stroke.fill_id for stroke in name}) == 1
+    # The name sits on its tab, under the window.
+    _x0, z0, _x1, _z1 = board.window_box(comp.gp2m)
+    zs = [p.position.z for stroke in name for p in stroke.points]
+    assert max(zs) < z0 and min(zs) > z0 - board.NAME_TAB_OUT * board.unit(comp.gp2m)
+    # Renamed: the board writes the new name.
+    old = len(name)
+    comp.name = "Ninna nanna"
+    assert board.update_name(comp)
+    assert _grid(comp).get(board.NAME_KEY) == "Ninna nanna"
+    assert len(_text_strokes(comp, board.NAME_LAYER, "GP2M Nome composizione")) != old
+    assert not board.update_name(comp)
+    # The frame number follows the frame (also while rendering: frame_change_pre).
+    assert handlers.on_frame_change in bpy.app.handlers.frame_change_pre
+    scene.frame_set(7)
+    assert _grid(comp).get(board.CURSOR_KEY) == "7"
+    one = len(_text_strokes(comp, board.CURSOR_LAYER, "GP2M Numero cursore"))
+    scene.frame_set(1288)
+    assert _grid(comp).get(board.CURSOR_KEY) == "1288"
+    assert len(_text_strokes(comp, board.CURSOR_LAYER, "GP2M Numero cursore")) > one
+    assert board.cursor_half_width("1288") > board.cursor_half_width("7")
+    assert not board.update_cursor(comp, scene)  # nothing changed
+    # The box moves with the playhead (driver on the layer, like the line).
+    data = _grid(comp).animation_data
+    assert data.drivers.find(f'layers["{board.CURSOR_LAYER}"].translation', index=0)
+    scene.frame_set(scene.frame_start)
+    assert board.board_materials_ok(comp)
+    # Key names: one fill per name.
+    comp.gp2m.key_labels = "ALL"
+    board.rebuild(comp, scene)
+    labels = _text_strokes(comp, "GP2M Etichette", "GP2M Etichetta tasti")
+    assert labels and all(stroke.hide_stroke for stroke in labels)
+    assert len({stroke.fill_id for stroke in labels}) == sum(
+        1 for midi in range(comp.gp2m.low_note, comp.gp2m.low_note + board.span(comp.gp2m) + 1)
+        if not sub("music").is_black(midi))
+    comp.gp2m.key_labels = "C"
+    board.rebuild(comp, scene)
+
+
+def test_board_of_0_0_37_gets_its_texts(comp):
+    board = sub("board")
+    gp = _grid(comp)
+    gp.layers.remove(gp.layers.get(board.NAME_LAYER))
+    assert not board.has_texts(comp)
+    board.rebuild(comp)
+    assert board.has_texts(comp)
+
+
+def test_layer_list_indents_with_empty_icons(addon):
+    ui = sub("ui")
+    icons = []
+
+    class Row:
+        def label(self, text="", icon="NONE"):
+            icons.append(icon)
+
+    ui._indent(Row(), 2)
+    assert icons == ["BLANK1"] * (2 * ui.INDENT_ICONS)
 
 
 def _fresh(addon):
@@ -2188,6 +2290,61 @@ def test_layer_modifiers_show_on_the_strokes(comp):
     assert len(_evaluated_strokes(comp, first)) == 1
 
 
+def test_modifier_copy_paste_and_apply(comp):
+    """Copia, Incolla and Applica of one modifier of a layer."""
+    props, engine, stroke_mods = sub("props"), sub("engine"), sub("stroke_mods")
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60), radius=0.03)
+    add_stroke(comp, 1, line(comp, 0.5, 1.5, 64), radius=0.03)
+    first, second = [layer.name for layer in sub("board").user_layers(comp.data)[:2]]
+    a = props.find_layer_settings(comp.data, first)
+    b = props.find_layer_settings(comp.data, second)
+    notes = lambda: engine.render_composition(comp, bpy.context.scene)[0].notes  # noqa: E731
+
+    # Copia on one layer, Incolla on another: the settings, and the modifier is on.
+    a.use_array = True
+    a.array_count = 3
+    a.array_beats = 2.0
+    a.array_unit = "SEMITONES"
+    a.array_pitch = 3
+    comp.data.layers.active = comp.data.layers[first]
+    assert bpy.ops.gp2m.mod_copy(kind="ARRAY") == {"FINISHED"}
+    assert bpy.ops.gp2m.mod_paste(kind="FADE") == {"CANCELLED"}  # no Fade copied
+    comp.data.layers.active = comp.data.layers[second]
+    assert bpy.ops.gp2m.mod_paste(kind="ARRAY") == {"FINISHED"}
+    assert b.use_array and b.array_count == 3 and b.array_beats == pytest.approx(2.0)
+    assert b.array_unit == "SEMITONES" and b.array_pitch == 3
+    assert not b.use_fade
+
+    # Applica: the copies become strokes, the modifier goes off, the sound stays.
+    comp.data.layers.active = comp.data.layers[first]
+    a.use_fade = True
+    a.fade_direction = "OUT"
+    heard = sorted((round(n.start, 3), n.pitch) for n in notes())
+    assert bpy.ops.gp2m.mod_apply(kind="ARRAY") == {"FINISHED"}
+    assert not a.use_array and a.use_fade
+    drawing = comp.data.layers[first].frames[0].drawing
+    assert len(drawing.strokes) == 3
+    assert comp.modifiers.get(stroke_mods.BAKE_NAME) is None
+    assert sorted((round(n.start, 3), n.pitch) for n in notes()) == heard
+    # Fade too: the radius of the points is thin at the end; nothing left on the layer.
+    assert bpy.ops.gp2m.mod_apply(kind="FADE") == {"FINISHED"}
+    assert not a.use_fade
+    assert comp.modifiers.get(stroke_mods.MODIFIER_PREFIX + first) is None
+    for stroke in comp.data.layers[first].frames[0].drawing.strokes:
+        radii = [p.radius for p in stroke.points]
+        assert radii[0] == pytest.approx(0.03, rel=1e-3) and radii[-1] < 0.01
+    assert len(comp.data.layers[second].frames[0].drawing.strokes) == 1  # left alone
+    # A modifier that is off is not applied.
+    assert bpy.ops.gp2m.mod_apply(kind="NOISE") == {"CANCELLED"}
+    # Also from Edit Mode, which stays on.
+    comp.data.layers.active = comp.data.layers[second]
+    bpy.ops.object.mode_set(mode="EDIT")
+    assert bpy.ops.gp2m.mod_apply(kind="ARRAY") == {"FINISHED"}
+    assert comp.mode == "EDIT" and not b.use_array
+    bpy.ops.object.mode_set(mode="OBJECT")
+    assert len(comp.data.layers[second].frames[0].drawing.strokes) == 3
+
+
 def test_layer_modifiers_keep_edit_mode_selection(comp):
     """Box select in Edit Mode finds the strokes with a layer modifier on.
 
@@ -2482,7 +2639,6 @@ def test_rig_handles_are_gizmos_with_the_design_colors(comp):
     assert rig.rig_object(comp) is None  # no object: the handles are gizmos
     assert "bl_rna" in rig.GP2M_GGT_rig.__dict__
     assert "bl_rna" in rig.GP2M_GT_handle.__dict__
-    assert "bl_rna" in rig.GP2M_GT_name.__dict__
     for handle in rig.HANDLE_NAMES:
         body, rim, glyphs = rig.handle_geometry(handle)
         assert len(body) % 3 == 0 and len(rim) % 3 == 0 and len(glyphs) % 3 == 0
@@ -2746,9 +2902,11 @@ def test_grid_opacity_and_layer_pan(comp):
     s = comp.gp2m
     s.grid_opacity = 0.4
     grid = board.grid_object(comp)
-    assert all(abs(layer.opacity - 0.4) < 1e-6 for layer in grid.data.layers)
+    assert all(abs(layer.opacity - (1.0 if layer.name == board.CURSOR_LAYER else 0.4)) < 1e-6
+               for layer in grid.data.layers)
     board.rebuild(comp)
-    assert all(abs(layer.opacity - 0.4) < 1e-6 for layer in board.grid_object(comp).data.layers)
+    assert all(abs(layer.opacity - (1.0 if layer.name == board.CURSOR_LAYER else 0.4)) < 1e-6
+               for layer in board.grid_object(comp).data.layers)
     # The drawing is not touched.
     assert all(layer.opacity == 1.0 for layer in board.user_layers(comp.data))
     item = sub("props").find_layer_settings(comp.data, "Livello 1")
@@ -3191,6 +3349,94 @@ def test_deleting_a_group_clip_mutes_the_group(comp):
     item.mute = False
     engine.regenerate(comp)
     assert name in engine.layer_group_metas(engine.meta_strip(scene, comp))
+
+
+def test_eye_of_a_group_and_of_its_layers_go_together(comp):
+    props, board = sub("props"), sub("board")
+    gp = comp.data
+    gp.layers.active = gp.layers["Livello 2"]
+    assert bpy.ops.gp2m.add_group() == {"FINISHED"}
+    gp.layers.active = gp.layers["Livello 1"]
+    assert bpy.ops.gp2m.move_to_group(group="Gruppo 1") == {"FINISHED"}
+    group = gp.layer_groups["Gruppo 1"]
+    settings = props.find_layer_settings(gp, "Gruppo 1")
+    inner = [props.find_layer_settings(gp, n) for n in ("Livello 1", "Livello 2")]
+    # The group's eye closes the eyes of its layers, and opens them again.
+    settings.hidden = True
+    assert group.hide and all(gp.layers[n].hide for n in ("Livello 1", "Livello 2"))
+    assert all(s.hidden for s in inner) and not gp.layers["Livello 3"].hide
+    settings.hidden = False
+    assert not group.hide and not any(s.hidden for s in inner)
+    # All its layers hidden: the group too; one shown again: the group is shown.
+    inner[0].hidden = True
+    assert not group.hide
+    inner[1].hidden = True
+    assert group.hide and settings.hidden
+    inner[0].hidden = False
+    assert not group.hide and gp.layers["Livello 2"].hide
+    assert not board.is_hidden(gp.layers["Livello 1"])
+    # Copying a layer's settings does not carry its eye.
+    assert "hidden" in props._COPY_SKIP
+
+
+def test_a_group_of_layers_with_a_clip_of_its_own(comp):
+    engine, seqsync, props = sub("engine"), sub("seqsync"), sub("props")
+    scene = bpy.context.scene
+    names, meta, group_meta = _layer_group(comp)
+    engine.arrange(scene)
+    name = group_meta[engine.LAYER_GROUP_KEY]
+    item = props.find_layer_settings(comp.data, name)
+    item.own_clip = True  # out of the composition's meta-clip
+    meta = engine.meta_strip(scene, comp)
+    clips = engine.own_clips(scene, comp)
+    assert list(clips) == [name]
+    clip = clips[name]
+    assert clip.parent_meta() is None and clip.channel == meta.channel + 1
+    assert name not in engine.layer_group_metas(meta)
+    strips = engine.layer_strips(scene, comp)
+    assert sorted(strips) == sorted(names)  # every layer still has its clip
+    assert all(strips[n].parent_meta().name == clip.name for n in names[:2])
+    assert all(strips[n].parent_meta().name == meta.name for n in names[2:])
+    assert engine.meta_strip(scene, comp).name == meta.name  # still one composition
+    assert engine._channel_count(scene, comp) == 2
+    # A new sound keeps it out, starting with the composition.
+    engine.regenerate(comp, force=True)
+    engine.arrange(scene)
+    clip = engine.own_clips(scene, comp)[name]
+    strips = engine.layer_strips(scene, comp)
+    assert all(strips[n].parent_meta().name == clip.name for n in names[:2])
+    start = min(s.content_start for s in engine.meta_sounds(engine.meta_strip(scene, comp)))
+    assert all(strips[n].content_start == start for n in names)
+    # The Sequencer sync does not read it as a copy or a group taken apart.
+    count = len(engine.scene_compositions(scene))
+    assert not seqsync.sync_scene(scene)
+    assert comp.data.layer_groups.get(name) is not None
+    assert len(engine.scene_compositions(scene)) == count
+    # Muted with the composition, and with the group.
+    comp.gp2m.mute = True
+    engine.arrange(scene)
+    assert engine.own_clips(scene, comp)[name].mute
+    comp.gp2m.mute = False
+    engine.arrange(scene)
+    assert not engine.own_clips(scene, comp)[name].mute
+    item.mute = True
+    assert engine.own_clips(scene, comp)[name].mute
+    item.mute = False
+    # Off again: back inside the meta-clip.
+    item.own_clip = False
+    meta = engine.meta_strip(scene, comp)
+    assert not engine.own_clips(scene, comp)
+    assert not engine._own_clips_all(scene.sequence_editor, comp)
+    metas = engine.layer_group_metas(meta)
+    assert name in metas
+    strips = engine.layer_strips(scene, comp)
+    assert all(strips[n].parent_meta().name == metas[name].name for n in names[:2])
+    # With one mix strip the option has no clip.
+    item.own_clip = True
+    assert engine.own_clips(scene, comp)
+    comp.gp2m.layer_channels = False
+    engine.regenerate(comp, force=True)
+    assert not engine._own_clips_all(scene.sequence_editor, comp)
 
 
 def test_reordering_clips_inside_a_group_of_layers(comp):

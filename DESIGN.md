@@ -58,7 +58,7 @@ midi_input.py  tastiera MIDI  →  eventi nota (rtmidi2, letto dal thread princi
 engine.py      render → WAV in cartella temporanea → strip nel VSE; export  [bpy]
 handlers.py    depsgraph / undo / load → rigenerazione con debounce        [bpy]
 board.py       tavola, tastiera, etichette, testina come livelli della composizione  [bpy]
-glyphs.py      font a tratto singolo per le etichette                     [puro]
+fonttext.py    testi della tavola come riempimenti GP col font di Blender  [bpy]
 timeline.py    suono nella Timeline: sorgenti, stili, note, flusso ottico;
                pulsante nell'header del Dope Sheet (draw handler POST_PIXEL)  [bpy]
 draw_sound.py  la punta del tratto suona mentre disegni (timer in Draw Mode)  [bpy]

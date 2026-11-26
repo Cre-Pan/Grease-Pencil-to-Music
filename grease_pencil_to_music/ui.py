@@ -284,16 +284,32 @@ def _audio_prop(layout, gp, item):
              icon=mute_icon(item.mute or silent))
 
 
+def _own_clip_prop(layout, gp, item):
+    """The group's clip of its own in the Sequencer (out of the composition's
+    meta-clip): lit when on, only with 'Un canale per livello'."""
+    sub = layout.row(align=True)
+    comps = [obj for obj in bpy.data.objects
+             if obj.type == "GREASEPENCIL" and obj.data == gp and obj.gp2m.is_composition]
+    sub.enabled = any(obj.gp2m.layer_channels for obj in comps)
+    sub.active = item.own_clip
+    sub.prop(item, "own_clip", text="", emboss=False, icon="SEQ_STRIP_META")
+
+
+INDENT_ICONS = 2  # empty icons per level: the rows inside a group make a staircase
+
+
 def _indent(layout, depth):
-    for _ in range(depth):
-        layout.separator(factor=1.6)
+    for _ in range(depth * INDENT_ICONS):
+        layout.label(text="", icon="BLANK1")
 
 
-def _lock_and_eye(layout, node):
+def _lock_and_eye(layout, node, item):
+    """The eye goes through the settings: a group and its layers hide together."""
     icons = layout.row(align=True)
     icons.emboss = "NONE"
     icons.prop(node, "lock", text="", emboss=False)
-    icons.prop(node, "hide", text="", emboss=False)
+    icons.prop(item, "hidden", text="", emboss=False,
+               icon="HIDE_ON" if node.hide else "HIDE_OFF")
 
 
 class GP2M_UL_layers(bpy.types.UIList):
@@ -315,7 +331,7 @@ class GP2M_UL_layers(bpy.types.UIList):
         row = layout.row(align=True)
         _indent(row, len(board.ancestors(layer)))
         row.label(text="", icon="OUTLINER_DATA_GP_LAYER")
-        _lock_and_eye(row, layer)
+        _lock_and_eye(row, layer, item)
         name = row.row(align=True)
         name.active = not board.is_hidden(layer) and not props.layer_silent(gp, item.name)
         name.prop(layer, "name", text="", emboss=False)
@@ -333,13 +349,14 @@ class GP2M_UL_layers(bpy.types.UIList):
         row = layout.row(align=True)
         _indent(row, len(board.ancestors(group)))
         row.prop(group, "is_expanded", text="", emboss=False,
-                 icon="DISCLOSURE_TRI_DOWN" if group.is_expanded else "DISCLOSURE_TRI_RIGHT")
+                 icon="DOWNARROW_HLT" if group.is_expanded else "RIGHTARROW")
         row.label(text="", icon="FILE_FOLDER")
-        _lock_and_eye(row, group)
+        _lock_and_eye(row, group, item)
         name = row.row(align=True)
         name.active = not group.hide and not props.layer_silent(gp, item.name)
         name.prop(group, "name", text="", emboss=False)
         right = row.row(align=True)
+        _own_clip_prop(right, gp, item)
         _audio_prop(right, gp, item)
         _solo_prop(right, item)
 
@@ -599,6 +616,20 @@ LAYER_PANELS = (
 )
 
 
+# The modifier panels and the kind the Copia / Incolla / Applica buttons act on.
+MOD_KINDS = {"mod_array": "ARRAY", "mod_mirror": "MIRROR", "mod_transpose": "TRANSPOSE",
+             "mod_fade": "FADE", "mod_noise": "NOISE"}
+
+
+def draw_mod_actions(layout, kind):
+    """Copia, Incolla, Applica under the settings of a modifier (as in Blender's menu
+    of a modifier)."""
+    row = layout.row(align=True)
+    row.operator("gp2m.mod_copy", text="Copia", icon="COPYDOWN").kind = kind
+    row.operator("gp2m.mod_paste", text="Incolla", icon="PASTEDOWN").kind = kind
+    row.operator("gp2m.mod_apply", text="Applica", icon="CHECKMARK").kind = kind
+
+
 def _group_summary(layout, settings, keys):
     """The body of "Modificatori" / "Effetti": how many are on, or a hint."""
     on = [label for key, label, _p, _d, toggle, _h in LAYER_PANELS
@@ -633,8 +664,11 @@ def _layer_panel(base, prefix, layer_parent, key, label, parent, draw, toggle, h
             if key == "mods":
                 self.layout.prop(comp.gp2m, "show_layer_mods")
         else:
-            self.layout.active = getattr(settings, toggle) if toggle else True
-            draw(self.layout, settings)
+            body = self.layout.column()
+            body.active = getattr(settings, toggle) if toggle else True
+            draw(body, settings)
+            if key in MOD_KINDS:
+                draw_mod_actions(self.layout, MOD_KINDS[key])
 
     attrs = {"bl_idname": idname, "bl_label": label, "bl_parent_id": parent_id,
              "bl_options": set() if key == "instruments" else {"DEFAULT_CLOSED"},
@@ -1303,6 +1337,7 @@ class GP2M_PT_sequencer_group(bpy.types.Panel):
             col.prop(settings, "clip_volume", text="Volume", slider=True)
             col.prop(settings, "pan_percent", text="Pan", slider=True)
             col.prop(settings, "mute", text="Muto")
+            col.prop(settings, "own_clip")
 
 
 classes = CHANGE_FAMILY_MENUS + (

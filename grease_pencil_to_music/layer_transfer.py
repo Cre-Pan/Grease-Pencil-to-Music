@@ -160,7 +160,7 @@ def _copy_settings(src_gp, src_name, dst_gp, dst_name):
         return
     for prop in source.bl_rna.properties:
         ident = prop.identifier
-        if ident in ("rna_type", "name") or prop.is_readonly:
+        if ident in ("rna_type", "name", "hidden") or prop.is_readonly:
             continue
         try:
             setattr(target, ident, getattr(source, ident))

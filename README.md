@@ -27,7 +27,10 @@ disegna su una tavola, e la tavola suona.
 1. Nel viewport 3D: **Shift+A → Doodle Music → Composizione Musicale**.
    Viene creata *Composizione Musicale 1*, il Grease Pencil su cui disegni (con la testina in
    cima), e sua figlia *Composizione Musicale 1 · Tavola*, un Grease Pencil a parte con
-   tastiera, griglia ed etichette. La tavola è bloccata e cliccandola selezioni la
+   tastiera, griglia ed etichette. Anche i testi (nomi dei tasti e delle corsie, nome della
+   composizione sotto la tavola, fotogramma nel riquadro blu della testina) sono tratti della
+   tavola, col font di Blender: si muovono e ruotano con la composizione e compaiono nei
+   render. La tavola è bloccata e cliccandola selezioni la
    composizione: entrando in **Draw Mode** disegni sempre sulla composizione, mai sulla griglia.
    La composizione parte **vuota**: un livello con un solo strumento (Flauto). La vista
    passa a frontale, *Solid → Texture*; si resta in Object Mode (passa a **Draw Mode** per
@@ -37,8 +40,10 @@ disegna su una tavola, e la tavola suona.
    clic per rinominare). Ogni riga: icona, lucchetto, occhio, nome, **audio** (acceso/spento;
    si spegne e diventa grigio quando un altro livello è in *Solo*) e **cuffie** per il *Solo*
    (gli altri livelli tacciono e scendono al 10% di opacità). Un gruppo si apre e chiude come
-   in Blender e il suo audio, Solo, occhio e lucchetto valgono per tutti i suoi livelli; ↑ / ↓
-   entrano ed escono dai gruppi. Il menu **▾** è come quello di Blender: duplica (con
+   in Blender e il suo audio, Solo, occhio e lucchetto valgono per tutti i suoi livelli (le
+   cuffie e l'occhio del gruppo e dei suoi livelli si accendono e spengono insieme); l'icona
+   **clip** di un gruppo gli dà una *clip propria* nel Sequencer, fuori dalla meta-clip della
+   composizione, sul canale sopra; ↑ / ↓ entrano ed escono dai gruppi. Il menu **▾** è come quello di Blender: duplica (con
    impostazioni e strumenti copiati), mostra tutti / nascondi gli altri, blocca / sblocca
    tutti, unisci sotto / unisci gruppo, nuovo gruppo, sposta nel gruppo, sciogli gruppo; la
    tavola (l'oggetto *· Tavola*) non viene mai toccata. Sotto la lista ci sono lettura, volume e gli strumenti del

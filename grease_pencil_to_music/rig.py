@@ -2,12 +2,13 @@
 """The rig of a composition: handles you drag in Object Mode, in the style of the
 Frame by Plane rigs.
 
-* Four handles, drawn as gizmos at a fixed size on screen (they never get tiny when
-  you zoom out, nor huge when you zoom in): light, with a dark rim; under the mouse
-  and while dragged they take the theme's Active Object color, like a selected object.
+* Four handles. The board draws them (Grease Pencil strokes of the grid: they turn
+  and scale with the composition and show in renders); gizmos as big as the board
+  catch the mouse and light them up in the theme's Active Object color (the
+  yellow-orange of a selected object) under the mouse and while dragged:
   - on the right edge: the length of the timeline (free, Ctrl: whole bars); board,
     sound and the meta-clip in the Sequencer follow while dragging;
-  - on top of the playhead, a box in the theme's playhead color: moves the scene's
+  - on top of the playhead, the blue box with the current frame: moves the scene's
     current frame, like the playhead of the Timeline;
   - above and below the keyboard: show or hide keys on top / at the bottom, one key
     at a time (Ctrl: whole octaves; the drawing never moves, see :func:`board.shift_keys`);
@@ -134,20 +135,25 @@ def triangle(cx, cz, dx, dz, size):
 
 
 TEXT_LIFT = -0.5  # the text a hair in front of the handle (handle units, -y)
-HEAD_BOX_HH = 8.0  # half height of the playhead box (pixels); its centre is this high + 3
 GRIP_HW, GRIP_RADIUS = 46.5, 20.0  # a grip: 93 design px wide, 40 out of the window
 GRIP_DOTS = ((-15.0, 15.0), (-5.0, 15.0), (5.0, 15.0), (15.0, 15.0),
              (-15.0, 25.0), (-5.0, 25.0), (5.0, 25.0), (15.0, 25.0))  # 8 dots, r 2
-NAME_HW = 100.0  # the name tab: 200 x 50 design px
 LABEL_OFFSET = {LENGTH: (board.TAB_OUT + 10.0, 0.0),
                 OCT_TOP: (GRIP_HW + 10.0, board.TAB_OUT / 2.0),
                 OCT_BOTTOM: (GRIP_HW + 10.0, -board.TAB_OUT / 2.0)}  # value while dragging
 MIN_GRIP_PX = 44.0  # a grip is never narrower than this on screen
 
 
-def head_half_width(digits):
-    """The playhead box widens with the frame number, like Blender's."""
-    return max(11.0, 3.6 * digits + 5.0)
+def _ring(outer, inner):
+    """Triangles between two loops with as many points (an outline)."""
+    out = []
+    n = len(outer)
+    for i in range(n):
+        (ax, az), (bx, bz) = outer[i], outer[(i + 1) % n]
+        (cx, cz), (dx, dz) = inner[i], inner[(i + 1) % n]
+        out.extend(((ax, 0.0, az), (bx, 0.0, bz), (dx, 0.0, dz),
+                    (ax, 0.0, az), (dx, 0.0, dz), (cx, 0.0, cz)))
+    return out
 
 
 def _turn(points, handle):
@@ -183,25 +189,17 @@ def grip_geometry(handle):
     return _fan(_turn(body, handle)), _fan(_turn(rim, handle)), dots
 
 
-def name_geometry(hw=NAME_HW):
-    """(body, rim) of the tab with the composition's name, under the window: 200 design
-    px wide, wider for a long name."""
-    rim = board._rounded_rect(-hw, -board.NAME_TAB_OUT, hw, 3.0, 25.0, 6,
-                              corners=(True, True, False, False))
-    body = board._rounded_rect(-hw + 2.0, -board.NAME_TAB_OUT + 2.0, hw - 2.0,
-                               3.0, 23.0, 6, corners=(True, True, False, False))
-    return _fan(body), _fan(rim)
-
-
-def handle_geometry(handle, digits=2):
-    """(body, rim, glyphs) triangles of a handle around its anchor: the playhead box in
-    pixels, the grips in design px."""
-    if handle == HEAD:  # CURSORE BLU: a rounded box over the stem
-        cx, cz, hw, hh = 0.0, HEAD_BOX_HH, head_half_width(digits), HEAD_BOX_HH
-        body = rounded_box(cx, cz, hw, hh, 5.0) + [(-1.5, 0.0, 0.0), (1.5, 0.0, 0.0),
-                                                  (0.0, 0.0, 1.0)]
-        rim = rounded_box(cx, cz, hw + 1.5, hh + 1.5, 6.5)
-        return body, rim, []
+def handle_geometry(handle, digits="1"):
+    """(body, rim, glyphs) triangles of a handle around its anchor, in design px: for
+    the playhead box (``digits``: the frame number) its outline and its area."""
+    if handle == HEAD:  # the playhead box (drawn by the board): its outline and area
+        hw = board.cursor_half_width(digits)
+        hh = board.CURSOR_BOX_H / 2.0
+        r = board.CURSOR_RADIUS
+        steps = 6
+        inner = board._rounded_rect(-hw, 0.0, hw, 2.0 * hh, r, steps)
+        outer = board._rounded_rect(-hw - 3.0, -3.0, hw + 3.0, 2.0 * hh + 3.0, r + 3.0, steps)
+        return _ring(outer, inner), _fan(outer), []
     return grip_geometry(handle)
 
 
@@ -587,13 +585,6 @@ def apply(comp, handle, value):
 
 # --- Gizmos --------------------------------------------------------------------------------
 
-def _gizmo_size(context):
-    try:
-        return max(float(context.preferences.view.gizmo_size), 1.0)
-    except (AttributeError, TypeError):
-        return 75.0
-
-
 class _FlatText:
     """Text drawn flat on the plane of the composition, like the gizmo's shapes."""
 
@@ -630,36 +621,31 @@ class _FlatText:
 
 
 class GP2M_GT_handle(_FlatText, bpy.types.Gizmo):
-    """A rig handle: the playhead box (fixed size on screen) or a grip of the window
-    (GRIP UP / DOWN / RIGHT: a dark tab with eight dots, as big as the board)."""
+    """A rig handle: the playhead box or a grip of the window (GRIP UP / DOWN / RIGHT).
+    Both are drawn by the board (they show in renders): the gizmo catches the mouse and
+    lights them up, as big as the board."""
 
     bl_idname = "GP2M_GT_handle"
     __slots__ = ("gp2m_body", "gp2m_rim", "gp2m_glyphs", "gp2m_handle", "gp2m_comp",
-                 "gp2m_digits", "gp2m_px", "gp2m_stem", "gp2m_stem_size")
+                 "gp2m_digits", "gp2m_px")
 
     def setup(self):
         self.gp2m_body = self.gp2m_rim = self.gp2m_glyphs = None
-        # The playhead's stem from the window's edge up to the box: a unit square
-        # drawn stretched (its size in pixels comes from draw_prepare).
-        self.gp2m_stem = self.new_custom_shape(
-            "TRIS", [(-0.5, 0.0, -1.0), (0.5, 0.0, -1.0), (0.5, 0.0, 0.0),
-                     (-0.5, 0.0, -1.0), (0.5, 0.0, 0.0), (-0.5, 0.0, 0.0)])
-        self.gp2m_stem_size = (0.0, 0.0)
         self.gp2m_handle = ""
         self.gp2m_comp = ""
-        self.gp2m_digits = 0
+        self.gp2m_digits = ""
         self.gp2m_px = 1.0
-        self.use_draw_scale = True
+        self.use_draw_scale = False
         self.use_draw_modal = True  # drawn also during the drag
 
-    def set_handle(self, handle, digits=2):
+    def set_handle(self, handle, digits="1"):
+        # The box changes shape only when its width does (not at every frame).
+        size = round(board.cursor_half_width(digits), 1) if handle == HEAD else ""
         if self.gp2m_handle == handle and self.gp2m_body is not None \
-                and (handle != HEAD or digits == self.gp2m_digits):
+                and size == self.gp2m_digits:
             return
         self.gp2m_handle = handle
-        self.gp2m_digits = digits
-        # The playhead box keeps its size on screen; the grips belong to the window.
-        self.use_draw_scale = handle == HEAD
+        self.gp2m_digits = size
         body, rim, glyphs = handle_geometry(handle, digits)
         self.gp2m_body = self.new_custom_shape("TRIS", body)
         self.gp2m_rim = self.new_custom_shape("TRIS", rim)
@@ -673,26 +659,17 @@ class GP2M_GT_handle(_FlatText, bpy.types.Gizmo):
         dragged = key in _drag
         chosen = dragged or _selected[0] == key
         if self.gp2m_handle == HEAD:
-            # The blue box; hover / selection show on the rim.
+            # The box is the board's: under the mouse and while chosen an outline.
             if chosen or self.is_highlight:
-                rim = colors["active"] if chosen else colors["hover_rim"]
-                self._part(self.gp2m_rim, rim[:3], 1.0 if chosen else 0.9)
-            width, length = self.gp2m_stem_size
-            if length > 0.0:
-                self.color = self.color_highlight = colors["playhead"][:3]
-                self.alpha = self.alpha_highlight = 1.0
-                self.draw_custom_shape(self.gp2m_stem, matrix=self.matrix_world
-                                       @ Matrix.Diagonal((max(width, 1.0), 1.0, length, 1.0)))
-            self._part(self.gp2m_body, colors["playhead"])
-            self._draw_text(context, str(context.scene.frame_current), colors["text"],
-                            (0.0, HEAD_BOX_HH), "CENTER", alpha=0.85)
+                self._part(self.gp2m_body, colors["active"], 1.0 if chosen else 0.85)
             return
         # The tab itself is drawn by the board, behind the window: here only its dots
-        # light up under the mouse (and while it is dragged).
+        # light up under the mouse and while chosen, in the theme's Active Object color
+        # (the yellow-orange of a selected object).
         if chosen:
-            self._part(self.gp2m_glyphs, colors["playhead"])
+            self._part(self.gp2m_glyphs, colors["active"])
         elif self.is_highlight:
-            self._part(self.gp2m_glyphs, colors["grip_dot"], 0.6)
+            self._part(self.gp2m_glyphs, colors["active"], 0.85)
         if dragged and _drag[key][2]:
             self._draw_text(context, _drag[key][2], colors["text"],
                             LABEL_OFFSET[self.gp2m_handle], "LEFT", size=18.0, alpha=0.85)
@@ -700,41 +677,6 @@ class GP2M_GT_handle(_FlatText, bpy.types.Gizmo):
     def draw_select(self, context, select_id):
         if self.gp2m_rim is not None:
             self.draw_custom_shape(self.gp2m_rim, select_id=select_id)
-
-
-class GP2M_GT_name(_FlatText, bpy.types.Gizmo):
-    """The tab under the window with the composition's name (nothing to click)."""
-
-    bl_idname = "GP2M_GT_name"
-    __slots__ = ("gp2m_body", "gp2m_rim", "gp2m_comp", "gp2m_px", "gp2m_hw")
-
-    def setup(self):
-        self.gp2m_hw = 0.0
-        self._shape(NAME_HW)
-        self.gp2m_comp = ""
-        self.gp2m_px = 1.0
-        self.use_draw_scale = False
-        self.use_draw_modal = True
-
-    def _shape(self, hw):
-        if abs(hw - self.gp2m_hw) < 0.5:
-            return
-        self.gp2m_hw = hw
-        body, rim = name_geometry(hw)
-        self.gp2m_body = self.new_custom_shape("TRIS", body)
-        self.gp2m_rim = self.new_custom_shape("TRIS", rim)
-
-    def draw(self, context):
-        # The tab is drawn by the board, behind the window: here only the name, smaller
-        # when it is too long for the 200 px of the tab.
-        colors = theme.handle_colors(context)
-        blf.size(0, 20.0)
-        width = blf.dimensions(0, self.gp2m_comp)[0]
-        room = 2.0 * (NAME_HW - 18.0)
-        size = 20.0 * min(1.0, room / width) if width > 0 else 20.0
-        self._draw_text(context, self.gp2m_comp, colors["text"],
-                        (0.0, -board.NAME_TAB_OUT / 2.0 + 1.5), "CENTER", size=size,
-                        alpha=0.5)
 
 
 def _compositions(context):
@@ -775,18 +717,12 @@ class GP2M_GGT_rig(bpy.types.GizmoGroup):
     def _sync(self, context):
         wanted = {}
         for comp in _compositions(context):
-            for handle in (*HANDLE_NAMES, NAME):
+            for handle in HANDLE_NAMES:
                 wanted[(comp.name, handle)] = comp
         for key in [key for key in self.handles if key not in wanted]:
             self.gizmos.remove(self.handles.pop(key))
         for key in wanted:
             if key in self.handles:
-                continue
-            if key[1] == NAME:
-                gz = self.gizmos.new(GP2M_GT_name.bl_idname)
-                gz.use_tooltip = False
-                gz.gp2m_comp = key[0]
-                self.handles[key] = gz
                 continue
             gz = self.gizmos.new(GP2M_GT_handle.bl_idname)
             gz.use_tooltip = False  # no message over the viewport
@@ -801,10 +737,6 @@ class GP2M_GGT_rig(bpy.types.GizmoGroup):
 
     def draw_prepare(self, context):
         depsgraph = context.evaluated_depsgraph_get()
-        # Blender scales a draw-scaled gizmo by the Gizmo Size preference and the UI
-        # scale: with this, one unit of the playhead box is one pixel.
-        scale = 1.0 / _gizmo_size(context)
-        ui = context.preferences.system.ui_scale
         for (name, handle), gz in self.handles.items():
             comp = bpy.data.objects.get(name)
             if comp is None or not comp.gp2m.is_composition:
@@ -818,21 +750,9 @@ class GP2M_GGT_rig(bpy.types.GizmoGroup):
             location = world @ Vector((x + dx, RIG_DEPTH, z + dz))
             rotation = world.to_quaternion().to_matrix().to_4x4()
             if handle == HEAD:
-                gz.matrix_basis = Matrix.Translation(location) @ rotation
-                gz.scale_basis = scale
-                # The stem between the window's edge and the box, in the box's pixels.
-                u = board.unit(comp.gp2m)
-                axis = world.to_3x3() @ Vector((1.0, 0.0, 0.0))
-                px = _pixels_per_unit(context, location, axis) * u / max(ui, 1e-6)
-                gz.gp2m_stem_size = (5.0 * px, (head_lift(comp.gp2m) / u
-                                                - board.MARGIN_TOP) * px)
-                gz.gp2m_px = ui
-                gz.set_handle(HEAD, len(str(context.scene.frame_current)))
-                continue
-            if handle == NAME and gz.gp2m_comp != name:
-                gz.gp2m_comp = name
-            # Grips and name: design px of the board, as big as the tabs drawn under
-            # the window (they grow and shrink with the board, like the drawing).
+                gz.set_handle(HEAD, str(context.scene.frame_current))
+            # Design px of the board: as big as the box and the tabs the board draws
+            # (they grow and shrink with the board, like the drawing).
             u = board.unit(comp.gp2m)
             axis = world.to_3x3() @ Vector((1.0, 0.0, 0.0))
             px = _pixels_per_unit(context, location, axis) * u  # screen px per design px
@@ -843,4 +763,4 @@ class GP2M_GGT_rig(bpy.types.GizmoGroup):
 
 
 classes = (GP2M_OT_rig_drag, GP2M_OT_rig_grab, GP2M_OT_rig_deselect, GP2M_GT_handle,
-           GP2M_GT_name, GP2M_GGT_rig)
+           GP2M_GGT_rig)

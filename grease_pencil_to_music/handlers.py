@@ -464,7 +464,15 @@ def _new_grids_tick():
     """A composition with no board of its own (the copy just made by Shift+D or
     Alt+D) gets one at once, also while it is still following the mouse: board and
     handles move with it. Only the grid is built here (a new object, the drawing is
-    left alone); the rest (playhead, sound, clips) follows when the move ends."""
+    left alone); the rest (playhead, sound, clips) follows when the move ends.
+    A renamed composition gets its new name on the board."""
+    if not transform_running():
+        for obj in compositions():
+            try:
+                if board.update_name(obj):
+                    board.tag_redraw_views()
+            except Exception as error:
+                print(f"[Doodle Music] name on the board failed: {error!r}")
     if bpy.context.mode != "OBJECT":
         return None  # never under a transform of points or strokes
     for obj in compositions():
@@ -505,6 +513,7 @@ def _shade_tick():
                     board.update_preview_shade(obj, scene)
                 except Exception as error:
                     print(f"[Doodle Music] preview range shading failed: {error!r}")
+    board.tag_redraw_views()
     return None
 
 
@@ -573,8 +582,8 @@ def on_load_post(*_args):
             if item.settings_version < props.SETTINGS_VERSION:
                 props.migrate_layer_settings(item)
         _stack_counts[obj.name] = _stack_count(obj)
-        if obj.gp2m.origin_version < board.ORIGIN_VERSION:
-            board.request_rebuild(obj)  # the origin goes on the dot of C4
+        if obj.gp2m.origin_version < board.ORIGIN_VERSION or not board.has_texts(obj):
+            board.request_rebuild(obj)  # the origin goes on the dot of C4; texts on the board
         # Sound files live in a temporary folder: recreate them for this session,
         # even when automatic updates are off.
         _mark_full(obj.name)
@@ -616,10 +625,33 @@ def _on_active_object():
             engine.arrange_safe(scene)
 
 
+def _on_preview_range():
+    """Use Preview Range (and its start / end) changed: the button only redraws the
+    Timeline, no depsgraph update follows, so the shade would wait for the next one."""
+    for scene in bpy.data.scenes:
+        _check_preview(scene)
+
+
 def subscribe():
     bpy.msgbus.clear_by_owner(_msgbus_owner)
     bpy.msgbus.subscribe_rna(key=(bpy.types.LayerObjects, "active"), owner=_msgbus_owner,
                              args=(), notify=_on_active_object)
+    for prop in ("use_preview_range", "frame_preview_start", "frame_preview_end"):
+        bpy.msgbus.subscribe_rna(key=(bpy.types.Scene, prop), owner=_msgbus_owner,
+                                 args=(), notify=_on_preview_range)
+
+
+@persistent
+def on_frame_change(scene, *_args):
+    """The frame number in the playhead box of every composition of the scene (also
+    while rendering an animation: the number is part of the board)."""
+    for obj in scene.objects:
+        if obj.type != "GREASEPENCIL" or not obj.gp2m.is_composition:
+            continue
+        try:
+            board.update_cursor(obj, scene)
+        except Exception as error:
+            print(f"[Doodle Music] playhead number failed: {error!r}")
 
 
 @persistent
@@ -670,6 +702,11 @@ def on_undo_redo(*_args):
             board.request_rebuild(obj)
     mark_all_dirty()
     for obj in compositions():
+        try:  # the frame is not part of Undo: the box shows the current one again
+            board.update_cursor(obj, engine.scene_of(obj))
+        except Exception as error:
+            print(f"[Doodle Music] playhead number failed: {error!r}")
+    for obj in compositions():
         # With automatic updates off the strips may now point to deleted files.
         if not obj.gp2m.auto_update and not engine.sound_files_ok(obj, engine.scene_of(obj)):
             _mark_full(obj.name)
@@ -681,6 +718,7 @@ def on_undo_redo(*_args):
 
 _HANDLERS = (
     (bpy.app.handlers.depsgraph_update_post, on_depsgraph_update),
+    (bpy.app.handlers.frame_change_pre, on_frame_change),
     (bpy.app.handlers.load_post, on_load_post),
     (bpy.app.handlers.undo_pre, on_undo_pre),
     (bpy.app.handlers.redo_pre, on_undo_pre),
