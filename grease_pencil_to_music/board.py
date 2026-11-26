@@ -922,10 +922,19 @@ def rebuild(comp, scene=None):
     """(Re)create the grid object (board and labels) and the playhead."""
     scene = scene or bpy.context.scene
     _remove_legacy_children(comp)
-    s = comp.gp2m
-    gp = comp.data
-    active_name = gp.layers.active.name if gp.layers.active is not None else None
     _strip_inner_board(comp)
+    build_grid(comp, scene)
+    _build_playhead(comp, scene)
+
+
+def build_grid(comp, scene=None):
+    """(Re)create the grid object (board and labels) of the composition.
+
+    It does not touch the composition's own drawing, so it is also safe while the
+    composition is being moved: the copy made by Shift+D gets its board at once and
+    carries it along while it follows the mouse."""
+    scene = scene or bpy.context.scene
+    s = comp.gp2m
     grid = ensure_grid(comp)
     grid_gp = grid.data
     index = _ensure_materials(grid_gp)
@@ -937,10 +946,7 @@ def rebuild(comp, scene=None):
 
     for layer in [layer for layer in grid_gp.layers if is_board_layer(layer)]:
         grid_gp.layers.remove(layer)
-    for layer in [layer for layer in gp.layers if is_board_layer(layer)]:
-        gp.layers.remove(layer)  # the playhead
     board_group = _ensure_group(grid_gp, BOARD_GROUP, bottom=True)
-    head_group = _ensure_group(gp, HEAD_GROUP, bottom=False)
 
     for name, specs in (
             ("GP2M Sfondo", _background(s, index, rows, width)),
@@ -956,6 +962,17 @@ def rebuild(comp, scene=None):
         layer.lock = True
 
     apply_grid_opacity(comp)
+
+
+def _build_playhead(comp, scene):
+    s = comp.gp2m
+    gp = comp.data
+    active_name = gp.layers.active.name if gp.layers.active is not None else None
+    _rows, _width, top = dimensions(s)
+    frame = _first_frame(scene)
+    for layer in [layer for layer in gp.layers if is_board_layer(layer)]:
+        gp.layers.remove(layer)  # the playhead
+    head_group = _ensure_group(gp, HEAD_GROUP, bottom=False)
     head = gp.layers.new(HEAD_LAYER, set_active=False, layer_group=head_group)
     head.use_lights = False
     head.pass_index = BOARD_PASS

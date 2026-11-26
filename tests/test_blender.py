@@ -10,6 +10,7 @@ export WAV/MP3/MIDI.
 import os
 import pathlib
 import sys
+import types
 import wave
 
 import numpy as np
@@ -1880,6 +1881,57 @@ def test_duplicate_and_delete_take_care_of_the_grid(comp):
     engine.cleanup_orphans()
     assert bpy.data.objects.get(grid_name) is None
     assert board.grid_object(comp) is not None
+
+
+def test_copy_gets_its_grid_at_once_without_touching_the_drawing(comp):
+    """Shift+D: the copy gets its own board right away (it follows the copy while it
+    is still being moved); its drawing is left alone until the move ends."""
+    board, handlers = sub("board"), sub("handlers")
+    copy = comp.copy()
+    copy.data = comp.data.copy()
+    bpy.context.scene.collection.objects.link(copy)
+    try:
+        layers = [layer.name for layer in copy.data.layers]
+        assert board.grid_object(copy) is None
+        assert handlers._new_grids_tick() is None
+        grid = board.grid_object(copy)
+        assert grid is not None and grid != board.grid_object(comp)
+        assert grid.parent == copy and grid.data.users == 1
+        assert board.grid_object(comp).parent == comp
+        assert [layer.name for layer in copy.data.layers] == layers
+        copy.location.x += 3.0
+        bpy.context.view_layer.update()
+        assert abs(grid.matrix_world.translation.x - copy.matrix_world.translation.x) < 1e-5
+    finally:
+        grid = board.grid_object(copy)
+        bpy.data.objects.remove(copy, do_unlink=True)
+        if grid is not None:
+            bpy.data.objects.remove(grid, do_unlink=True)
+
+
+def test_transform_running_sees_the_move_of_shift_d(addon, monkeypatch):
+    handlers = sub("handlers")
+
+    class Step:
+        def __init__(self, name):
+            self.bl_idname = name
+
+    class Macro(Step):
+        macros = (Step("OBJECT_OT_duplicate"), Step("TRANSFORM_OT_translate"))
+
+    class Window:
+        modal_operators = (Macro("OBJECT_OT_duplicate_move"),)
+
+    class Manager:
+        windows = (Window(),)
+
+    class Context:
+        window_manager = Manager()
+
+    monkeypatch.setattr(handlers, "bpy", types.SimpleNamespace(context=Context()))
+    assert handlers.transform_running()
+    Window.modal_operators = (Step("OBJECT_OT_select_box"),)
+    assert not handlers.transform_running()
 
 
 # --- One channel per layer, absolute volumes, Auto on the active layer only -----------

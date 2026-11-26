@@ -121,12 +121,20 @@ def _modal_running(test):
         for operator in getattr(window, "modal_operators", ()):
             if test(operator.bl_idname):
                 return True
+            # A macro (Shift+D is "Duplicate" + "Move", Alt+D the same) runs as one
+            # modal operator: its steps tell what is going on.
+            for step in getattr(operator, "macros", ()):
+                if test(step.bl_idname):
+                    return True
     return False
 
 
 def transform_running():
-    """True while an interactive transform (G, R, S) is in progress."""
-    return _modal_running(lambda name: name.startswith("TRANSFORM_OT"))
+    """True while an interactive transform (G, R, S, also the move after Shift+D)
+    is in progress."""
+    return _modal_running(lambda name: name.startswith("TRANSFORM_OT")
+                          or name.endswith(("_OT_duplicate_move",
+                                            "_OT_duplicate_move_linked")))
 
 
 BRUSH_OPERATORS = frozenset((
@@ -427,6 +435,26 @@ def on_depsgraph_update(_scene, depsgraph):
                 _tick_names[0] = 0.0  # list the compositions again
                 _cleanup_needed[0] = True
                 _ensure_timer()
+                if not bpy.app.timers.is_registered(_new_grids_tick):
+                    bpy.app.timers.register(_new_grids_tick, first_interval=0.0)
+
+
+def _new_grids_tick():
+    """A composition with no board of its own (the copy just made by Shift+D or
+    Alt+D) gets one at once, also while it is still following the mouse: board and
+    handles move with it. Only the grid is built here (a new object, the drawing is
+    left alone); the rest (playhead, sound, clips) follows when the move ends."""
+    if bpy.context.mode != "OBJECT":
+        return None  # never under a transform of points or strokes
+    for obj in compositions():
+        if board.grid_object(obj) is not None or obj.data is None:
+            continue
+        try:
+            board.build_grid(obj, engine.scene_of(obj))
+            board.tag_redraw_views()
+        except Exception as error:
+            print(f"[Doodle Music] grid of a new copy failed: {error!r}")
+    return None
 
 
 def _timing(scene):
@@ -655,7 +683,7 @@ def unregister():
             handler_list.remove(func)
     bpy.msgbus.clear_by_owner(_msgbus_owner)
     for timer in (_tick, _resume_playback, _shade_tick, _layer_sync_tick,
-                  board._rebuild_pending, _undo_tick_timer):
+                  board._rebuild_pending, _undo_tick_timer, _new_grids_tick):
         if bpy.app.timers.is_registered(timer):
             bpy.app.timers.unregister(timer)
     engine.stop_background()

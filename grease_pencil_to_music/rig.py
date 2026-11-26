@@ -128,6 +128,7 @@ def triangle(cx, cz, dx, dz, size):
 
 LABEL_OFFSET = {LENGTH: (PAD + 20.0, 0.0), OCT_TOP: (PAD + 22.0, PAD + 7.0),
                 OCT_BOTTOM: (PAD + 22.0, -(PAD + 7.0))}  # value shown while dragging
+TEXT_LIFT = -0.5  # the text a hair in front of the handle (handle units, -y)
 HEAD_BOX_HH = 8.0  # half height of the playhead box (pixels); its centre is this high + 3
 
 
@@ -594,27 +595,27 @@ class GP2M_GT_handle(bpy.types.Gizmo):
 
     def _draw_text(self, context, text, color, offset, align):
         """Text beside the handle (pixels from its anchor): the frame in the playhead
-        box, like in the Timeline, or the value while dragging."""
-        region, rv3d = context.region, context.region_data
-        if region is None or rv3d is None:
-            return
-        anchor = view3d_utils.location_3d_to_region_2d(region, rv3d,
-                                                       self.matrix_basis.translation)
-        if anchor is None:
-            return
+        box, like in the Timeline, or the value while dragging. It lies flat on the
+        plane of the composition, like the handle: seen from the side it is
+        foreshortened with the box, it never turns to face the view."""
         ui = context.preferences.system.ui_scale
         font = 0
-        blf.size(font, 10.0 * ui)
+        blf.size(font, 10.0 * ui)  # crisp glyphs, scaled back to handle units below
         width, height = blf.dimensions(font, text)
-        ortho = Matrix.Identity(4)
-        ortho[0][0], ortho[1][1] = 2.0 / region.width, 2.0 / region.height
-        ortho[0][3] = ortho[1][3] = -1.0
-        with gpu.matrix.push_pop(), gpu.matrix.push_pop_projection():
-            gpu.matrix.load_identity()
-            gpu.matrix.load_projection_matrix(ortho)
+        width, height = width / ui, height / ui
+        x = offset[0] - (width / 2.0 if align == "CENTER" else 0.0)
+        z = offset[1] - height / 2.0
+        # The shapes lie in the x/z plane of the gizmo (one unit: one pixel at UI
+        # scale 1); blf writes in x/y: y goes to z, a hair in front of the body.
+        place = Matrix(((1.0, 0.0, 0.0, x),
+                        (0.0, 0.0, -1.0, TEXT_LIFT),
+                        (0.0, 1.0, 0.0, z),
+                        (0.0, 0.0, 0.0, 1.0)))
+        with gpu.matrix.push_pop():
+            gpu.matrix.multiply_matrix(self.matrix_world @ place
+                                       @ Matrix.Scale(1.0 / ui, 4))
             blf.color(font, *color[:3], 1.0)
-            x = anchor.x + offset[0] * ui - (width / 2.0 if align == "CENTER" else 0.0)
-            blf.position(font, round(x), round(anchor.y + offset[1] * ui - height / 2.0), 0.0)
+            blf.position(font, 0.0, 0.0, 0.0)
             blf.draw(font, text)
 
     def draw_select(self, context, select_id):

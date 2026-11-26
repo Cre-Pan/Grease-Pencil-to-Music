@@ -355,6 +355,21 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.32
+
+Ogni composizione si porta dietro il suo cursore, anche la copia appena fatta con Shift+D; i
+numeri del cursore stanno piatti sulla tavola.
+
+- **Shift+D:** la copia ha subito la sua tavola, il suo cursore e le sue maniglie e li porta con
+  sé mentre la sposti; resta dove la lasci. Prima, durante lo spostamento dopo Shift+D, il
+  l'add-on non si accorgeva che stavi ancora trascinando: dopo un attimo rifaceva tavola e
+  suono della copia sotto il mouse (lo stesso lavoro che con G aspetta la fine del movimento).
+  Ora con Shift+D e Alt+D aspetta come con G; solo la tavola della copia viene creata subito.
+- **Numeri del cursore piatti:** il numero del fotogramma nel riquadro del cursore, e il valore
+  che compare trascinando le maniglie (durata, tasti), sono disegnati sul piano della
+  composizione come il cursore: guardando di lato si inclinano con il riquadro invece di girarsi
+  verso la vista.
+
 ## 0.0.31
 
 Icone degli strumenti più chiare e minimal, strumenti in nuove categorie, due tendine per
