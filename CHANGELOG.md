@@ -357,15 +357,27 @@
 
 ## 0.0.31
 
-Icone degli strumenti più chiare e minimal.
+Icone degli strumenti più chiare e minimal, strumenti in nuove categorie, due tendine per
+sceglierli e l'anteprima del suono.
 
-- **Ridisegnate:** pianoforte (tre tasti bianchi divisi e due neri), percussioni intonate (barre
-  viste dall'alto e una bacchetta), campana, archi (violino con archetto), chitarra (la paletta,
-  inclinata al contrario degli archi), arpa (ora una lira), pad (tre note lunghe tenute), dente di
-  sega e onda quadra (meno onde, senza la linea sotto), batteria (bacchette incrociate sul tamburo).
-- **Fiati:** un'icona sola, una folata di vento, per flauti, flauto dolce, ocarina, clarinetto,
-  oboe, fagotto e armonica.
-- **Ottoni:** un'icona sola, una tromba minimal, per tromba, trombone, corno, tuba e sassofono.
+- **Icone ridisegnate:** pianoforte (tre tasti bianchi divisi e due neri), percussioni intonate
+  (barre viste dall'alto e una bacchetta), campana, archi (violino con archetto), chitarra (la
+  paletta, inclinata al contrario degli archi), arpa (ora una lira), pad (tre note lunghe tenute),
+  dente di sega e onda quadra (meno onde, senza la linea sotto), percussioni (bacchette incrociate
+  sul tamburo).
+- **Un'icona per categoria:** fiati (una folata di vento), ottoni (una tromba minimal), piatti e
+  strumenti concreti (una bottiglia). Da 34 icone a 16.
+- **Categorie nuove:** il sassofono è negli ottoni; Batteria, Tamburi, Legni e blocchi e Fruscii
+  diventano **Percussioni**; hi-hat, crash, piatti, gong, campane nepalesi, sonagli, albero di
+  campanelli, tamburello e freno sono nei **Piatti**; triangolo, campanaccio e agogo nelle
+  **Percussioni intonate**; gli Oggetti diventano **Strumenti concreti**.
+- **Due tendine:** nella lista dei livelli l'icona dello strumento apre le categorie (scegliendone
+  una passi al suo primo strumento) e accanto la seconda tendina mostra solo gli strumenti di
+  quella categoria; il pennello rende attivo lo strumento per disegnare. Le stesse due tendine
+  sono nel pannello *Strumento musicale* del materiale.
+- **Anteprima:** nei menu degli strumenti, fermandoti con il mouse su una voce senti una nota di
+  quello strumento (parte con il suggerimento, dopo circa mezzo secondo). Si spegne in
+  *Preferenze → Anteprima degli strumenti*.
 
 ## 0.0.30
 

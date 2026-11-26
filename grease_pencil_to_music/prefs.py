@@ -110,6 +110,10 @@ class GP2M_Preferences(bpy.types.AddonPreferences):
     draw_sound: BoolProperty(name="Suona mentre disegni", default=True,
                              description="In Draw Mode senti la punta del tratto mentre "
                              "disegni, con lo strumento e la lettura del livello")
+    preview_instruments: BoolProperty(
+        name="Anteprima degli strumenti", default=True,
+        description="Nei menu degli strumenti senti una nota dello strumento quando ti "
+        "fermi con il mouse su una voce")
     map_thickness: EnumProperty(name="Spessore", items=THICKNESS_ITEMS,
                                 default="VOLUME", update=_changed)
     map_opacity: EnumProperty(name="Opacità", items=OPACITY_ITEMS, default="BRIGHTNESS",
@@ -185,6 +189,7 @@ class GP2M_Preferences(bpy.types.AddonPreferences):
             grid.label(text=label)
             grid.prop(self, attr, text="")
         box.prop(self, "draw_sound")
+        box.prop(self, "preview_instruments")
         box.prop(self, "resume_after_undo")
         box = layout.box()
         box.label(text="Cosa suona nel tratto", icon="SOUND")
@@ -234,6 +239,7 @@ class _Defaults:
     note_naming = "EN"
     resume_after_undo = True
     draw_sound = True
+    preview_instruments = True
     map_thickness = "VOLUME"
     map_opacity = "BRIGHTNESS"
     map_vertex_color = "NONE"
@@ -286,6 +292,10 @@ def get_prefs():
     if addon is None or addon.preferences is None:
         return _Defaults
     return addon.preferences
+
+
+def get_preview():
+    return bool(getattr(get_prefs(), "preview_instruments", True))
 
 
 def get_mapping():

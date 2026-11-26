@@ -91,6 +91,32 @@ def note_off(handle):
     bpy.app.timers.register(fade, first_interval=0.0)
 
 
+PREVIEW_PITCH = 60  # middle C
+PREVIEW_SECONDS = 0.9
+_preview = {"handle": None, "ident": None, "time": -10.0}
+
+
+def preview(ident, sample_rate=44100):
+    """A short note of an instrument: played when the mouse rests on it in the instrument
+    menus (Blender asks for its tooltip; there is no hover event for menu entries)."""
+    import time
+    if ident in ("SAMPLE", "LIBRARY") or ident not in synth.INSTRUMENT_BY_ID:
+        return
+    now = time.monotonic()
+    if ident == _preview["ident"] and now - _preview["time"] < PREVIEW_SECONDS:
+        return
+    note_off(_preview["handle"])
+    handle = note_on(ident, PREVIEW_PITCH, sample_rate, 0.7)
+    _preview.update(handle=handle, ident=ident, time=now)
+    if handle is not None:
+        def stop():
+            if _preview["handle"] is handle:
+                note_off(handle)
+                _preview["handle"] = None
+            return None
+        bpy.app.timers.register(stop, first_interval=PREVIEW_SECONDS)
+
+
 def velocity_volume(velocity):
     """MIDI velocity (1-127) to playback volume, with a gentle curve."""
     return 0.15 + 0.85 * (max(min(velocity, 127), 1) / 127.0) ** 1.5

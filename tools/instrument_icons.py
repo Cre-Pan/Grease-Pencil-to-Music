@@ -68,10 +68,6 @@ class Pen:
         return img.resize((SIZE, SIZE), Image.LANCZOS)
 
 
-def _wave(y, amp, x0=6, x1=58, phase=0.0, steps=40):
-    return [(x0 + (x1 - x0) * i / steps,
-             y + amp * math.sin(i / steps * 2 * math.pi + phase)) for i in range(steps + 1)]
-
 
 # --- Melodic ---------------------------------------------------------------------------------
 
@@ -247,21 +243,6 @@ def snare(color):
     return p.done()
 
 
-def kick(color):
-    p = Pen(color)
-    p.ring(32, 32, 27, 8)
-    p.circle(32, 32, 11, t="s")
-    return p.done()
-
-
-def clap(color):
-    p = Pen(color)
-    for a, b, c, d in ((6, 14, 11, 22), (30, 2, 30, 7), (54, 10, 49, 16)):
-        p.stick(a, b, c, d, 3.5, t="s")
-    p.rect(17, 28, 47, 60, r=10)
-    for x, top in ((21, 16), (28.5, 12), (36, 13), (43, 18)):
-        p.rect(x - 3.4, top, x + 3.4, 36, r=3.4)
-    return p.done()
 
 
 def cymbal(color):
@@ -273,103 +254,31 @@ def cymbal(color):
     return p.done()
 
 
-def conga(color):
+
+
+
+
+
+
+
+
+
+def found(color):
+    """A bottle: every found object (concrete sounds)."""
     p = Pen(color)
-    p.poly([(12, 16), (52, 16), (54, 32), (46, 60), (18, 60), (10, 32)])
-    p.ellipse(12, 7, 52, 23, t="s")
-    return p.done()
+    p.rect(27, 4, 37, 10, r=2, t="s")
+    p.rect(28, 8, 36, 22)
+    p.poly([(28, 20), (36, 20), (44, 30), (20, 30)])
+    p.rect(20, 28, 44, 60, r=5)
+    p.rect(20, 36, 44, 46, t="s")
+    return p.done(angle=-15)
 
 
-def gong(color):
-    p = Pen(color)
-    p.path([(6, 62), (6, 6), (58, 6), (58, 62)], 5, t="s")
-    p.circle(32, 36, 20)
-    return p.done()
-
-
-def triangle(color):
-    p = Pen(color)
-    p.stick(40, 22, 62, 40, 4, t="s")
-    p.path([(26, 8), (6, 54), (56, 54), (34, 10)], 6.5)
-    return p.done()
-
-
-def cowbell(color):
-    p = Pen(color)
-    p.arc(24, 4, 40, 26, 180, 360, 5, t="s")
-    p.poly([(22, 16), (42, 16), (52, 58), (12, 58)])
-    return p.done()
-
-
-def jingle(color):
-    p = Pen(color)
-    p.arc(4, 8, 60, 56, 200, 340, 4, t="s")
-    for cx, cy, r in ((14, 36, 9), (32, 44, 10), (50, 36, 9)):
-        p.circle(cx, cy, r)
-    return p.done()
-
-
-def tambourine(color):
-    p = Pen(color)
-    p.ring(32, 32, 26, 8)
-    for k in range(5):
-        a = math.radians(k * 72 - 90)
-        p.circle(32 + 22 * math.cos(a), 32 + 22 * math.sin(a), 5, t="s")
-    return p.done()
-
-
-def block(color):
-    p = Pen(color)
-    p.stick(40, 10, 58, 3, 4, t="s")
-    p.circle(38, 11, 5.5, t="s")
-    p.rect(4, 24, 60, 50, r=6)
-    return p.done()
-
-
-def claves(color):
-    p = Pen(color)
-    p.stick(10, 54, 54, 10, 9, t="s")
-    p.stick(10, 10, 54, 54, 9)
-    return p.done()
-
-
-def maracas(color):
-    p = Pen(color)
-    p.ellipse(32, 4, 60, 34, t="s")
-    p.stick(45, 30, 34, 58, 5, t="s")
-    p.ellipse(4, 4, 30, 34)
-    p.stick(19, 30, 30, 58, 5)
-    return p.done()
-
-
-def hammer(color):
-    p = Pen(color)
-    p.stick(12, 58, 38, 26, 7, t="s")
-    p.poly([(30, 4), (60, 28), (52, 38), (20, 12)])
-    return p.done()
-
-
-def bubbles(color):
-    p = Pen(color)
-    p.circle(48, 16, 8, t="s")
-    p.circle(52, 48, 6, t="s")
-    p.ring(24, 38, 18, 5)
-    return p.done()
-
-
-def glass(color):
-    p = Pen(color)
-    p.rect(29.5, 26, 34.5, 54, t="s")
-    p.ellipse(16, 52, 48, 60, t="s")
-    p.poly([(12, 4), (52, 4), (32, 30)])
-    return p.done()
 
 
 ICONS = {
     "keys": keys, "organ": organ, "mallets": mallets, "bell": bell, "violin": violin,
     "guitar": guitar, "harp": harp, "wind": wind, "trumpet": trumpet, "choir": choir,
-    "pad": pad, "saw": saw, "square": square, "snare": snare, "kick": kick, "clap": clap,
-    "cymbal": cymbal, "conga": conga, "gong": gong, "triangle": triangle, "cowbell": cowbell,
-    "jingle": jingle, "tambourine": tambourine, "block": block, "claves": claves,
-    "maracas": maracas, "hammer": hammer, "bubbles": bubbles, "glass": glass,
+    "pad": pad, "saw": saw, "square": square, "snare": snare,
+    "cymbal": cymbal, "found": found,
 }
