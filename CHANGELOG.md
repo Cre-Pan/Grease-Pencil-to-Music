@@ -358,6 +358,23 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.42
+
+- **In e Out per ogni composizione** (*Ascolto e Sequencer*): il primo e l'ultimo fotogramma
+  della sua clip nel Video Sequencer. Cambiando l'In (o trascinando la clip) la composizione
+  si sposta liberamente nel tempo, senza rifare il suono; cambiando l'Out (o trascinando la
+  fine della clip) si allunga o si accorcia. **Allinea alla clip attiva** le dà In e Out della
+  clip selezionata nel Sequencer (un video, un suono...): così ogni composizione può stare
+  sotto la sua clip video. Ascoltando *Una dopo l'altra* l'In lo decide l'ordine.
+- **Lista dei livelli**: occhio e lucchetto sono le prime icone a sinistra, allineate su ogni
+  riga; dopo vengono la scaletta dei gruppi, le frecce, l'icona e il nome.
+- **Gruppi colorati**: l'icona di un gruppo è quella dei gruppi Grease Pencil, nel colore del
+  gruppo; il colore è lo stesso della clip del gruppo nel Sequencer e del gruppo Grease
+  Pencil. Colorando la clip nel Sequencer si colora il gruppo, e viceversa. I gruppi nuovi
+  prendono un colore da soli, come i livelli.
+- Tolta la *clip propria* dei gruppi della 0.0.41: i gruppi restano dentro la meta-clip
+  della composizione, che ora si sposta liberamente con In e Out.
+
 ## 0.0.41
 
 - **L'occhio segue i gruppi, come le cuffie**: nella lista dei livelli, chiudendo l'occhio di un

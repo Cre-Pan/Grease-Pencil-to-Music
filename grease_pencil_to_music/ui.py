@@ -284,17 +284,6 @@ def _audio_prop(layout, gp, item):
              icon=mute_icon(item.mute or silent))
 
 
-def _own_clip_prop(layout, gp, item):
-    """The group's clip of its own in the Sequencer (out of the composition's
-    meta-clip): lit when on, only with 'Un canale per livello'."""
-    sub = layout.row(align=True)
-    comps = [obj for obj in bpy.data.objects
-             if obj.type == "GREASEPENCIL" and obj.data == gp and obj.gp2m.is_composition]
-    sub.enabled = any(obj.gp2m.layer_channels for obj in comps)
-    sub.active = item.own_clip
-    sub.prop(item, "own_clip", text="", emboss=False, icon="SEQ_STRIP_META")
-
-
 INDENT_ICONS = 2  # empty icons per level: the rows inside a group make a staircase
 
 
@@ -303,18 +292,28 @@ def _indent(layout, depth):
         layout.label(text="", icon="BLANK1")
 
 
-def _lock_and_eye(layout, node, item):
-    """The eye goes through the settings: a group and its layers hide together."""
+def _eye_and_lock(layout, node, item):
+    """First on the left, so they line up on every row whatever the depth. The eye
+    goes through the settings: a group and its layers hide together."""
     icons = layout.row(align=True)
     icons.emboss = "NONE"
-    icons.prop(node, "lock", text="", emboss=False)
     icons.prop(item, "hidden", text="", emboss=False,
                icon="HIDE_ON" if node.hide else "HIDE_OFF")
+    icons.prop(node, "lock", text="", emboss=False)
+
+
+def group_icon(item):
+    """The Grease Pencil group icon in the group's color (the color of its clip in the
+    Sequencer); gray or no color: the plain one."""
+    color = item.color if item is not None else "NONE"
+    if color in props.GROUP_ICON_COLORS:
+        return "LAYERGROUP_" + color
+    return "GREASEPENCIL_LAYER_GROUP"
 
 
 class GP2M_UL_layers(bpy.types.UIList):
     """The layers and groups of the composition, top first, like Blender's own
-    layer tree: icon, lock, eye, name, then audio on/off and Solo."""
+    layer tree: eye, lock, then (indented) arrow, icon, name, then audio on/off and Solo."""
 
     bl_idname = "GP2M_UL_layers"
 
@@ -329,9 +328,9 @@ class GP2M_UL_layers(bpy.types.UIList):
             layout.label(text=item.name, icon="ERROR")
             return
         row = layout.row(align=True)
+        _eye_and_lock(row, layer, item)
         _indent(row, len(board.ancestors(layer)))
         row.label(text="", icon="OUTLINER_DATA_GP_LAYER")
-        _lock_and_eye(row, layer, item)
         name = row.row(align=True)
         name.active = not board.is_hidden(layer) and not props.layer_silent(gp, item.name)
         name.prop(layer, "name", text="", emboss=False)
@@ -347,16 +346,16 @@ class GP2M_UL_layers(bpy.types.UIList):
             layout.label(text=item.name, icon="ERROR")
             return
         row = layout.row(align=True)
+        _eye_and_lock(row, group, item)
         _indent(row, len(board.ancestors(group)))
         row.prop(group, "is_expanded", text="", emboss=False,
                  icon="DOWNARROW_HLT" if group.is_expanded else "RIGHTARROW")
-        row.label(text="", icon="FILE_FOLDER")
-        _lock_and_eye(row, group, item)
+        row.label(text="", icon=group_icon(item))
         name = row.row(align=True)
         name.active = not group.hide and not props.layer_silent(gp, item.name)
         name.prop(group, "name", text="", emboss=False)
         right = row.row(align=True)
-        _own_clip_prop(right, gp, item)
+        right.prop(item, "color", text="", icon_only=True, emboss=False)
         _audio_prop(right, gp, item)
         _solo_prop(right, item)
 
@@ -947,6 +946,14 @@ def draw_sequencer(layout, scene, comp):
     layout.prop(comp.gp2m, "layer_channels")
     col = layout.column(align=True)
     col.prop(comp.gp2m, "channel", text="Canale (0 = auto)")
+    col = layout.column(align=True)
+    sub = col.column(align=True)
+    sub.active = scene.gp2m_play.mode != "SEQUENCE"
+    sub.prop(comp.gp2m, "frame_in")
+    out = sub.row(align=True)
+    out.active = not comp.gp2m.use_sections
+    out.prop(comp.gp2m, "frame_out")
+    col.operator("gp2m.fit_to_strip", icon="SEQ_STRIP_DUPLICATE")
     col.prop(comp.gp2m, "start_delay")
     row = col.row(align=True)
     row.active = scene.gp2m_play.mode == "SEQUENCE"
@@ -1337,7 +1344,6 @@ class GP2M_PT_sequencer_group(bpy.types.Panel):
             col.prop(settings, "clip_volume", text="Volume", slider=True)
             col.prop(settings, "pan_percent", text="Pan", slider=True)
             col.prop(settings, "mute", text="Muto")
-            col.prop(settings, "own_clip")
 
 
 classes = CHANGE_FAMILY_MENUS + (

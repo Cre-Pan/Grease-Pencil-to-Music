@@ -264,6 +264,44 @@ class GP2M_OT_export(bpy.types.Operator):
         return {"FINISHED"}
 
 
+def _target_strip(context):
+    """The active clip of the Sequencer, when it is not one of the composition's."""
+    from . import engine
+    scene = context.scene
+    editor = scene.sequence_editor if scene is not None else None
+    strip = editor.active_strip if editor is not None else None
+    if strip is None or strip.get(engine.OWNER_KEY) is not None:
+        return None
+    return strip
+
+
+class GP2M_OT_fit_to_strip(bpy.types.Operator):
+    """La composizione prende In e Out della clip attiva del Sequencer (un video, un
+    suono...): parte con lei e dura quanto lei"""
+
+    bl_idname = "gp2m.fit_to_strip"
+    bl_label = "Allinea alla clip attiva"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return active_composition(context) is not None and _target_strip(context) is not None
+
+    def execute(self, context):
+        comp = active_composition(context)
+        strip = _target_strip(context)
+        start, end = int(strip.left_handle), int(strip.right_handle) - 1
+        s = comp.gp2m
+        if start < context.scene.frame_start:
+            self.report({"WARNING"}, "La clip inizia prima della scena: la composizione "
+                        "parte dall'inizio della scena")
+        s.frame_in = start
+        engine.arrange(context.scene)
+        if not s.use_sections:
+            s.frame_out = end
+        return {"FINISHED"}
+
+
 def _composition_poll(context):
     return active_composition(context) is not None
 
@@ -1133,6 +1171,7 @@ def _target_group(gp):
 
 classes = (
     GP2M_OT_add_composition,
+    GP2M_OT_fit_to_strip,
     GP2M_OT_board_octaves,
     GP2M_OT_regenerate,
     GP2M_OT_rebuild_board,

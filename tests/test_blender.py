@@ -3379,64 +3379,84 @@ def test_eye_of_a_group_and_of_its_layers_go_together(comp):
     assert "hidden" in props._COPY_SKIP
 
 
-def test_a_group_of_layers_with_a_clip_of_its_own(comp):
-    engine, seqsync, props = sub("engine"), sub("seqsync"), sub("props")
+def test_layer_list_eye_and_lock_come_first(comp):
+    props = sub("props")
+    gp = comp.data
+    gp.layers.active = gp.layers["Livello 2"]
+    assert bpy.ops.gp2m.add_group() == {"FINISHED"}
+    props.ensure_layer_settings(gp)
+    ui_list = bpy.types.GP2M_UL_layers
+    for name in ("Gruppo 1", "Livello 2", "Livello 1"):
+        log = []
+        item = props.find_layer_settings(gp, name)
+        ui_list.draw_item(None, bpy.context, MockLayout(log), gp, item, 0, gp,
+                          "gp2m_layer_index")
+        assert [entry[1] for entry in log[:2]] == ["hidden", "lock"], name
+
+
+def test_group_icon_and_clip_share_the_color(comp):
+    engine, seqsync, props, ui = sub("engine"), sub("seqsync"), sub("props"), sub("ui")
     scene = bpy.context.scene
     names, meta, group_meta = _layer_group(comp)
     engine.arrange(scene)
     name = group_meta[engine.LAYER_GROUP_KEY]
     item = props.find_layer_settings(comp.data, name)
-    item.own_clip = True  # out of the composition's meta-clip
-    meta = engine.meta_strip(scene, comp)
-    clips = engine.own_clips(scene, comp)
-    assert list(clips) == [name]
-    clip = clips[name]
-    assert clip.parent_meta() is None and clip.channel == meta.channel + 1
-    assert name not in engine.layer_group_metas(meta)
-    strips = engine.layer_strips(scene, comp)
-    assert sorted(strips) == sorted(names)  # every layer still has its clip
-    assert all(strips[n].parent_meta().name == clip.name for n in names[:2])
-    assert all(strips[n].parent_meta().name == meta.name for n in names[2:])
-    assert engine.meta_strip(scene, comp).name == meta.name  # still one composition
-    assert engine._channel_count(scene, comp) == 2
-    # A new sound keeps it out, starting with the composition.
+    group = comp.data.layer_groups[name]
+    icons = bpy.types.UILayout.bl_rna.functions["prop"].parameters["icon"].enum_items.keys()
+    assert item.color_assigned and item.color != "NONE"  # a group gets a color too
+    # The group's color: its Grease Pencil group, its clip and its icon.
+    item.color = "COLOR_03"
+    clip = engine.layer_group_metas(engine.meta_strip(scene, comp))[name]
+    assert group.color_tag == "COLOR3" and clip.color_tag == "COLOR_03"
+    assert ui.group_icon(item) == "LAYERGROUP_COLOR_03" and ui.group_icon(item) in icons
+    # Colored in the Sequencer: the group takes it.
+    clip.color_tag = "COLOR_05"
+    seqsync.sync_scene(scene)
+    assert item.color == "COLOR_05" and group.color_tag == "COLOR5"
+    # Gray has no group color: the plain icon.
+    item.color = "COLOR_09"
+    assert group.color_tag == "NONE" and ui.group_icon(item) == "GREASEPENCIL_LAYER_GROUP"
+    assert "GREASEPENCIL_LAYER_GROUP" in icons
+    # A new sound keeps the clip's color.
     engine.regenerate(comp, force=True)
     engine.arrange(scene)
-    clip = engine.own_clips(scene, comp)[name]
-    strips = engine.layer_strips(scene, comp)
-    assert all(strips[n].parent_meta().name == clip.name for n in names[:2])
-    start = min(s.content_start for s in engine.meta_sounds(engine.meta_strip(scene, comp)))
-    assert all(strips[n].content_start == start for n in names)
-    # The Sequencer sync does not read it as a copy or a group taken apart.
-    count = len(engine.scene_compositions(scene))
-    assert not seqsync.sync_scene(scene)
-    assert comp.data.layer_groups.get(name) is not None
-    assert len(engine.scene_compositions(scene)) == count
-    # Muted with the composition, and with the group.
-    comp.gp2m.mute = True
-    engine.arrange(scene)
-    assert engine.own_clips(scene, comp)[name].mute
-    comp.gp2m.mute = False
-    engine.arrange(scene)
-    assert not engine.own_clips(scene, comp)[name].mute
-    item.mute = True
-    assert engine.own_clips(scene, comp)[name].mute
-    item.mute = False
-    # Off again: back inside the meta-clip.
-    item.own_clip = False
-    meta = engine.meta_strip(scene, comp)
-    assert not engine.own_clips(scene, comp)
-    assert not engine._own_clips_all(scene.sequence_editor, comp)
-    metas = engine.layer_group_metas(meta)
-    assert name in metas
-    strips = engine.layer_strips(scene, comp)
-    assert all(strips[n].parent_meta().name == metas[name].name for n in names[:2])
-    # With one mix strip the option has no clip.
-    item.own_clip = True
-    assert engine.own_clips(scene, comp)
-    comp.gp2m.layer_channels = False
+    assert engine.layer_group_metas(engine.meta_strip(scene, comp))[name].color_tag == "COLOR_09"
+
+
+def test_composition_in_and_out(comp):
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60), material_index=0)
     engine.regenerate(comp, force=True)
-    assert not engine._own_clips_all(scene.sequence_editor, comp)
+    engine.arrange(scene)
+    s = comp.gp2m
+    fps = scene.render.fps / scene.render.fps_base
+    assert s.frame_in == scene.frame_start
+    assert s.frame_out == scene.frame_start + round(s.length * fps) - 1
+    key = engine.state(comp).get("key")
+    # In: the clip moves, the sound stays.
+    s.frame_in = scene.frame_start + 48
+    assert s.start_delay == pytest.approx(48 / fps)
+    start = min(st.content_start for st in engine.composition_strips(scene, comp))
+    assert start == scene.frame_start + 48 and s.frame_in == start
+    assert engine.state(comp).get("key") == key
+    # Out: longer.
+    s.frame_out = s.frame_in + round(10 * fps) - 1
+    assert s.length == pytest.approx(10.0)
+    # Dragging the clip in the Sequencer moves the In.
+    meta = engine.meta_strip(scene, comp) or engine.top_strip(scene, comp)
+    meta.content_start = meta.content_start + 24
+    seqsync.sync_scene(scene)
+    assert s.frame_in == scene.frame_start + 72
+    # Aligned to a video clip (here a color strip) of the Sequencer.
+    video = scene.sequence_editor.strips.new_effect("Video", "COLOR", 20,
+                                                    frame_start=200, length=96)
+    scene.sequence_editor.active_strip = video
+    bpy.context.view_layer.objects.active = comp
+    assert bpy.ops.gp2m.fit_to_strip() == {"FINISHED"}
+    assert s.frame_in == 200 and s.frame_out == 295
+    assert s.length == pytest.approx(96 / fps)
+    scene.sequence_editor.strips.remove(video)
 
 
 def test_reordering_clips_inside_a_group_of_layers(comp):

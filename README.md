@@ -41,9 +41,10 @@ disegna su una tavola, e la tavola suona.
    si spegne e diventa grigio quando un altro livello è in *Solo*) e **cuffie** per il *Solo*
    (gli altri livelli tacciono e scendono al 10% di opacità). Un gruppo si apre e chiude come
    in Blender e il suo audio, Solo, occhio e lucchetto valgono per tutti i suoi livelli (le
-   cuffie e l'occhio del gruppo e dei suoi livelli si accendono e spengono insieme); l'icona
-   **clip** di un gruppo gli dà una *clip propria* nel Sequencer, fuori dalla meta-clip della
-   composizione, sul canale sopra; ↑ / ↓ entrano ed escono dai gruppi. Il menu **▾** è come quello di Blender: duplica (con
+   cuffie e l'occhio del gruppo e dei suoi livelli si accendono e spengono insieme). Occhio
+   e lucchetto sono le prime icone a sinistra, allineate su ogni riga; l'icona di un gruppo
+   ha il colore della sua clip nel Sequencer (e viceversa). ↑ / ↓ entrano ed escono dai
+   gruppi. Il menu **▾** è come quello di Blender: duplica (con
    impostazioni e strumenti copiati), mostra tutti / nascondi gli altri, blocca / sblocca
    tutti, unisci sotto / unisci gruppo, nuovo gruppo, sposta nel gruppo, sciogli gruppo; la
    tavola (l'oggetto *· Tavola*) non viene mai toccata. Sotto la lista ci sono lettura, volume e gli strumenti del
