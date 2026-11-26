@@ -355,6 +355,15 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.37
+
+- **Box select in Edit Mode di nuovo funzionante.** Con un modificatore del livello acceso
+  (Array, Simmetria, Trasponi, Fade o Noise, con *Mostra sul tratto*) il box select (B o
+  trascinando) non trovava i tratti: Blender li cercava spostati di quanto dista l'origine sul
+  Do dall'angolo della tavola, così un riquadro attorno al tratto non prendeva niente (A invece
+  selezionava tutto). Ora le copie si fanno sul tratto come disegnato e la selezione (box,
+  lazo, clic) trova i punti dove sono. I file già salvati si sistemano da soli all'apertura.
+
 ## 0.0.35
 
 Tutto insieme: le novità di 0.0.31, 0.0.32, 0.0.33 e 0.0.34 (qui sotto) e i modificatori sul tratto.

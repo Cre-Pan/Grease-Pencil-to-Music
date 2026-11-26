@@ -21,7 +21,8 @@ from . import music
 
 MODIFIER_PREFIX = "GP2M Modificatori "
 GROUP_NAME = "GP2M Modificatori"
-GROUP_VERSION = 2  # 2: board coordinates (the origin is on the C4 dot)
+GROUP_VERSION = 4  # 2: board coordinates (the origin is on the C4 dot); 4: copies made
+# before moving to the board (Edit Mode selection)
 VERSION_KEY = "gp2m_version"
 
 
@@ -311,8 +312,12 @@ def _build(tree):
     selected = layer.outputs[0]
 
     # Array: copies every Step, each moved up by Pitch and softer by Decay.
+    # Edit Mode: Blender selects (box, lasso, click) the points where they were when the
+    # first node that adds or removes points ran ("edit hints"). The copies are made on
+    # the strokes as drawn, before moving anything: moved to the board first, the
+    # selection looked for the strokes off by the origin (box select found nothing).
     first_x = b.node("GeometryNodeFieldMinAndMax", domain="POINT", data_type="FLOAT")
-    b.put(first_x, "Value", b.xyz(position())[0])
+    b.put(first_x, "Value", b.add(b.xyz(position())[0], gi("Origin X")))  # board x
     b.put(first_x, "Group Index", curve_index())
     fill = b.math("FLOOR", b.div(b.sub(b.sub(gi("Loop"), 1e-6), b.socket(first_x.outputs, "Min")),
                                  b.math("MAXIMUM", gi("Array Step"), 1e-9)))
@@ -320,18 +325,18 @@ def _build(tree):
     count = b.switch("FLOAT", gi("Array Fill"), gi("Array Count"), fill)
     count = b.switch("FLOAT", selected, 1.0, count)
     array = b.node("GeometryNodeDuplicateElements", domain="SPLINE")
-    # Object -> board coordinates (x = 0 where the loop starts, z = 0 the lowest row).
-    ox, oy, oz = b.xyz(position())
-    on_board = set_position(gi("Geometry"), True, b.vector(b.add(ox, gi("Origin X")), oy,
-                                                           b.add(oz, gi("Origin Z"))))
-    b.put(array, "Geometry", on_board)
+    b.put(array, "Geometry", gi("Geometry"))
     b.put(array, "Amount", b.to_int(count))
     k = b.socket(array.outputs, "Duplicate Index")
+    # Object -> board coordinates (x = 0 where the loop starts, z = 0 the lowest row).
+    ox, oy, oz = b.xyz(position())
+    on_board = set_position(b.socket(array.outputs, "Geometry"), True,
+                            b.vector(b.add(ox, gi("Origin X")), oy, b.add(oz, gi("Origin Z"))))
     x, y, z = b.xyz(position())
     moved = b.vector(b.add(x, b.mul(k, gi("Array Step"))), y,
                      shift(z, b.mul(k, gi("Array Pitch")), gi("Array Diatonic")))
     has_copy = b.compare("GREATER_THAN", k, 0.5)
-    geometry = set_position(b.socket(array.outputs, "Geometry"), has_copy, moved)
+    geometry = set_position(on_board, has_copy, moved)
     geometry = set_radius(geometry, has_copy,
                           b.mul(radius(), b.math("POWER", gi("Array Decay"), k)))
 

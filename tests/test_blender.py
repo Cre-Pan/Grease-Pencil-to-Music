@@ -2179,6 +2179,24 @@ def test_layer_modifiers_show_on_the_strokes(comp):
     assert len(_evaluated_strokes(comp, first)) == 1
 
 
+def test_layer_modifiers_keep_edit_mode_selection(comp):
+    """Box select in Edit Mode finds the strokes with a layer modifier on.
+
+    Blender selects the points where they are when the first node that adds points
+    runs (the "edit hints"): the copies must be made on the strokes as drawn, before
+    they are moved to the board coordinates (that moved them off by the origin)."""
+    props, stroke_mods = sub("props"), sub("stroke_mods")
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
+    first = sub("board").user_layers(comp.data)[0].name
+    props.find_layer_settings(comp.data, first).use_array = True
+    tree = comp.modifiers[stroke_mods.MODIFIER_PREFIX + first].node_group
+    # The strokes as drawn go straight into the copies (Duplicate Elements) and nowhere else.
+    readers = [link.to_node.bl_idname for link in tree.links
+               if link.from_node.bl_idname == "NodeGroupInput"
+               and link.from_socket.name == "Geometry"]
+    assert readers == ["GeometryNodeDuplicateElements"]
+
+
 def test_instrument_icons_are_loaded(addon):
     icons, families = sub("icons"), sub("families")
     for name in families.icon_names():  # (icon ids stay 0 without a GPU, as here)
