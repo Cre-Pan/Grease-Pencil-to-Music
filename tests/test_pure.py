@@ -645,6 +645,55 @@ def test_legato_layers_join_strokes_in_the_mix():
     assert quantized.voice_count == 1
 
 
+def _energy_at(audio, midi_pitch, t0, t1):
+    """Spectral energy around ``midi_pitch`` between ``t0`` and ``t1`` seconds."""
+    seg = audio[int(t0 * SR):int(t1 * SR)].mean(axis=1)
+    spectrum = np.abs(np.fft.rfft(seg * np.hanning(len(seg))))
+    freqs = np.fft.rfftfreq(len(seg), 1.0 / SR)
+    f = music.midi_to_freq(midi_pitch)
+    return float(spectrum[(freqs > f * 0.94) & (freqs < f * 1.06)].sum())
+
+
+@pytest.mark.parametrize("mode", ["QUANTIZED", "LEGATO", "OPTICAL", "OPTICAL_LEGATO",
+                                  "GESTURE"])
+@pytest.mark.parametrize("instrument", ["SINE", "STRINGS"])
+def test_overlapping_strokes_sound_together(mode, instrument):
+    # 0.0.39: a low stroke and a high one drawn over each other (same layer, same
+    # instrument) are both heard. In the legato readings the high one used to cut the low.
+    spec = free_spec(length=4.0, bpm=120.0)
+    low = stroke((0.5, 2.5), (0, 0), instrument=instrument)  # C3, long
+    high = stroke((1.0, 2.0), (33, 33), instrument=instrument)  # A5, over it
+    alone = mixer.render([mixer.LayerInput("L", [low], mode=mode)], spec,
+                         interpret.Mapping(), SR, loop=False)
+    both = mixer.render([mixer.LayerInput("L", [low, high], mode=mode)], spec,
+                        interpret.Mapping(), SR, loop=False)
+    assert both.voice_count == 2
+    assert _energy_at(both.audio, 48, 1.2, 1.8) == pytest.approx(
+        _energy_at(alone.audio, 48, 1.2, 1.8), rel=0.05)
+    assert _energy_at(both.audio, 81, 1.2, 1.8) > 0.1 * _energy_at(both.audio, 48, 1.2, 1.8)
+
+
+def test_legato_groups_keep_overlapping_lines_apart():
+    spec, mapping = free_spec(), interpret.Mapping()
+
+    def voice(xs, row):
+        return interpret.interpret_stroke(stroke(xs, (row, row)), spec, mapping,
+                                          "OPTICAL").voices[0]
+
+    # Two lines drawn as pieces: a low one (C4) and a high one (C5) at the same time.
+    low1, low2 = voice((0.0, 1.0), C4_ROW), voice((1.2, 2.0), C4_ROW + 2)
+    high1, high2 = voice((0.1, 0.9), C4_ROW + 12), voice((1.1, 2.1), C4_ROW + 14)
+    groups = interpret.legato_groups([low1, high1, low2, high2], gap=0.5)
+    assert sorted(sorted(g) for g in groups) == [[0, 2], [1, 3]]  # each line glides on
+    joined = interpret.legato_join([low1, high1, low2, high2], gap=0.5)
+    assert len(joined) == 2 and all(v.glide for _m, v in joined)
+    # Strokes one after the other still become one voice, even overlapping a tiny bit.
+    touching = voice((0.97, 1.5), C4_ROW + 4)
+    assert interpret.legato_groups([low1, touching], gap=0.5) == [[0, 1]]
+    overlapping = voice((0.5, 1.5), C4_ROW + 4)
+    assert len(interpret.legato_groups([low1, overlapping], gap=0.5)) == 2
+
+
 def test_plucked_sounds_hold_the_optical_glide():
     rising = stroke((0.0, 2.0), (C4_ROW, C4_ROW + 12))
     res = interpret.interpret_stroke(rising, free_spec(), interpret.Mapping(), "OPTICAL")

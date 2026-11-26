@@ -2720,6 +2720,7 @@ function voiceAt(v, t) {
   const pick = a => (a.length > 1 ? a[Math.min(a.length - 1, Math.round(u * (a.length - 1)))] : a[0]);
   return [v.curve ? pick(v.curve) : v.midi, pick(v.amp)];
 }
+const LEGATO_OVERLAP = 0.05;  // seconds: a stroke that overlaps the previous one less still joins it
 function legatoJoin(vs) {
   const out = [], byInst = new Map(), gap = spb();
   for (const v of vs) {
@@ -2729,14 +2730,22 @@ function legatoJoin(vs) {
   }
   for (const list of byInst.values()) {
     list.sort((a, b) => a.start - b.start);
-    let group = [], end = -Infinity;
-    const flush = () => { if (group.length) out.push(group.length === 1 ? group[0] : joinVoices(group)); group = []; };
+    // A joined group plays one pitch at a time: a voice that overlaps it (high and low
+    // strokes drawn over each other) starts or continues another group and sounds with it.
+    const groups = [];
     for (const v of list) {
-      if (group.length && v.start - end > gap) flush();
-      if (!group.length) end = -Infinity;
-      group.push(v); end = Math.max(end, v.start + v.dur);
+      const first = voiceAt(v, v.start)[0];
+      let best = null;
+      for (const g of groups) {
+        if (v.start < g.end - LEGATO_OVERLAP || v.start - g.end > gap) continue;
+        const d = Math.abs(g.last - first);
+        if (!best || d < best.d || (d === best.d && g.end > best.g.end)) best = { g, d };
+      }
+      const g = best ? best.g : (groups.push({ vs: [], end: -Infinity, last: first }), groups[groups.length - 1]);
+      g.vs.push(v);
+      if (v.start + v.dur >= g.end) { g.end = v.start + v.dur; g.last = voiceAt(v, g.end)[0]; }
     }
-    flush();
+    for (const g of groups) out.push(g.vs.length === 1 ? g.vs[0] : joinVoices(g.vs));
   }
   return out;
 }

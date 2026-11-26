@@ -2,6 +2,9 @@
 
 ## Web app (iPad)
 
+- Ottica legata e Quantizzata legata: due tratti dello stesso strumento sovrapposti nel tempo
+  (per esempio una nota molto alta sopra una molto bassa) suonano tutti e due. Prima si univano in
+  una sola voce e quello iniziato dopo interrompeva l'altro.
 - Isola delle sezioni più fluida: cambiando sezione, o quando i nomi si chiudono mentre disegni,
   i nomi e la pillola si muovono insieme sulla stessa curva (prima i nomi scattavano e la pillola li
   rincorreva). Le isole in alto hanno tutte la stessa altezza; quelle che arrivano con una sezione
@@ -354,6 +357,16 @@
 - **Lista strumenti per famiglie** richiudibili (con i colori della famiglia in anteprima);
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
+
+## 0.0.39
+
+- Tratti sovrapposti: nelle letture *Quantizzata legata* e *Ottica legata* due tratti dello stesso
+  strumento che si sovrappongono nel tempo (una nota molto alta sopra una molto bassa, o le copie di
+  Array e Simmetria) ora suonano ognuno per conto suo. Prima il legato li univa in una sola voce,
+  che suona una nota alla volta: quello iniziato dopo copriva l'altro, che si interrompeva. I tratti
+  uno dopo l'altro (anche sovrapposti di meno di 50 ms) si uniscono come prima, e dove più linee
+  continuano insieme ogni tratto prosegue quella con l'altezza più vicina. Le altre letture
+  suonavano già i tratti separati. Stessa correzione nella web app.
 
 ## 0.0.38
 
