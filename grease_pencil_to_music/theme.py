@@ -76,43 +76,76 @@ def rgba(c, alpha=1.0):
     return (*to_linear(c), alpha)
 
 
+def hex_srgb(code):
+    code = code.lstrip("#")
+    return tuple(int(code[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+
+
+# The board of the Figma design ("Tavola"), sRGB.
+DESIGN = {
+    "window": hex_srgb("181818"), "window_rim": hex_srgb("252525"),
+    "tab": hex_srgb("1B1B1B"),
+    "white_key": hex_srgb("DBDBDB"), "white_key_rim": hex_srgb("C0C0C0"),
+    "black_key": hex_srgb("1B1B1B"), "black_key_rim": hex_srgb("323232"),
+    "dot": hex_srgb("BFBFBF"),
+    "white_row": hex_srgb("2D2D2D"), "black_row": hex_srgb("262626"),
+    "frame": hex_srgb("323232"),
+    "second": hex_srgb("0D0D0D"), "beat": hex_srgb("202020"),
+    "playhead": hex_srgb("407FB7"),
+    "grip_dot": hex_srgb("D9D9D9"),
+    # Composizione Bit
+    "lane": hex_srgb("272727"), "lane_alt": hex_srgb("242424"),
+    "lane_rim": hex_srgb("1C1C1C"), "panel": hex_srgb("1B1B1B"),
+    "mask_rim": hex_srgb("353535"), "lane_text": hex_srgb("6A6A6A"),
+}
+
+
 def board_palette(context=None):
-    """name: (stroke RGBA or None, fill RGBA or None) of the board materials, linear."""
-    t = colors(context)
-    back, grid, text = t["back"], t["grid"], t["text"]
-    shade = t["scene_range"]
+    """name: (stroke RGBA or None, fill RGBA or None) of the board materials, linear.
+
+    The colors of the Figma design of the board (dark, whatever the Blender theme)."""
+    d = DESIGN
     return {
-        "GP2M Sfondo": (None, rgba(back)),
-        "GP2M Banda tasti neri": (None, rgba(mix(back, grid, 0.55))),
-        "GP2M Linea Do": (rgba(t["keyframe_selected"], 0.9), None),
-        "GP2M Linea nota": (rgba(mix(back, grid, 0.8)), None),
-        "GP2M Linea secondo": (rgba(mix(back, text, 0.42)), None),
-        "GP2M Linea battito": (rgba(mix(back, text, 0.16)), None),
-        "GP2M Tasto bianco": (rgba(mix(text, back, 0.35)), rgba(mix(text, t["text_hi"], 0.7))),
-        "GP2M Tasto nero": (None, rgba(mix(grid, (0.0, 0.0, 0.0), 0.4))),
-        "GP2M Etichetta tasti": (rgba(mix(back, text, 0.55)), None),
-        "GP2M Etichetta tempo": (rgba(text), None),
-        "GP2M Testina": (rgba(t["playhead"]), None),
-        "GP2M Fuori anteprima": (None, rgba(shade, max(0.35, min(0.8, shade[3] + 0.12))
-                                            if len(shade) > 3 else 0.62)),
+        "GP2M Finestra": (rgba(d["window_rim"]), rgba(d["window"])),
+        "GP2M Riga bianca": (None, rgba(d["white_row"])),
+        "GP2M Banda tasti neri": (None, rgba(d["black_row"])),
+        "GP2M Linea ottava": (rgba(d["black_row"], 0.65), None),
+        "GP2M Bordo": (rgba(d["frame"]), None),
+        "GP2M Linea secondo": (rgba(d["second"], 0.25), None),
+        "GP2M Linea battito": (rgba(d["beat"], 0.25), None),
+        "GP2M Tasto bianco": (rgba(d["white_key_rim"]), rgba(d["white_key"])),
+        "GP2M Tasto nero": (rgba(d["black_key_rim"]), rgba(d["black_key"])),
+        "GP2M Pallino Do": (rgba((1.0, 1.0, 1.0), 0.35), rgba(d["dot"])),
+        "GP2M Etichetta tasti": (rgba(mix(d["white_key"], (0.0, 0.0, 0.0), 0.55)), None),
+        "GP2M Etichetta tasti neri": (rgba(mix(d["black_key"], (1.0, 1.0, 1.0), 0.55)), None),
+        "GP2M Testina": (rgba(d["playhead"]), None),
+        "GP2M Fuori anteprima": (None, (0.0, 0.0, 0.0, 0.65)),
+        "GP2M Presa": (None, (0.0, 0.0, 0.0, 0.0)),
+        "GP2M Linguetta": (rgba(d["window_rim"]), rgba(d["tab"])),
+        "GP2M Puntino grip": (None, rgba(mix(d["tab"], d["grip_dot"], 0.14))),
+        # Composizione Bit
+        "GP2M Fondo corsie": (rgba(d["mask_rim"]), rgba(d["panel"])),
+        "GP2M Corsia": (None, rgba(d["lane"])),
+        "GP2M Corsia alterna": (None, rgba(d["lane_alt"])),
+        "GP2M Bordo corsia": (rgba(d["lane_rim"]), None),
+        "GP2M Etichetta corsia": (rgba(d["lane_text"]), None),
     }
 
 
 def handle_colors(context=None):
-    """sRGB colors of the rig gizmos (gizmos draw in display space)."""
+    """sRGB colors of the rig gizmos (gizmos draw in display space): the tabs of the
+    Figma design, the theme's Active Object color on the box under the mouse."""
     t = colors(context)
     accent = t["object_active"][:3]
+    d = DESIGN
     return {
-        # "Off" until the mouse comes: a muted grey, half way to the theme background.
-        "idle": mix(HANDLE_COLOR, t["back"], 0.45),
-        "rim_idle": (0.0, 0.0, 0.0, 0.3),
-        "glyph_idle": mix(GLYPH_COLOR, t["back"], 0.35),
-        "hover": mix(HANDLE_COLOR, accent, 0.7),
+        "tab": d["tab"],
+        "tab_rim": d["window_rim"],
+        "grip_dot": d["grip_dot"],
+        "hover_rim": mix((1.0, 1.0, 1.0), accent, 0.7),
         "active": accent,
-        "rim": HANDLE_RIM,
-        "glyph": GLYPH_COLOR,
-        "playhead": t["playhead"][:3],
-        "text": t["text_hi"][:3],
+        "playhead": d["playhead"],
+        "text": (1.0, 1.0, 1.0),
     }
 
 

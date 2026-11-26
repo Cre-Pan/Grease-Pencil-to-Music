@@ -178,9 +178,20 @@ def read_composition(obj, frame_number, use_modifiers=False, depsgraph=None, onl
             drawing = drawing_at(layer, frame_number)
         if drawing is not None:
             read.strokes = read_drawing(drawing, materials, layer.name,
-                                        layer.matrix_local, divisors)
+                                        _board_space(obj, layer.matrix_local), divisors)
         result.append(read)
     return result
+
+
+def _board_space(obj, matrix_local):
+    """The layer's matrix followed by object local -> board coordinates (the origin
+    of the object is on the dot of C4, the board starts at its corner)."""
+    from .board import origin
+    ox, oz = origin(obj.gp2m)
+    if abs(ox) < 1e-12 and abs(oz) < 1e-12:
+        return matrix_local
+    import mathutils
+    return mathutils.Matrix.Translation((ox, 0.0, oz)) @ matrix_local
 
 
 def has_unsupported_stack(obj):

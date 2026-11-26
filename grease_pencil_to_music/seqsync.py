@@ -378,13 +378,19 @@ def _sync_length(scene, obj):
     meta = engine.meta_strip(scene, obj)
     st = engine.state(obj)
     span = st.get("meta_span")
+    base = st.pop(PREVIEW_KEY, None)  # the length before the drag (the board followed)
+    s = obj.gp2m
     if meta is None or span is None:
         return False
     left, right = int(meta.left_handle), int(meta.right_handle)
     if (left, right) == tuple(span):
+        if base is not None and abs(s.length - base) > 1e-6:
+            s.length = base  # the drag was cancelled (Esc)
+            return True
         return False
     st["meta_span"] = (left, right)
-    s = obj.gp2m
+    if base is not None and abs(s.length - base) > 1e-6:
+        s.length = base  # computed again below from where the drag started
     moved = (left - span[0]) == (right - span[1])
     if moved:
         return False  # moved in time: see _sync_time
@@ -665,9 +671,42 @@ def sync_scene(scene):
     return changed
 
 
+PREVIEW_KEY = "preview_length"  # engine state: the length before a clip end was dragged
+
+
+def _preview_lengths():
+    """While the end of a composition's clip is dragged in the Sequencer the board
+    follows at once (the scene End, the sound and the clips when it is let go)."""
+    for scene in bpy.data.scenes:
+        if scene.sequence_editor is None:
+            continue
+        fps = scene.render.fps / scene.render.fps_base
+        for obj in engine.scene_compositions(scene):
+            s = obj.gp2m
+            st = engine.state(obj)
+            meta = engine.meta_strip(scene, obj)
+            span = st.get("meta_span")
+            if s.use_sections or meta is None or span is None:
+                continue
+            left, right = int(meta.left_handle), int(meta.right_handle)
+            if left != span[0]:
+                continue  # moved, or its start trimmed: see _sync_length
+            if right == span[1] and PREVIEW_KEY not in st:
+                continue
+            base = st.setdefault(PREVIEW_KEY, s.length)
+            length = round(min(max(base + (right - span[1]) / fps, 1.0), 300.0), 4)
+            if abs(length - s.length) > 1e-6:
+                s.length = length
+
+
 def _later():
-    from .handlers import TRANSFORM_POLL, transform_running
+    from .handlers import TRANSFORM_POLL, sequencer_transform_running, transform_running
     if transform_running():
+        if sequencer_transform_running() and not _busy[0]:
+            try:
+                _preview_lengths()
+            except Exception as error:  # keep Blender responsive
+                print(f"[Doodle Music] Sequencer preview failed: {error!r}")
         return TRANSFORM_POLL
     for scene in bpy.data.scenes:
         try:

@@ -8,7 +8,7 @@ import bpy
 from bpy.props import BoolProperty, EnumProperty, IntProperty, StringProperty
 from mathutils import Euler, Vector
 
-from . import board, engine, props, synth
+from . import beat, board, engine, props, synth
 
 
 def active_composition(context):
@@ -23,11 +23,11 @@ def active_composition(context):
     return None
 
 
-def _next_name():
+def _next_name(base="Composizione Musicale"):
     index = 1
-    while bpy.data.objects.get(f"Composizione Musicale {index}") is not None:
+    while bpy.data.objects.get(f"{base} {index}") is not None:
         index += 1
-    return f"Composizione Musicale {index}"
+    return f"{base} {index}"
 
 
 def frame_view(context, comp):
@@ -38,7 +38,7 @@ def frame_view(context, comp):
     s = comp.gp2m
     _rows, width, top = board.dimensions(s)
     kw = board.key_width(s)
-    center = comp.matrix_world @ Vector(((width - kw) / 2.0, 0.0, top / 2.0))
+    center = board.board_matrix(comp) @ Vector(((width - kw) / 2.0, 0.0, top / 2.0))
     for area in screen.areas:
         if area.type != "VIEW_3D":
             continue
@@ -63,6 +63,15 @@ class GP2M_OT_add_composition(bpy.types.Operator):
     bl_label = "Composizione Musicale"
     bl_options = {"REGISTER", "UNDO"}
 
+    kind: EnumProperty(name="Tipo", items=beat.KIND_ITEMS, default=beat.NOTES)
+
+    @classmethod
+    def description(cls, _context, properties):
+        if properties.kind == beat.BEAT:
+            return ("Crea una tavola del ritmo: otto corsie, una percussione ciascuna. "
+                    "Un tratto in una corsia suona la sua percussione, a qualunque altezza")
+        return cls.__doc__
+
     def execute(self, context):
         if context.mode != "OBJECT" and context.active_object is not None:
             try:
@@ -70,7 +79,8 @@ class GP2M_OT_add_composition(bpy.types.Operator):
             except RuntimeError:
                 pass
         scene = context.scene
-        name = _next_name()
+        bit = self.kind == beat.BEAT
+        name = _next_name("Composizione Ritmica" if bit else "Composizione Musicale")
         gp = bpy.data.grease_pencils.new(name)
         obj = bpy.data.objects.new(name, gp)
         collection = getattr(context, "collection", None) or scene.collection
@@ -84,6 +94,13 @@ class GP2M_OT_add_composition(bpy.types.Operator):
         for attr in ("bpm", "length", "low_note", "octaves", "row_height", "seconds_width",
                      "scale", "time_grid", "key_labels", "sample_rate"):
             setattr(s, attr, getattr(p, "new_" + attr))
+        s.origin_version = board.ORIGIN_VERSION  # the origin on the dot of C4
+        if not bit:
+            board._fit_anchor(s)
+        if bit:
+            s.kind = beat.BEAT
+            s.lanes = beat.DEFAULT_LANES
+            props.ensure_lanes(s)
         first_frame = min(1, scene.frame_start)
         for i in range(1, p.new_layers + 1):
             layer = gp.layers.new(f"Livello {i}")
@@ -91,7 +108,9 @@ class GP2M_OT_add_composition(bpy.types.Operator):
             layer.frames.new(first_frame)
         gp.layers.active = gp.layers[0]
         # The starting instruments live in the first layer.
-        for material in board.instrument_materials(prefs.new_instrument_idents()):
+        # Bit: one pen; the lane, not the pen, chooses the percussion.
+        idents = ("DRUM",) if bit else prefs.new_instrument_idents()
+        for material in board.instrument_materials(idents):
             material.gp2m_layer = gp.layers[0].name
             gp.materials.append(material)
         props.ensure_layer_settings(gp)
@@ -139,6 +158,10 @@ class GP2M_OT_board_octaves(bpy.types.Operator):
     def description(cls, _context, properties):
         where = "in cima" if properties.edge == "TOP" else "in fondo"
         verb = "Mostra" if properties.delta > 0 else "Nascondi"
+        comp = active_composition(_context)
+        if comp is not None and beat.is_beat(comp.gp2m):
+            verb = "Aggiungi" if properties.delta > 0 else "Togli"
+            return f"{verb} una corsia {where} alla tavola (il disegno non si sposta)"
         return f"{verb} un'ottava {where} alla tavola (il disegno non si sposta)"
 
     def execute(self, context):

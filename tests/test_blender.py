@@ -10,6 +10,7 @@ export WAV/MP3/MIDI.
 import os
 import pathlib
 import sys
+import types
 import wave
 
 import numpy as np
@@ -61,6 +62,12 @@ def _grid(comp):
     return sub("board").grid_object(comp).data
 
 
+def local(obj, x, z):
+    """Board coordinates -> the composition's own (its origin is on the C4 dot)."""
+    ox, oz = sub("board").local_offset(obj.gp2m)
+    return (x + ox, 0.0, z + oz)
+
+
 def add_stroke(obj, layer_index, points, radius=0.02, material_index=0, frame=None):
     """``points``: (x, z) pairs in board coordinates; ``layer_index`` counts the
     user layers only (0 = "Livello 1"); ``frame``: keyframe number (new if missing)."""
@@ -73,8 +80,9 @@ def add_stroke(obj, layer_index, points, radius=0.02, material_index=0, frame=No
     drawing.add_strokes([len(points)])
     stroke = drawing.strokes[len(drawing.strokes) - 1]
     stroke.material_index = material_index
+    ox, oz = sub("board").local_offset(obj.gp2m)  # board -> the object's coordinates
     for point, (x, z) in zip(stroke.points, points):
-        point.position = (x, 0.0, z)
+        point.position = (x + ox, 0.0, z + oz)
         point.radius = radius
         point.opacity = 1.0
     drawing.tag_positions_changed()
@@ -116,19 +124,19 @@ def test_add_composition_has_its_grid_apart(comp):
     names = [layer.name for layer in comp.data.layers]
     assert [l.name for l in board.user_layers(comp.data)] == ["Livello 1", "Livello 2",
                                                               "Livello 3"]
-    # The drawing has only the user layers and the playhead on top.
-    assert names[-1] == board.HEAD_LAYER and names[:-1] == ["Livello 1", "Livello 2",
-                                                           "Livello 3"]
+    # The drawing has only the user layers, the window's catch area and the playhead.
+    assert names[-2:] == [board.CATCH_LAYER, board.HEAD_LAYER]
+    assert names[:-2] == ["Livello 1", "Livello 2", "Livello 3"]
     assert comp.data.layer_groups.get(board.BOARD_GROUP) is None
     assert all(board.is_board_layer(layer) and layer.lock for layer in grid.data.layers)
     assert comp.data.layers.active.name == "Livello 1"
     board_materials = [m.name for m in comp.data.materials if board.is_board_material(m)]
-    assert board_materials == ["GP2M Testina"]
+    assert board_materials == ["GP2M Testina", "GP2M Presa"]
     instruments = [slot.material.gp2m_instrument for slot in comp.material_slots
                    if not board.is_board_material(slot.material)]
     assert len(instruments) == 25 and {"PLUCK", "KICK", "SNARE", "HIHAT"} <= set(instruments)
     labels = board.grid_object(comp).data.layers.get("GP2M Etichette").frames[0].drawing
-    assert len(labels.strokes) > 10
+    assert len(labels.strokes) == 3  # a dot on every whole C (3 octaves)
     # Empty composition: a silent strip already exists and the scene loops 8 s.
     scene = bpy.context.scene
     strip = sub("engine").find_strip(scene, comp)
@@ -1199,12 +1207,12 @@ def test_gesture_mode_reads_drawing_time(comp):
     settings = props.find_layer_settings(comp.data, "Livello 1")
     settings.mode = "GESTURE"
     result = engine.regenerate(comp)  # no drawing time: read like "Quantizzata"
-    assert [(n.start, round(n.end, 2)) for n in result.notes] == [(1.0, 1.25)]
+    assert [(round(n.start, 4), round(n.end, 2)) for n in result.notes] == [(1.0, 1.25)]
     attr = drawing.attributes.new("delta_time", "FLOAT", "POINT")
     attr.data.foreach_set("value", np.linspace(0.0, 1.5, 50, dtype=np.float32))
     drawing.tag_positions_changed()
     result = engine.regenerate(comp)  # drawn in 1.5 s: the note lasts 1.5 s
-    assert [(n.start, round(n.end, 2)) for n in result.notes] == [(1.0, 2.5)]
+    assert [(round(n.start, 4), round(n.end, 2)) for n in result.notes] == [(1.0, 2.5)]
 
 
 def test_midi_keyboard_plays_and_records(comp):
@@ -1443,7 +1451,7 @@ def test_sound_while_drawing_follows_the_stroke_being_drawn(comp, monkeypatch):
     for i, midi in enumerate((64, 65, 67), start=2):
         drawing.resize_strokes([i], indices=[index])
         stroke = drawing.strokes[index]
-        stroke.points[i - 1].position = (0.5 + 0.1 * i, 0.0, row_z(comp, midi))
+        stroke.points[i - 1].position = local(comp, 0.5 + 0.1 * i, row_z(comp, midi))
         stroke.points[i - 1].radius = 0.02
         assert draw_sound.step(comp, scene, 0.01 * (i + 1)) == "move"
     instrument = keyboard.instrument_of(comp)[0]
@@ -1457,7 +1465,7 @@ def test_sound_while_drawing_follows_the_stroke_being_drawn(comp, monkeypatch):
     assert draw_sound.step(comp, scene, 6.0) == "start"
     index = len(drawing.strokes) - 1
     drawing.resize_strokes([2], indices=[index])
-    drawing.strokes[index].points[1].position = (2.2, 0.0, row_z(comp, 62))
+    drawing.strokes[index].points[1].position = local(comp, 2.2, row_z(comp, 62))
     assert draw_sound.step(comp, scene, 6.01) == "move"
     assert played == [(instrument, 60)]
     assert draw_sound._Live.handle.pitch == pytest.approx(2 ** (2 / 12))
@@ -1527,9 +1535,11 @@ def test_web_project_opens_as_composition(addon, tmp_path):
         assert len(drawing.strokes) == 3
         first = drawing.strokes[0]
         # Beat 0..2 at 120 BPM = 0..1 s; pitch 72.5 = the middle of the C5 row.
-        xs = [p.position.x for p in first.points]
-        assert xs[0] == pytest.approx(0.0) and xs[-1] == pytest.approx(1.0 * s.seconds_width)
-        assert first.points[0].position.z == pytest.approx(row_z(comp, 72))
+        ox, oz = board.origin(s)  # the composition's coordinates -> the board's
+        xs = [p.position.x + ox for p in first.points]
+        assert xs[0] == pytest.approx(0.0, abs=1e-5)
+        assert xs[-1] == pytest.approx(1.0 * s.seconds_width)
+        assert first.points[0].position.z + oz == pytest.approx(row_z(comp, 72))
         assert first.points[0].radius == pytest.approx(0.3 * s.row_height)
         assert drawing.attributes["delta_time"].data[20].value == pytest.approx(1.2)
         mats = gp.materials
@@ -1847,7 +1857,8 @@ def test_grid_inside_the_composition_moves_out(comp):
     assert board.has_board(comp)
     assert gp.layer_groups.get(board.LEGACY_BOARD_GROUP) is None
     assert gp.layer_groups.get(board.BOARD_GROUP) is None
-    assert [m.name for m in gp.materials if board.is_board_material(m)] == ["GP2M Testina"]
+    assert [m.name for m in gp.materials if board.is_board_material(m)] == ["GP2M Testina",
+                                                                            "GP2M Presa"]
     stroke = board.user_layers(gp)[0].frames[0].drawing.strokes[0]
     assert gp.materials[stroke.material_index].name == instrument  # same instrument
     assert board.board_materials_ok(comp)
@@ -1880,6 +1891,57 @@ def test_duplicate_and_delete_take_care_of_the_grid(comp):
     engine.cleanup_orphans()
     assert bpy.data.objects.get(grid_name) is None
     assert board.grid_object(comp) is not None
+
+
+def test_copy_gets_its_grid_at_once_without_touching_the_drawing(comp):
+    """Shift+D: the copy gets its own board right away (it follows the copy while it
+    is still being moved); its drawing is left alone until the move ends."""
+    board, handlers = sub("board"), sub("handlers")
+    copy = comp.copy()
+    copy.data = comp.data.copy()
+    bpy.context.scene.collection.objects.link(copy)
+    try:
+        layers = [layer.name for layer in copy.data.layers]
+        assert board.grid_object(copy) is None
+        assert handlers._new_grids_tick() is None
+        grid = board.grid_object(copy)
+        assert grid is not None and grid != board.grid_object(comp)
+        assert grid.parent == copy and grid.data.users == 1
+        assert board.grid_object(comp).parent == comp
+        assert [layer.name for layer in copy.data.layers] == layers
+        copy.location.x += 3.0
+        bpy.context.view_layer.update()
+        assert abs(grid.matrix_world.translation.x - copy.matrix_world.translation.x) < 1e-5
+    finally:
+        grid = board.grid_object(copy)
+        bpy.data.objects.remove(copy, do_unlink=True)
+        if grid is not None:
+            bpy.data.objects.remove(grid, do_unlink=True)
+
+
+def test_transform_running_sees_the_move_of_shift_d(addon, monkeypatch):
+    handlers = sub("handlers")
+
+    class Step:
+        def __init__(self, name):
+            self.bl_idname = name
+
+    class Macro(Step):
+        macros = (Step("OBJECT_OT_duplicate"), Step("TRANSFORM_OT_translate"))
+
+    class Window:
+        modal_operators = (Macro("OBJECT_OT_duplicate_move"),)
+
+    class Manager:
+        windows = (Window(),)
+
+    class Context:
+        window_manager = Manager()
+
+    monkeypatch.setattr(handlers, "bpy", types.SimpleNamespace(context=Context()))
+    assert handlers.transform_running()
+    Window.modal_operators = (Step("OBJECT_OT_select_box"),)
+    assert not handlers.transform_running()
 
 
 # --- One channel per layer, absolute volumes, Auto on the active layer only -----------
@@ -2030,6 +2092,91 @@ def test_layer_modifiers_effects_and_copy_paste(comp):
         item = props.find_layer_settings(comp.data, layer.name)
         assert item.use_fade and item.fade_direction == "BOTH" and item.mode == "OPTICAL"
         assert item.use_canon and item.name == layer.name
+
+
+def _evaluated_strokes(comp, layer_name):
+    """(x, z, radius) of the strokes Blender shows on a layer (after the modifiers), in
+    board coordinates."""
+    bpy.context.view_layer.update()
+    gp = comp.evaluated_get(bpy.context.evaluated_depsgraph_get()).data
+    drawing = gp.layers[layer_name].current_frame().drawing
+    ox, oz = sub("board").origin(comp.gp2m)
+    out = []
+    for stroke in drawing.strokes:
+        out.append((np.array([p.position[0] + ox for p in stroke.points]),
+                    np.array([p.position[2] + oz for p in stroke.points]),
+                    np.array([p.radius for p in stroke.points])))
+    return out
+
+
+def test_layer_modifiers_show_on_the_strokes(comp):
+    """0.0.34: the layer modifiers change the drawing too, as they change the sound."""
+    props, engine, reader, lm = sub("props"), sub("engine"), sub("reader"), sub("layer_mods")
+    stroke_mods, feedback, mixer = sub("stroke_mods"), sub("feedback"), sub("mixer")
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60), radius=0.03)
+    first, second = [layer.name for layer in sub("board").user_layers(comp.data)[:2]]
+    add_stroke(comp, 1, line(comp, 0.5, 1.5, 64), radius=0.03)
+    settings = props.find_layer_settings(comp.data, first)
+    notes = lambda: engine.render_composition(comp, bpy.context.scene)[0].notes  # noqa: E731
+    plain = len(notes())
+
+    # Fade in: the start of the stroke is thin, the end as drawn; the stroke stays as is.
+    settings.use_fade = True
+    name = stroke_mods.MODIFIER_PREFIX + first
+    modifier = comp.modifiers.get(name)
+    assert modifier is not None and modifier.type == "NODES"
+    assert not feedback.user_modifiers(comp) and not reader.has_unsupported_stack(comp)
+    (x, z, r), = _evaluated_strokes(comp, first)
+    assert r[0] == pytest.approx(0.03 * settings.fade_minimum, rel=1e-3)
+    assert r[-1] == pytest.approx(0.03, rel=1e-3)
+    original = sub("board").user_layers(comp.data)[0].frames[0].drawing.strokes[0]
+    assert all(p.radius == pytest.approx(0.03) for p in original.points)
+    (x2, z2, r2), = _evaluated_strokes(comp, second)
+    assert np.allclose(r2, 0.03)  # the other layer is left alone
+    settings.fade_direction = "OUT"
+    (x, z, r), = _evaluated_strokes(comp, first)
+    assert r[0] == pytest.approx(0.03, rel=1e-3) and r[-1] < 0.01
+
+    # Everything on: the drawing is what the sound reads, stroke by stroke.
+    settings.use_array = True
+    settings.array_count = 3
+    settings.array_pitch = 2
+    settings.use_mirror = True
+    settings.mirror_pitch = True
+    settings.use_transpose = True
+    read = reader.read_composition(comp, bpy.context.scene.frame_start)
+    read = next(item for item in read if item.name == first)
+    spec = engine.board_spec(comp.gp2m)
+    expected = lm.apply(read.strokes, engine.layer_mods(settings),
+                        mixer.mods_board(spec, sub("board").dimensions(comp.gp2m)[0]))
+    shown = _evaluated_strokes(comp, first)
+    assert len(shown) == len(expected) == 3 * 4  # time, pitch, both and the original
+    key = lambda s: (round(float(s[0][0]), 4), round(float(s[1][0]), 4))  # noqa: E731
+    for got, want in zip(sorted(shown, key=key),
+                         sorted([(e.x, e.z, e.radius) for e in expected], key=key)):
+        for a, b in zip(got, want):
+            assert np.allclose(a, b, atol=1e-4)
+
+    # Reading the evaluated strokes ("Usa modificatori") does not apply them twice.
+    heard = len(notes())
+    assert heard > plain
+    comp.gp2m.use_modifiers = True
+    assert len(notes()) == heard
+    comp.gp2m.use_modifiers = False
+
+    # "Mostra sul tratto" off: only the sound changes; on again: shown again.
+    comp.gp2m.show_layer_mods = False
+    assert comp.modifiers.get(name) is None
+    assert len(_evaluated_strokes(comp, first)) == 1
+    assert len(notes()) == heard
+    comp.gp2m.show_layer_mods = True
+    assert comp.modifiers.get(name) is not None
+
+    # Every modifier off: no node modifier left.
+    for prop in props.LAYER_MOD_PROPS:
+        setattr(settings, prop, False)
+    assert comp.modifiers.get(name) is None
+    assert len(_evaluated_strokes(comp, first)) == 1
 
 
 def test_instrument_icons_are_loaded(addon):
@@ -2303,28 +2450,30 @@ def test_octaves_below_and_above_keep_the_drawing(comp):
 
 # --- Rig (Object Mode handles, gizmos) -------------------------------------------------
 
-def test_rig_handles_are_gizmos_with_theme_colors(comp):
+def test_rig_handles_are_gizmos_with_the_design_colors(comp):
     rig = sub("rig")
     assert rig.rig_object(comp) is None  # no object: the handles are gizmos
     assert "bl_rna" in rig.GP2M_GGT_rig.__dict__
     assert "bl_rna" in rig.GP2M_GT_handle.__dict__
+    assert "bl_rna" in rig.GP2M_GT_name.__dict__
     for handle in rig.HANDLE_NAMES:
         body, rim, glyphs = rig.handle_geometry(handle)
         assert len(body) % 3 == 0 and len(rim) % 3 == 0 and len(glyphs) % 3 == 0
-        # Drawn outside the board, beside the anchor (pixels).
+        # Grips stick out of the window edge (a hair under it), the box sits above.
         xs = [p[0] for p in rim]
         zs = [p[2] for p in rim]
         if handle == rig.LENGTH:
-            assert min(xs) > 0
+            assert min(xs) >= -3.0 and max(xs) > 30
         elif handle in (rig.OCT_TOP, rig.HEAD):
             assert min(zs) >= -3.0
         else:
-            assert max(zs) < 0
+            assert max(zs) <= 3.0
+        if handle != rig.HEAD:
+            assert len(glyphs) == 8 * 8 * 3  # eight dots
     colors = sub("theme").handle_colors(bpy.context)
     active = tuple(bpy.context.preferences.themes[0].view_3d.object_active)
     assert np.allclose(colors["active"], active)
-    playhead = tuple(bpy.context.preferences.themes[0].common.anim.playhead)[:3]
-    assert np.allclose(colors["playhead"], playhead)
+    assert np.allclose(colors["playhead"], sub("theme").hex_srgb("407FB7"))
 
 
 def test_rig_of_0_0_22_is_removed(comp):
@@ -2341,25 +2490,30 @@ def test_rig_of_0_0_22_is_removed(comp):
     assert sub("board").has_board(comp)
 
 
-def test_board_and_playhead_follow_the_theme(comp):
-    theme = sub("theme")
-    t = bpy.context.preferences.themes[0]
+def test_board_has_the_colors_of_the_design(comp):
+    theme, board = sub("theme"), sub("board")
+    def fill(name):
+        return tuple(bpy.data.materials[name].grease_pencil.fill_color)[:3]
+    for name, code in (("GP2M Finestra", "181818"), ("GP2M Riga bianca", "2D2D2D"),
+                       ("GP2M Banda tasti neri", "262626"), ("GP2M Tasto bianco", "DBDBDB"),
+                       ("GP2M Tasto nero", "1B1B1B")):
+        assert np.allclose(fill(name), theme.to_linear(theme.hex_srgb(code)), atol=1e-4)
     head = bpy.data.materials["GP2M Testina"].grease_pencil
-    assert np.allclose(tuple(head.color)[:3], theme.to_linear(t.common.anim.playhead), atol=1e-4)
-    back = bpy.data.materials["GP2M Sfondo"].grease_pencil
-    assert np.allclose(tuple(back.fill_color)[:3],
-                       theme.to_linear(t.dopesheet_editor.space.back), atol=1e-4)
-    old = tuple(t.common.anim.playhead)
-    try:
-        t.common.anim.playhead = (0.9, 0.1, 0.5, 1.0)
-        assert theme.apply_to_materials()
-        assert np.allclose(tuple(head.color)[:3], theme.to_linear(t.common.anim.playhead),
-                           atol=1e-4)
-        assert head.color[0] > 0.6 > head.color[1]
-        assert not theme.apply_to_materials()  # nothing changed since
-    finally:
-        t.common.anim.playhead = old
-        theme.apply_to_materials()
+    assert np.allclose(tuple(head.color)[:3], theme.to_linear(theme.hex_srgb("407FB7")),
+                       atol=1e-4)
+    # The window wraps keyboard and grid with the margins of the design.
+    s = comp.gp2m
+    u = board.unit(s)
+    x0, z0, x1, z1 = board.window_box(s)
+    rows, width, top = board.dimensions(s)
+    assert abs(x1 - (width + 21 * u)) < 1e-6 and abs(z1 - (top + 20 * u)) < 1e-6
+    assert abs(board.keyboard_box(s)[2] + 16 * u) < 1e-6
+    # A colour changed by hand comes back (the theme timer keeps the design).
+    material = bpy.data.materials["GP2M Testina"].grease_pencil
+    material.color = (1.0, 0.0, 0.0, 1.0)
+    assert theme.apply_to_materials(force=True)
+    assert np.allclose(tuple(material.color)[:3], theme.to_linear(theme.hex_srgb("407FB7")),
+                       atol=1e-4)
 
 
 def test_rig_handles_change_length_playhead_and_octaves(comp):
@@ -2384,12 +2538,15 @@ def test_rig_handles_change_length_playhead_and_octaves(comp):
     assert rig.apply(comp, rig.OCT_TOP, 2) and (s.octaves, s.extra_keys) == (4, 3)
     assert sub("board").dimensions(s)[0] == 4 * 12 + 3 + 1
     assert rig.apply(comp, rig.OCT_TOP, -3) and (s.octaves, s.extra_keys) == (4, 0)
-    # The handles sit outside the board: right edge, above the keys, below the keys.
+    # The grips stick out of the window: right edge, above and below the keyboard.
     rows, width, top = sub("board").dimensions(s)
-    assert rig.handle_point(comp, rig.LENGTH)[0] == width
-    assert rig.handle_point(comp, rig.OCT_TOP)[1] == top
-    assert rig.handle_point(comp, rig.OCT_BOTTOM)[1] == 0
-    assert rig.handle_point(comp, rig.HEAD, 1.5) == (1.5, top + rig.HEAD_LIFT)
+    x0, z0, x1, z1 = sub("board").window_box(s)
+    kx0, _kz0, kx1, _kz1 = sub("board").keyboard_box(s)
+    assert rig.handle_point(comp, rig.LENGTH) == (x1, (z0 + z1) / 2.0)
+    assert rig.handle_point(comp, rig.OCT_TOP) == ((kx0 + kx1) / 2.0, z1)
+    assert rig.handle_point(comp, rig.OCT_BOTTOM) == ((kx0 + kx1) / 2.0, z0)
+    assert rig.handle_point(comp, rig.HEAD, 1.5) == (1.5, top + rig.head_lift(s))
+    assert rig.handle_point(comp, rig.NAME) == (width / 2.0, z0)
 
 
 def test_rig_gizmos_only_in_object_mode(comp):
@@ -2455,9 +2612,9 @@ def test_rig_handle_selection_and_g(comp):
     # G is bound in Object Mode (before Blender's Move), so with no handle it moves objects.
     items = [item for km, item in rig._keymaps if item.idname == "gp2m.rig_grab"]
     assert items and items[0].type == "G"
-    # Idle handles are muted, not the full white of a hovered one.
+    # Grips: dark tabs with light dots.
     colors = sub("theme").handle_colors(bpy.context)
-    assert sum(colors["idle"]) < sum(colors["hover"]) and colors["rim_idle"][3] < colors["rim"][3]
+    assert sum(colors["tab"]) < sum(colors["grip_dot"])
     rig.select(None, None)
     assert rig.selected() is None
 
@@ -2588,6 +2745,38 @@ def test_meta_clip_end_changes_the_length(comp):
     meta.right_handle = meta.right_handle + int(2 * fps)
     assert seqsync.sync_scene(scene)
     assert abs(comp.gp2m.length - (before + 2.0)) < 1e-3
+
+
+def test_board_follows_the_clip_end_while_it_is_dragged(comp):
+    """Dragging the end of the clip in the Sequencer: the board follows at once; let
+    go the length is counted once; Esc puts it back."""
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    comp.gp2m.follow_scene = False
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
+    engine.regenerate(comp)
+    meta = engine.meta_strip(scene, comp)
+    fps = scene.render.fps / scene.render.fps_base
+    before = comp.gp2m.length
+    meta.right_handle = meta.right_handle + int(fps)
+    seqsync._preview_lengths()  # while dragging
+    assert abs(comp.gp2m.length - (before + 1.0)) < 1e-3
+    meta.right_handle = meta.right_handle + int(fps)
+    seqsync._preview_lengths()
+    assert abs(comp.gp2m.length - (before + 2.0)) < 1e-3
+    assert seqsync.sync_scene(scene)  # let go
+    assert abs(comp.gp2m.length - (before + 2.0)) < 1e-3
+    # Esc: the clip is back where it was, so is the board.
+    engine.arrange(scene)
+    meta = engine.meta_strip(scene, comp)
+    longer = comp.gp2m.length
+    span = tuple(engine.state(comp)["meta_span"])
+    meta.right_handle = meta.right_handle - int(fps)
+    seqsync._preview_lengths()
+    assert abs(comp.gp2m.length - (longer - 1.0)) < 1e-3
+    meta.right_handle = span[1]
+    seqsync.sync_scene(scene)
+    assert abs(comp.gp2m.length - longer) < 1e-3
 
 
 # --- Cases in the Sequencer (cut, duplicate, rename, delete, trim, move) -------------------
@@ -3276,3 +3465,167 @@ def test_redo_of_a_layer_moved_on_the_board_keeps_the_move(comp):
     _undo_to({(comp, '["gp2m_sync"]'): sync})
     assert [layer.name for layer in sub("board").user_layers(gp)] == moved
     assert engine.clip_order(comp)[""] != before  # the clips followed the layers
+
+
+# --- Composizione Bit ----------------------------------------------------------------
+
+@pytest.fixture
+def bit(addon):
+    assert bpy.ops.gp2m.add_composition(kind="BEAT") == {"FINISHED"}
+    obj = bpy.context.view_layer.objects.active
+    yield obj
+    sub("engine")._state.pop(obj.name, None)
+
+
+def _lane_z(obj, lane, where=0.5):
+    return (lane + where) * sub("beat").lane_height(obj.gp2m)
+
+
+def test_bit_composition_has_eight_lanes_of_percussion(bit):
+    beat, board = sub("beat"), sub("board")
+    s = bit.gp2m
+    assert bit.name.startswith("Composizione Ritmica")
+    assert s.kind == "BEAT" and s.lanes == 8 and len(s.lane_drums) == 8
+    drums = beat.lane_drums(s)
+    assert drums[0] == "KICK" and len(set(drums)) == 8
+    assert all(sub("synth").get_instrument(d).percussive for d in drums)
+    # As tall as the three octaves of a note board (630 design px).
+    assert board.dimensions(s)[2] == pytest.approx(36 * s.row_height)
+    gp = _grid(bit)
+    names = {m.name for m in gp.materials}
+    assert {"GP2M Corsia", "GP2M Corsia alterna", "GP2M Bordo corsia",
+            "GP2M Fondo corsie"} <= names
+    assert len(gp.layers["GP2M Tasti"].frames[0].drawing.strokes) == 0  # no piano
+    # 7 borders between the 8 lanes, on the left panel and on the grid, + 2 outlines.
+    assert len(gp.layers["GP2M Righe"].frames[0].drawing.strokes) == 2 * 7 + 2
+    assert len(gp.layers["GP2M Etichette"].frames[0].drawing.strokes) > 8  # the names
+    assert board.board_materials_ok(bit)
+
+
+def test_bit_lane_chooses_the_drum_whatever_the_height(bit):
+    engine, beat = sub("engine"), sub("beat")
+    s = bit.gp2m
+    s.time_grid = "OFF"
+    # Kick at the bottom of its lane, then at the top: the same hit.
+    add_stroke(bit, 0, [(0.5 * s.seconds_width, _lane_z(bit, 0, 0.1)),
+                        (0.6 * s.seconds_width, _lane_z(bit, 0, 0.2))])
+    add_stroke(bit, 0, [(1.5 * s.seconds_width, _lane_z(bit, 0, 0.9)),
+                        (1.6 * s.seconds_width, _lane_z(bit, 0, 0.8))])
+    # A slanted stroke in the snare lane is one snare hit.
+    add_stroke(bit, 0, [(2.5 * s.seconds_width, _lane_z(bit, 1, 0.05)),
+                        (3.5 * s.seconds_width, _lane_z(bit, 1, 0.95))])
+    result = engine.regenerate(bit)
+    hits = sorted((round(n.start, 1), n.instrument, n.pitch) for n in result.notes)
+    assert [h[1] for h in hits] == ["KICK", "KICK", "SNARE"]
+    assert hits[0][2] == hits[1][2]  # the height inside the lane changes nothing
+    # The pen's instrument does not matter: the lane does.
+    s.lane_drums[0].drum = "CLAP"
+    result = engine.regenerate(bit)
+    assert sorted(n.instrument for n in result.notes) == ["CLAP", "CLAP", "SNARE"]
+    assert beat.lane_drums(s)[0] == "CLAP"
+
+
+def test_bit_lanes_grow_and_shrink_without_moving_the_drawing(bit):
+    board, beat = sub("board"), sub("beat")
+    s = bit.gp2m
+    add_stroke(bit, 0, [(1.0, _lane_z(bit, 0)), (1.2, _lane_z(bit, 0))])
+    point = bit.data.layers["Livello 1"].frames[0].drawing.strokes[0].points[0]
+    world = bit.matrix_world @ point.position
+    drums = beat.lane_drums(s)
+    assert board.shift_keys(bit, "BOTTOM", 2) == 2  # two lanes below
+    assert s.lanes == 10
+    after = bit.matrix_world @ bit.data.layers["Livello 1"].frames[0].drawing.strokes[0] \
+        .points[0].position
+    assert (after - world).length < 1e-3  # float32 positions
+    assert beat.lane_drums(s)[2:] == drums  # every lane kept its drum
+    assert board.shift_keys(bit, "BOTTOM", -2) == -2
+    assert beat.lane_drums(s) == drums
+    assert board.shift_keys(bit, "TOP", -3) == -3 and s.lanes == 5
+    assert board.shift_keys(bit, "TOP", 3) == 3
+    assert beat.lane_drums(s) == drums  # hidden lanes come back with their drum
+    assert board.key_steps(s, "TOP", 20) == beat.MAX_LANES - s.lanes
+    assert board.shift_octaves(bit, "TOP", 1) == 1 and s.lanes == 9  # the + button
+
+
+# --- Origin on the C4 dot, tabs behind the window --------------------------------------
+
+def test_origin_is_on_the_c4_dot_and_keys_below_do_not_move_anything(comp):
+    from mathutils import Vector
+    board, engine = sub("board"), sub("engine")
+    s = comp.gp2m
+    assert s.origin_version == board.ORIGIN_VERSION
+    u = board.unit(s)
+    kx0 = board.keyboard_box(s)[0]
+    dot = [(z0 + z1) / 2.0 for z0, z1, midi in board.white_keys(s) if midi == 60][0]
+    assert board.origin(s) == pytest.approx((kx0 + board.DOT_X * u, dot))
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 64))
+    stroke = board.user_layers(comp.data)[0].frames[0].drawing.strokes[0]
+    before_world = comp.matrix_world.copy()
+    before = [tuple(p.position) for p in stroke.points]
+    assert board.shift_keys(comp, "BOTTOM", 5) == 5  # the board grows downwards only
+    assert comp.matrix_world == before_world
+    assert [tuple(p.position) for p in stroke.points] == before
+    assert [n.pitch for n in engine.regenerate(comp).notes] == [64]
+    # The octave of C4 cannot be hidden, from below or from above.
+    assert board.shift_keys(comp, "BOTTOM", -100) == -(60 - 43)
+    assert s.low_note == 60
+    assert board.shift_keys(comp, "TOP", -100) <= 0 and s.low_note + board.span(s) >= 72
+    s.low_note = 72  # the slider too: back to C4
+    assert s.low_note == 60
+    ox, oz = board.origin(s)
+    assert (board.board_matrix(comp) @ Vector((ox, 0.0, oz))
+            - comp.matrix_world.translation).length < 1e-5
+
+
+def test_reading_follows_the_composition_wherever_it_is(comp):
+    engine = sub("engine")
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 67))
+    notes = [(round(n.start, 3), n.pitch) for n in engine.regenerate(comp).notes]
+    comp.location = (12.0, -3.0, 40.0)
+    comp.rotation_euler = (0.4, 0.3, 1.2)
+    bpy.context.view_layer.update()
+    assert [(round(n.start, 3), n.pitch) for n in engine.regenerate(comp).notes] == notes
+
+
+def test_old_composition_takes_the_new_origin_without_moving(comp):
+    board, engine = sub("board"), sub("engine")
+    s = comp.gp2m
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 62))
+    notes = [n.pitch for n in engine.regenerate(comp).notes]
+    # As a file of 0.0.33: origin on the board's corner.
+    ox, oz = board.origin(s)
+    board._move_drawing(comp, ox, oz)
+    s.origin_version = 0
+    bpy.context.view_layer.update()
+    point = board.user_layers(comp.data)[0].frames[0].drawing.strokes[0].points[0]
+    world = comp.matrix_world @ point.position
+    assert [n.pitch for n in engine.regenerate(comp).notes] == notes
+    board.rebuild(comp)
+    bpy.context.view_layer.update()
+    assert s.origin_version == board.ORIGIN_VERSION
+    assert (comp.matrix_world @ point.position - world).length < 1e-3
+    assert [n.pitch for n in engine.regenerate(comp).notes] == notes
+
+
+def test_tabs_are_drawn_behind_the_window_and_the_board_lets_clicks_through(comp):
+    board = sub("board")
+    grid = board.grid_object(comp)
+    assert grid.hide_select  # a click picks the composition (its catch area)
+    names = [layer.name for layer in grid.data.layers]
+    assert names.index("GP2M Linguette") < names.index("GP2M Sfondo")  # under the window
+    tabs = grid.data.layers["GP2M Linguette"].frames[0].drawing
+    assert len(tabs.strokes) == 4 + 3 * 8  # 3 grips with 8 dots, the name's tab
+    catch = comp.data.layers[board.CATCH_LAYER].frames[0].drawing
+    assert len(catch.strokes) == 1
+
+
+def test_percussion_preview_repeats_the_hit(addon):
+    keyboard, synth = sub("keyboard"), sub("synth")
+    assert keyboard.preview_hits(0.3) == (3, 0.3) and keyboard.preview_hits(1.2)[0] == 2
+    assert keyboard.preview_hits(6.0)[0] == 1
+    buffer, seconds = keyboard.hits_buffer("KICK")
+    count, every = keyboard.preview_hits(synth.get_instrument("KICK").length)
+    assert count == 3 and seconds == pytest.approx(len(buffer) / 44100)
+    step = int(every * 44100)
+    for i in range(count):  # a hit at the start of every step
+        assert np.abs(buffer[i * step:i * step + 2000]).max() > 0.1

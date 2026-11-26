@@ -58,12 +58,14 @@ def _copy_drawing(src, dst, remap, transform):
 def _transform(src_comp, dst_comp):
     a, b = src_comp.gp2m, dst_comp.gp2m
 
+    (ax, az), (bx, bz) = board.origin(a), board.origin(b)
+
     def position(data):
         xyz = data.reshape(-1, 3).astype(np.float64)
-        seconds = xyz[:, 0] / max(a.seconds_width, 1e-9)
-        notes = xyz[:, 2] / max(a.row_height, 1e-9) + a.low_note
-        xyz[:, 0] = seconds * b.seconds_width
-        xyz[:, 2] = (notes - b.low_note) * b.row_height
+        seconds = (xyz[:, 0] + ax) / max(a.seconds_width, 1e-9)
+        notes = (xyz[:, 2] + az) / max(a.row_height, 1e-9) + a.low_note
+        xyz[:, 0] = seconds * b.seconds_width - bx
+        xyz[:, 2] = (notes - b.low_note) * b.row_height - bz
         return xyz.astype(np.float32).ravel()
 
     return {"position": position, "radius": b.row_height / max(a.row_height, 1e-9)}

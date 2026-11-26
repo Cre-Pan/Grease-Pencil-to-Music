@@ -12,7 +12,7 @@ import time
 import bpy
 from bpy.app.handlers import persistent
 
-from . import board, engine, feedback, prefs, props
+from . import board, engine, feedback, prefs, props, stroke_mods
 
 _dirty = set()
 _full = set()  # dirty compositions that need every layer rendered again
@@ -101,6 +101,10 @@ def flush(background=False):
             feedback.sync(obj)  # also keeps every modifier off the board
         except Exception as error:
             print(f"[Doodle Music] board update failed: {error!r}")
+        try:
+            stroke_mods.sync(obj)  # the layer modifiers shown on the strokes
+        except Exception as error:
+            print(f"[Doodle Music] stroke modifiers update failed: {error!r}")
         only_active = name not in full and obj.gp2m.auto_active_layer
         if background:
             engine.regenerate_background(obj, only_active=only_active)
@@ -121,12 +125,20 @@ def _modal_running(test):
         for operator in getattr(window, "modal_operators", ()):
             if test(operator.bl_idname):
                 return True
+            # A macro (Shift+D is "Duplicate" + "Move", Alt+D the same) runs as one
+            # modal operator: its steps tell what is going on.
+            for step in getattr(operator, "macros", ()):
+                if test(step.bl_idname):
+                    return True
     return False
 
 
 def transform_running():
-    """True while an interactive transform (G, R, S) is in progress."""
-    return _modal_running(lambda name: name.startswith("TRANSFORM_OT"))
+    """True while an interactive transform (G, R, S, also the move after Shift+D)
+    is in progress."""
+    return _modal_running(lambda name: name.startswith("TRANSFORM_OT")
+                          or name.endswith(("_OT_duplicate_move",
+                                            "_OT_duplicate_move_linked")))
 
 
 BRUSH_OPERATORS = frozenset((
@@ -135,6 +147,23 @@ BRUSH_OPERATORS = frozenset((
     "GREASE_PENCIL_OT_vertex_brush_stroke",
     "GREASE_PENCIL_OT_weight_brush_stroke",
 ))
+
+
+SEQUENCER_TRANSFORMS = frozenset(("TRANSFORM_OT_seq_slide",))
+
+
+def sequencer_transform_running():
+    """True while clips are dragged in the Sequencer (G, or a clip's handle): nothing
+    of the 3D drawings is held, the board may be rebuilt meanwhile."""
+    return _modal_running(lambda name: name in SEQUENCER_TRANSFORMS)
+
+
+def board_transform_running():
+    """A transform that the board must not be rebuilt under (any but the Sequencer's)."""
+    return _modal_running(lambda name: (name.startswith("TRANSFORM_OT")
+                                        and name not in SEQUENCER_TRANSFORMS)
+                          or name.endswith(("_OT_duplicate_move",
+                                            "_OT_duplicate_move_linked")))
 
 
 def brush_running():
@@ -427,6 +456,26 @@ def on_depsgraph_update(_scene, depsgraph):
                 _tick_names[0] = 0.0  # list the compositions again
                 _cleanup_needed[0] = True
                 _ensure_timer()
+                if not bpy.app.timers.is_registered(_new_grids_tick):
+                    bpy.app.timers.register(_new_grids_tick, first_interval=0.0)
+
+
+def _new_grids_tick():
+    """A composition with no board of its own (the copy just made by Shift+D or
+    Alt+D) gets one at once, also while it is still following the mouse: board and
+    handles move with it. Only the grid is built here (a new object, the drawing is
+    left alone); the rest (playhead, sound, clips) follows when the move ends."""
+    if bpy.context.mode != "OBJECT":
+        return None  # never under a transform of points or strokes
+    for obj in compositions():
+        if board.grid_object(obj) is not None or obj.data is None:
+            continue
+        try:
+            board.build_grid(obj, engine.scene_of(obj))
+            board.tag_redraw_views()
+        except Exception as error:
+            print(f"[Doodle Music] grid of a new copy failed: {error!r}")
+    return None
 
 
 def _timing(scene):
@@ -524,6 +573,8 @@ def on_load_post(*_args):
             if item.settings_version < props.SETTINGS_VERSION:
                 props.migrate_layer_settings(item)
         _stack_counts[obj.name] = _stack_count(obj)
+        if obj.gp2m.origin_version < board.ORIGIN_VERSION:
+            board.request_rebuild(obj)  # the origin goes on the dot of C4
         # Sound files live in a temporary folder: recreate them for this session,
         # even when automatic updates are off.
         _mark_full(obj.name)
@@ -655,7 +706,7 @@ def unregister():
             handler_list.remove(func)
     bpy.msgbus.clear_by_owner(_msgbus_owner)
     for timer in (_tick, _resume_playback, _shade_tick, _layer_sync_tick,
-                  board._rebuild_pending, _undo_tick_timer):
+                  board._rebuild_pending, _undo_tick_timer, _new_grids_tick):
         if bpy.app.timers.is_registered(timer):
             bpy.app.timers.unregister(timer)
     engine.stop_background()

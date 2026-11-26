@@ -355,6 +355,111 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.35
+
+Tutto insieme: le novità di 0.0.31, 0.0.32, 0.0.33 e 0.0.34 (qui sotto) e i modificatori sul tratto.
+
+Modificatori sul tratto
+- **I modificatori dei livelli si vedono sul tratto.** Array, Simmetria, Trasponi, Fade e Noise
+  non cambiano più solo il suono: cambia anche il disegno, con gli stessi calcoli. Il Fade
+  assottiglia l'inizio (In), la fine (Out) o tutte e due le punte di ogni tratto (o del loop,
+  con *Su: Loop*); Array mostra le copie, che salgono di grado e si assottigliano con *Smorza*;
+  Simmetria mostra il tratto specchiato nel tempo e/o in altezza (e nasconde l'originale se
+  *Tieni l'originale* è spento); Trasponi sposta il tratto sulle righe della scala; Noise lo fa
+  tremare di altezza, spessore e tempo come lo si sente.
+- I tratti disegnati non cambiano: ogni livello con modificatori accesi riceve un modificatore
+  Geometry Nodes *GP2M Modificatori <livello>* che segue da solo le impostazioni del livello
+  (anche cambiando scala, tonalità, BPM o durata). Spegni il modificatore e il tratto torna come
+  l'hai disegnato. In Edit Mode si modificano i punti originali e si vede il risultato.
+- *Mostra sul tratto* (pannello Modificatori del livello) lascia cambiare solo il suono, come prima.
+- Con *Usa modificatori* acceso i modificatori del livello non vengono applicati due volte.
+
+## 0.0.34
+
+Tavola
+- **Si sposta e si ruota dove vuoi**: un clic sulla tavola prende la composizione (prima prendeva
+  la griglia, che è bloccata: trascinando con Tweak o con lo strumento Move non si muoveva nulla e
+  sembrava tornare indietro). La lettura usa le coordinate locali della composizione: spostata o
+  ruotata suona uguale, e il disegno resta sul suo piano anche ruotata.
+- **Origine sul pallino del Do centrale (C4)**: l'origine della composizione è al centro del
+  pallino. L'ottava di C4 resta sempre (maniglie, pulsanti e *Nota più bassa* non la tolgono).
+  Nella Composizione Ritmica l'origine è nello stesso punto, nella corsia in basso (che resta).
+- **Il grip in basso fa crescere solo verso il basso**: la composizione e il disegno non si
+  spostano, scende solo il bordo della tavola. Le composizioni salvate prima prendono la nuova
+  origine all'apertura, senza muoversi.
+- **Linguette dietro la finestra**: i tre grip e la linguetta del nome sono disegnati sotto la
+  finestra (escono da dietro), grandi come nel Figma e non si ingrandiscono più allontanandosi.
+  Sotto il mouse si accendono i puntini. Il nome rimpicciolisce se non ci sta.
+- **Selezione**: selezionata, diventa arancione solo il bordo della finestra (non cursore, tratti
+  o linguette).
+- *Shift+A → Doodle Music → Composizione Ritmica* (era "Composizione Bit").
+
+Anteprima degli strumenti
+- Le percussioni nelle tendine si sentono ripetute: tre volte i colpi corti, due quelli lunghi,
+  una volta gong e piatti.
+
+## 0.0.33
+
+Composizione Ritmica (dal Figma "Composizione Bit")
+- **Nuovo tipo di composizione**: *Shift+A → Doodle Music → Composizione Ritmica*. Stessa finestra,
+  maniglie, cursore blu e anteprima della tavola delle note; al posto di tastiera e righe ci sono
+  **8 corsie**, una percussione ciascuna (dal basso: Cassa, Rullante, Battimani, Tom, Rimshot,
+  Charleston, Charleston aperto, Piatto).
+- **La corsia sceglie il suono**: ogni tratto suona la percussione della corsia dove sta (la sua
+  altezza mediana), qualunque sia la penna. Più in alto o più in basso dentro la corsia non cambia
+  nulla: un tratto storto resta un solo colpo. Spessore e volume della penna danno la forza del colpo.
+- **Bordi come nel disegno**: corsie #272727 / #242424 a righe alterne (la prima in alto è la più
+  chiara), bordo di 2 px #1C1C1C tra una corsia e l'altra, pannelli #1B1B1B tagliati dagli angoli
+  arrotondati (raggio 25) e contorno di 2 px #323232 sopra tutto, a sinistra e sulla griglia.
+- **Nomi delle corsie** sul pannello di sinistra (si spengono con *Nomi delle corsie → Nessuna*).
+- **Corsie dalle maniglie**: la maniglia in alto e quella in basso aggiungono o tolgono una corsia
+  alla volta (da 1 a 16), il disegno non si sposta e ogni corsia tiene la sua percussione.
+- Nel pannello *Tavola* si sceglie la percussione di ogni corsia; *Suona mentre disegni* fa
+  sentire la percussione della corsia dove inizi il tratto.
+
+## 0.0.32
+
+**Tavola nuova, dal disegno in Figma.** La tavola ora è una finestra scura (#181818, bordo #252525,
+angoli arrotondati) con dentro la tastiera e la griglia, anche loro arrotondate:
+- **Tastiera:** tasti bianchi chiari (#DBDBDB) come su un pianoforte vero (Do, Re, Mi si dividono
+  5 semitoni, Fa, Sol, La, Si 7), tasti neri scuri arrotondati verso i bianchi, allineati alle loro
+  righe; un pallino su ogni Do (con *Etichette tasti: Solo Do*; le altre scelte scrivono ancora i
+  nomi delle note).
+- **Griglia:** righe dei tasti bianchi #2D2D2D e dei neri #262626, una linea dove due bianchi si
+  toccano (Mi-Fa, Si-Do), linee dei secondi e dei battiti appena accennate. Fuori dal Preview
+  Range la griglia è scurita al 65%. Le etichette dei secondi sopra la griglia non ci sono più.
+- **Cursore blu** (#407FB7) con il numero del fotogramma nel riquadro sopra la finestra.
+- **Maniglie a linguetta:** sopra e sotto la tastiera (tasti) e a destra (durata), linguette scure
+  con otto puntini che escono dalla finestra; sotto il mouse i puntini si accendono, trascinandole
+  diventano blu. Sono grandi quanto la tavola, ma da lontano non diventano più piccole di così.
+- **Nome:** sotto la finestra una linguetta con il nome della composizione (si allarga per i nomi
+  lunghi).
+- I colori sono quelli del disegno, qualunque sia il tema di Blender.
+
+Ogni composizione si porta dietro il suo cursore, anche la copia appena fatta con Shift+D; i
+numeri del cursore stanno piatti sulla tavola; la tavola segue il mouse mentre ne trascini
+altezza e larghezza, anche dalla fine della clip nel Sequencer.
+
+- **Shift+D:** la copia ha subito la sua tavola, il suo cursore e le sue maniglie e li porta con
+  sé mentre la sposti; resta dove la lasci. Prima, durante lo spostamento dopo Shift+D, il
+  l'add-on non si accorgeva che stavi ancora trascinando: dopo un attimo rifaceva tavola e
+  suono della copia sotto il mouse (lo stesso lavoro che con G aspetta la fine del movimento).
+  Ora con Shift+D e Alt+D aspetta come con G; solo la tavola della copia viene creata subito.
+- **Numeri del cursore piatti:** il numero del fotogramma nel riquadro del cursore, e il valore
+  che compare trascinando le maniglie (durata, tasti), sono disegnati sul piano della
+  composizione come il cursore: guardando di lato si inclinano con il riquadro invece di girarsi
+  verso la vista.
+- **Tasti in basso:** trascinando la maniglia sotto la tastiera le righe compaiono (o spariscono)
+  sotto mentre trascini; la cima della tavola e il disegno restano fermi. Prima la tavola si
+  aggiornava solo al rilascio e per un attimo veniva disegnata con le righe vecchie sulla nuova
+  origine, così saltava su o giù. Esc o clic destro la rimettono com'era.
+- **In tempo reale:** altezza (tasti sopra e sotto) e larghezza (durata) della tavola seguono
+  il mouse mentre trascini le maniglie; il suono si rifà al rilascio.
+- **Fine della clip nel Sequencer:** trascinando la maniglia destra della clip di una
+  composizione la tavola si allunga o si accorcia mentre trascini (prima solo al rilascio,
+  quando cambiava anche l'End della scena). Al rilascio l'End della scena segue come prima; con
+  Esc tavola e clip tornano come erano.
+
 ## 0.0.31
 
 Icone degli strumenti più chiare e minimal, strumenti in nuove categorie, due tendine per

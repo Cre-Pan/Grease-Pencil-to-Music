@@ -48,8 +48,12 @@ def fit_board(comp, tracks, bpm):
         s.length = min(max(math.ceil(max(ends)), 1.0), 300.0)
     if pitches:
         low = max(12, (min(pitches) // 12) * 12)
-        s.low_note = min(low, 96)
-        s.octaves = int(min(max(math.ceil((max(pitches) + 1 - s.low_note) / 12), 1), 7))
+        octaves = int(min(max(math.ceil((max(pitches) + 1 - low) / 12), 1), 7))
+        if s.origin_version >= board.ORIGIN_VERSION:  # C4 to C5 always on the board
+            board.fit_range(s, low, octaves * 12)
+        else:
+            s.low_note = min(low, 96)
+            s.octaves = octaves
 
 
 def import_midi(context, path, comp=None, fit=True):
@@ -65,7 +69,7 @@ def import_midi(context, path, comp=None, fit=True):
         fit_board(comp, tracks, bpm)
     s = comp.gp2m
     h, sw = s.row_height, s.seconds_width
-    top = s.low_note + s.octaves * 12
+    top = s.low_note + board.span(s)
     gp = comp.data
     frame = min(1, context.scene.frame_start)
     base_radius = h * 0.22
@@ -87,7 +91,7 @@ def import_midi(context, path, comp=None, fit=True):
             z = np.full(count, (row_pitch - s.low_note + 0.5) * h)
             radius = np.full(count, base_radius * (0.35 + 0.65 * velocity / 127.0))
             strokes.append((x, z, radius, _material_slot(comp, ident, layer.name)))
-        board.add_strokes_bulk(drawing, strokes)
+        board.add_strokes_bulk(drawing, strokes, board.local_offset(s))
     if tracks:  # the empty "Livello 1..3" of a new composition are not needed
         for name in empty_defaults:
             layer = gp.layers.get(name)

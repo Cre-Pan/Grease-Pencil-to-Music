@@ -10,7 +10,7 @@
 
 import bpy
 
-from . import board, engine, families, help, music, prefs, props, reader
+from . import beat, board, engine, families, help, music, prefs, props, reader
 from .icons import family_icon, icon, icon_kwargs, instrument_icon
 from .operators import active_composition
 
@@ -630,6 +630,8 @@ def _layer_panel(base, prefix, layer_parent, key, label, parent, draw, toggle, h
             draw_layer_instruments(self.layout, comp, layer, settings)
         elif children:
             _group_summary(self.layout, settings, children)
+            if key == "mods":
+                self.layout.prop(comp.gp2m, "show_layer_mods")
         else:
             self.layout.active = getattr(settings, toggle) if toggle else True
             draw(self.layout, settings)
@@ -715,20 +717,36 @@ def draw_board(layout, s):
     col = layout.column(heading="Ripeti", align=True)
     col.prop(s, "loop")
     col.prop(s, "use_sections")
-    col = layout.column(align=True)
-    low = s.low_note
-    col.prop(s, "low_note", text=f"Nota più bassa ({music.note_name(low, style)})")
-    col.prop(s, "octaves", text=f"Ottave (fino a {music.note_name(low + board.span(s), style)})")
-    if s.extra_keys:
-        col.prop(s, "extra_keys")
-    _octave_buttons(col)
-    col.prop(s, "key_labels")
+    if beat.is_beat(s):
+        draw_lanes(layout, s)
+    else:
+        col = layout.column(align=True)
+        low = s.low_note
+        col.prop(s, "low_note", text=f"Nota più bassa ({music.note_name(low, style)})")
+        col.prop(s, "octaves",
+                 text=f"Ottave (fino a {music.note_name(low + board.span(s), style)})")
+        if s.extra_keys:
+            col.prop(s, "extra_keys")
+        _octave_buttons(col)
+        col.prop(s, "key_labels")
     layout.prop(s, "grid_opacity", slider=True)
     col = layout.column(align=True)
     col.prop(s, "row_height")
     col.prop(s, "seconds_width")
     layout.prop(s, "show_beats")
     layout.operator("gp2m.rebuild_board", icon="GRID")
+
+
+def draw_lanes(layout, s):
+    """Bit: the lanes from the top, each with its percussion."""
+    col = layout.column(align=True)
+    col.prop(s, "lanes")
+    _octave_buttons(col)
+    col = layout.column(align=True)
+    for lane in reversed(range(beat.lane_count(s))):
+        if lane < len(s.lane_drums):
+            col.prop(s.lane_drums[lane], "drum", text=f"Corsia {beat.lane_count(s) - lane}")
+    layout.prop(s, "key_labels", text="Nomi delle corsie")
 
 
 def _octave_buttons(layout):
@@ -745,9 +763,10 @@ def _octave_buttons(layout):
 def draw_reading(layout, s):
     layout.use_property_split = True
     layout.use_property_decorate = False
-    col = layout.column(align=True)
-    col.prop(s, "scale")
-    col.prop(s, "root")
+    if not beat.is_beat(s):  # Bit: the lanes choose the sound, not the height
+        col = layout.column(align=True)
+        col.prop(s, "scale")
+        col.prop(s, "root")
     col = layout.column(align=True)
     col.prop(s, "time_grid")
     sub = col.column(align=True)
@@ -1103,6 +1122,8 @@ class VIEW3D_MT_gp2m_add(bpy.types.Menu):
     def draw(self, _context):
         self.layout.operator("gp2m.add_composition", text="Composizione Musicale",
                              icon="OUTLINER_OB_GREASEPENCIL")
+        self.layout.operator("gp2m.add_composition", text="Composizione Ritmica",
+                             icon="SEQ_HISTOGRAM").kind = "BEAT"
         self.layout.operator("gp2m.import_midi", text="Composizione da MIDI…", icon="IMPORT")
         self.layout.operator("gp2m.import_web", text="Composizione dalla web app…", icon="URL")
 

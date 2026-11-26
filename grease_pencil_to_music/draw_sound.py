@@ -162,6 +162,7 @@ def _play(obj, tip, event):
     if z is None:
         return
     s = obj.gp2m
+    z += board.origin(s)[1]  # object local -> board (the origin is on C4)
     slots = obj.material_slots
     material = (slots[material_index].material
                 if 0 <= material_index < len(slots) else None)
@@ -170,6 +171,17 @@ def _play(obj, tip, event):
         return
     settings = props.find_layer_settings(obj.data, layer.name)
     mode = settings.mode if settings is not None else "QUANTIZED"
+    from . import beat
+    if beat.is_beat(s):  # Bit: the drum of the lane where the stroke begins
+        lane = beat.lane_at(s, z)
+        if event == "start" and lane is not None:
+            _silence()
+            ident = beat.lane_drum(s, lane)
+            volume = (tip_volume(radius, interpret.full_radius(s.row_height),
+                                 prefs.get_mapping())
+                      * reader.material_gain(material) * max(layer.opacity, 0.0))
+            keyboard.note_on(ident, beat.lane_pitch(ident), int(s.sample_rate), volume)
+        return
     pitch = tip_pitch(z, engine.board_spec(s), mode, board.span(s))
     if event == "start":
         _silence()

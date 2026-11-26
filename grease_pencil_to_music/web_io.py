@@ -73,15 +73,16 @@ def _write_attribute(drawing, name, kind, domain, start, values, default):
     attr.data.foreach_set("value", current)
 
 
-def _add_strokes(drawing, strokes, slots):
-    """Add ``web_project.Stroke`` objects with all their attributes."""
+def _add_strokes(drawing, strokes, slots, offset=(0.0, 0.0)):
+    """Add ``web_project.Stroke`` objects with all their attributes (``offset``: board
+    coordinates -> the composition's own)."""
     if not strokes:
         return
     first_curve = len(drawing.strokes)
     position = drawing.attributes.get("position")
     first_point = len(position.data) if position is not None and first_curve else 0
     board.add_strokes_bulk(drawing, [(s.x, s.z, s.radius, slot)
-                                     for s, slot in zip(strokes, slots)])
+                                     for s, slot in zip(strokes, slots)], offset)
     counts = [len(s.x) for s in strokes]
     opacity = np.concatenate([np.full(n, s.opacity, np.float32) for s, n in zip(strokes, counts)])
     _write_attribute(drawing, "opacity", "FLOAT", "POINT", first_point, opacity, 1.0)
@@ -124,7 +125,8 @@ def import_project(context, path):
     defaults = [layer.name for layer in board.user_layers(comp.data)]
     s = comp.gp2m
     b = project.board
-    s.bpm, s.length, s.low_note, s.octaves = b.bpm, b.length, b.low_note, b.octaves
+    s.bpm, s.length = b.bpm, b.length
+    board.fit_range(s, b.low_note, b.octaves * 12)  # C4 to C5 stays on the board
     s.scale = project.scale
     s.root = music.NOTE_NAMES[project.root]
     s.time_grid = project.grid
@@ -138,6 +140,9 @@ def import_project(context, path):
     frame = min(1, context.scene.frame_start)
     cache = {}
     created = []
+    # The strokes come on the web board (its lowest note); the board here may start lower.
+    ox, oz = board.local_offset(s)
+    offset = (ox, oz + (b.low_note - s.low_note) * s.row_height)
     for layer in project.layers:
         gp_layer = gp.layers.new(_unique_layer(gp, layer.name))
         gp_layer.use_lights = False
@@ -145,7 +150,7 @@ def import_project(context, path):
         drawing = gp_layer.frames.new(frame).drawing
         slots = [_slot_for(comp, gp_layer.name, st.instrument, sounds, cache)
                  for st in layer.strokes]
-        _add_strokes(drawing, layer.strokes, slots)
+        _add_strokes(drawing, layer.strokes, slots, offset)
         created.append((gp_layer, layer))
     for name in defaults:  # the empty layers of a new composition
         old = gp.layers.get(name)
@@ -209,6 +214,7 @@ def _sound_data(material):
 def collect_project(comp, scene):
     """The composition as a :class:`web_project.Project` (keyframe at the scene start)."""
     s = comp.gp2m
+    origin_x, origin_z = board.origin(s)  # object local -> board coordinates
     b = web_project.Board(bpm=s.bpm, length=s.length, low_note=s.low_note, octaves=s.octaves,
                           row_height=s.row_height, seconds_width=s.seconds_width)
     project = web_project.Project(name=comp.name, board=b, scale=s.scale,
@@ -263,7 +269,8 @@ def collect_project(comp, scene):
                             root=material.gp2m_sample_root, data=data))
                 ident = key or "EPIANO"
             out.strokes.append(web_project.Stroke(
-                x=position[a:c, 0].astype(np.float64), z=position[a:c, 2].astype(np.float64),
+                x=position[a:c, 0].astype(np.float64) + origin_x,
+                z=position[a:c, 2].astype(np.float64) + origin_z,
                 radius=radius[a:c].astype(np.float64),
                 opacity=float(np.mean(opacity[a:c])) if c > a else 1.0,
                 times=None if times is None else times[a:c].astype(np.float64),
