@@ -21,6 +21,19 @@ def _sound_changed(self, _context):
         handlers.mark_data_dirty(owner)
 
 
+def _mods_changed(self, context):
+    """A layer modifier changed: the sound, and at once the strokes that show it."""
+    _sound_changed(self, context)
+    from . import handlers, stroke_mods
+    owner = self.id_data
+    for obj in handlers.compositions():
+        if obj == owner or obj.data == owner:
+            try:
+                stroke_mods.sync(obj)
+            except Exception as error:
+                print(f"[Doodle Music] stroke modifiers update failed: {error!r}")
+
+
 def _board_changed(self, _context):
     from . import board, handlers
     obj = self.id_data
@@ -429,80 +442,80 @@ class GP2M_LayerSettings(bpy.types.PropertyGroup):
                             "dopo l'altra")
 
     # Non-destructive modifiers, as in the web app (layer_mods.py).
-    use_array: BoolProperty(name="Array", default=False, update=_sound_changed,
+    use_array: BoolProperty(name="Array", default=False, update=_mods_changed,
                             description="Ripete il tratto ogni tot battiti, anche salendo "
                             "di grado")
     array_count: IntProperty(name="Copie", default=4, min=1, max=64, soft_max=16,
-                             update=_sound_changed, description="Quante volte c'è il tratto "
+                             update=_mods_changed, description="Quante volte c'è il tratto "
                              "(1 = solo l'originale)")
-    array_fill: BoolProperty(name="Riempi il loop", default=False, update=_sound_changed,
+    array_fill: BoolProperty(name="Riempi il loop", default=False, update=_mods_changed,
                              description="Tante copie quante ne stanno fino alla fine del loop")
     array_beats: FloatProperty(name="Ogni (battiti)", default=1.0, min=-64.0, max=64.0,
-                               soft_min=0.0, soft_max=16.0, step=25, update=_sound_changed,
+                               soft_min=0.0, soft_max=16.0, step=25, update=_mods_changed,
                                description="Battiti tra una copia e la successiva")
     array_pitch: IntProperty(name="Sali di", default=0, min=-24, max=24,
-                             update=_sound_changed,
+                             update=_mods_changed,
                              description="Ogni copia sale (o scende) di tanto rispetto "
                              "alla precedente")
     array_unit: EnumProperty(name="Unità", items=PITCH_UNITS, default="SCALE",
-                             update=_sound_changed)
+                             update=_mods_changed)
     array_decay: FloatProperty(name="Smorza", default=0.0, min=0.0, max=0.95,
-                               subtype="FACTOR", update=_sound_changed,
+                               subtype="FACTOR", update=_mods_changed,
                                description="Ogni copia è più piano della precedente (eco "
                                "disegnato)")
 
-    use_mirror: BoolProperty(name="Simmetria", default=False, update=_sound_changed,
+    use_mirror: BoolProperty(name="Simmetria", default=False, update=_mods_changed,
                              description="Specchia nel tempo (retrogrado) o in altezza "
                              "(inversione)")
-    mirror_time: BoolProperty(name="Nel tempo", default=True, update=_sound_changed,
+    mirror_time: BoolProperty(name="Nel tempo", default=True, update=_mods_changed,
                               description="Retrogrado: il tratto suona al contrario")
-    mirror_pitch: BoolProperty(name="In altezza", default=False, update=_sound_changed,
+    mirror_pitch: BoolProperty(name="In altezza", default=False, update=_mods_changed,
                                description="Inversione: le note acute diventano gravi")
-    mirror_keep: BoolProperty(name="Tieni l'originale", default=True, update=_sound_changed,
+    mirror_keep: BoolProperty(name="Tieni l'originale", default=True, update=_mods_changed,
                               description="Suona anche il tratto non specchiato")
     mirror_time_center: FloatProperty(name="Centro nel tempo", default=0.5, min=0.0, max=1.0,
-                                      subtype="FACTOR", update=_sound_changed,
+                                      subtype="FACTOR", update=_mods_changed,
                                       description="Dove sta lo specchio, dall'inizio "
                                       "(0) alla fine (1) del loop")
     mirror_pitch_center: FloatProperty(name="Centro in altezza", default=0.5, min=0.0,
-                                       max=1.0, subtype="FACTOR", update=_sound_changed,
+                                       max=1.0, subtype="FACTOR", update=_mods_changed,
                                        description="Dove sta lo specchio, dal fondo (0) "
                                        "alla cima (1) della tavola")
 
-    use_transpose: BoolProperty(name="Trasponi", default=False, update=_sound_changed,
+    use_transpose: BoolProperty(name="Trasponi", default=False, update=_mods_changed,
                                 description="Sposta tutto in alto o in basso")
-    transpose_steps: IntProperty(name="Di", default=2, min=-36, max=36, update=_sound_changed)
+    transpose_steps: IntProperty(name="Di", default=2, min=-36, max=36, update=_mods_changed)
     transpose_unit: EnumProperty(name="Unità", items=PITCH_UNITS, default="SCALE",
-                                 update=_sound_changed)
+                                 update=_mods_changed)
 
-    use_fade: BoolProperty(name="Fade", default=False, update=_sound_changed,
+    use_fade: BoolProperty(name="Fade", default=False, update=_mods_changed,
                            description="Il tratto parte o finisce sottile: il volume "
                            "cresce o cala")
     fade_direction: EnumProperty(name="Direzione", items=FADE_DIRECTIONS, default="IN",
-                                 update=_sound_changed)
+                                 update=_mods_changed)
     fade_scope: EnumProperty(name="Su", items=FADE_SCOPES, default="STROKE",
-                             update=_sound_changed)
+                             update=_mods_changed)
     fade_length: FloatProperty(name="Lunghezza", default=0.5, min=0.02, max=1.0,
-                               subtype="FACTOR", update=_sound_changed,
+                               subtype="FACTOR", update=_mods_changed,
                                description="Quanta parte del tratto (o del loop) dura il fade")
     fade_minimum: FloatProperty(name="Volume minimo", default=0.05, min=0.0, max=1.0,
-                                subtype="FACTOR", update=_sound_changed)
+                                subtype="FACTOR", update=_mods_changed)
 
-    use_noise: BoolProperty(name="Noise", default=False, update=_sound_changed,
+    use_noise: BoolProperty(name="Noise", default=False, update=_mods_changed,
                             description="Piccole imperfezioni casuali di altezza, volume e "
                             "tempo, come il modificatore Noise di Blender")
     noise_pitch: FloatProperty(name="Altezza (semitoni)", default=0.15, min=0.0, max=12.0,
-                               soft_max=2.0, update=_sound_changed)
+                               soft_max=2.0, update=_mods_changed)
     noise_width: FloatProperty(name="Volume", default=0.25, min=0.0, max=1.0,
-                               subtype="FACTOR", update=_sound_changed,
+                               subtype="FACTOR", update=_mods_changed,
                                description="Quanto cambia lo spessore (il volume)")
     noise_time: FloatProperty(name="Tempo (battiti)", default=0.04, min=0.0, max=1.0,
-                              step=1, update=_sound_changed,
+                              step=1, update=_mods_changed,
                               description="Ogni tratto anticipa o ritarda al massimo di tanto")
     noise_scale: FloatProperty(name="Frequenza", default=6.0, min=0.1, max=32.0,
-                               update=_sound_changed,
+                               update=_mods_changed,
                                description="Oscillazioni per battito: più alta = più fitta")
-    noise_seed: IntProperty(name="Seme", default=1, min=0, max=9999, update=_sound_changed,
+    noise_seed: IntProperty(name="Seme", default=1, min=0, max=9999, update=_mods_changed,
                             description="Un altro seme dà altre imperfezioni")
 
 
@@ -657,6 +670,11 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
     swing: FloatProperty(name="Swing", default=0.0, min=0.0, max=0.5, subtype="FACTOR",
                          description="Ritarda le note sui contrattempi della griglia ritmica",
                          update=_sound_changed)
+    show_layer_mods: BoolProperty(name="Mostra sul tratto", default=True,
+                                  update=_mods_changed,
+                                  description="I modificatori dei livelli (Array, Simmetria, "
+                                  "Trasponi, Fade, Noise) cambiano anche il disegno, non solo "
+                                  "il suono. I tratti restano come disegnati")
     use_modifiers: BoolProperty(name="Usa modificatori", default=False,
                                 description="Legge i tratti dopo modificatori come Noise o "
                                 "Array (dati valutati) invece dei tratti originali",

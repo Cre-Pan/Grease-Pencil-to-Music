@@ -199,10 +199,20 @@ def section_frames(obj, scene):
     return sorted(frames)[:MAX_SECTIONS]
 
 
+def _shown_on_strokes(obj):
+    """Layers whose modifiers are already in the evaluated strokes (stroke_mods)."""
+    from . import stroke_mods
+    return {m.name[len(stroke_mods.MODIFIER_PREFIX):] for m in obj.modifiers
+            if stroke_mods.is_stroke_modifier(m) and m.show_viewport}
+
+
 def _layer_inputs(obj, reads):
     seconds_per_beat = 60.0 / max(obj.gp2m.bpm, 1e-6)
     bit = beat.is_beat(obj.gp2m)
     rows = 128 if bit else board.dimensions(obj.gp2m)[0]
+    # Reading the evaluated strokes ("Usa modificatori"), the layer modifiers shown on
+    # the strokes are already in them: they must not be applied a second time.
+    evaluated = _shown_on_strokes(obj) if obj.gp2m.use_modifiers else set()
     layers = []
     for read in reads:
         settings = props.find_layer_settings(obj.data, read.name)
@@ -219,7 +229,7 @@ def _layer_inputs(obj, reads):
             canon_delay=settings.canon_delay * seconds_per_beat if settings else 0.0,
             canon_transpose=settings.canon_transpose if settings else 0,
             harmony=settings.harmony if settings else "OFF",
-            mods=layer_mods(settings),
+            mods=layer_mods(None if read.name in evaluated else settings),
             rows=rows,
         ))
     return layers

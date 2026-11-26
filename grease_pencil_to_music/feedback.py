@@ -18,7 +18,10 @@ def is_feedback_modifier(modifier):
 
 
 def user_modifiers(obj):
-    return [m for m in obj.modifiers if not is_feedback_modifier(m)]
+    """The modifiers the user added (not the ones of the add-on)."""
+    from .stroke_mods import is_stroke_modifier
+    return [m for m in obj.modifiers
+            if not is_feedback_modifier(m) and not is_stroke_modifier(m)]
 
 
 def radius_divisors(obj):

@@ -2094,6 +2094,89 @@ def test_layer_modifiers_effects_and_copy_paste(comp):
         assert item.use_canon and item.name == layer.name
 
 
+def _evaluated_strokes(comp, layer_name):
+    """(x, z, radius) of the strokes Blender shows on a layer (after the modifiers)."""
+    bpy.context.view_layer.update()
+    gp = comp.evaluated_get(bpy.context.evaluated_depsgraph_get()).data
+    drawing = gp.layers[layer_name].current_frame().drawing
+    out = []
+    for stroke in drawing.strokes:
+        out.append((np.array([p.position[0] for p in stroke.points]),
+                    np.array([p.position[2] for p in stroke.points]),
+                    np.array([p.radius for p in stroke.points])))
+    return out
+
+
+def test_layer_modifiers_show_on_the_strokes(comp):
+    """0.0.34: the layer modifiers change the drawing too, as they change the sound."""
+    props, engine, reader, lm = sub("props"), sub("engine"), sub("reader"), sub("layer_mods")
+    stroke_mods, feedback, mixer = sub("stroke_mods"), sub("feedback"), sub("mixer")
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60), radius=0.03)
+    first, second = [layer.name for layer in sub("board").user_layers(comp.data)[:2]]
+    add_stroke(comp, 1, line(comp, 0.5, 1.5, 64), radius=0.03)
+    settings = props.find_layer_settings(comp.data, first)
+    notes = lambda: engine.render_composition(comp, bpy.context.scene)[0].notes  # noqa: E731
+    plain = len(notes())
+
+    # Fade in: the start of the stroke is thin, the end as drawn; the stroke stays as is.
+    settings.use_fade = True
+    name = stroke_mods.MODIFIER_PREFIX + first
+    modifier = comp.modifiers.get(name)
+    assert modifier is not None and modifier.type == "NODES"
+    assert not feedback.user_modifiers(comp) and not reader.has_unsupported_stack(comp)
+    (x, z, r), = _evaluated_strokes(comp, first)
+    assert r[0] == pytest.approx(0.03 * settings.fade_minimum, rel=1e-3)
+    assert r[-1] == pytest.approx(0.03, rel=1e-3)
+    original = sub("board").user_layers(comp.data)[0].frames[0].drawing.strokes[0]
+    assert all(p.radius == pytest.approx(0.03) for p in original.points)
+    (x2, z2, r2), = _evaluated_strokes(comp, second)
+    assert np.allclose(r2, 0.03)  # the other layer is left alone
+    settings.fade_direction = "OUT"
+    (x, z, r), = _evaluated_strokes(comp, first)
+    assert r[0] == pytest.approx(0.03, rel=1e-3) and r[-1] < 0.01
+
+    # Everything on: the drawing is what the sound reads, stroke by stroke.
+    settings.use_array = True
+    settings.array_count = 3
+    settings.array_pitch = 2
+    settings.use_mirror = True
+    settings.mirror_pitch = True
+    settings.use_transpose = True
+    read = reader.read_composition(comp, bpy.context.scene.frame_start)
+    read = next(item for item in read if item.name == first)
+    spec = engine.board_spec(comp.gp2m)
+    expected = lm.apply(read.strokes, engine.layer_mods(settings),
+                        mixer.mods_board(spec, sub("board").dimensions(comp.gp2m)[0]))
+    shown = _evaluated_strokes(comp, first)
+    assert len(shown) == len(expected) == 3 * 4  # time, pitch, both and the original
+    key = lambda s: (round(float(s[0][0]), 4), round(float(s[1][0]), 4))  # noqa: E731
+    for got, want in zip(sorted(shown, key=key),
+                         sorted([(e.x, e.z, e.radius) for e in expected], key=key)):
+        for a, b in zip(got, want):
+            assert np.allclose(a, b, atol=1e-4)
+
+    # Reading the evaluated strokes ("Usa modificatori") does not apply them twice.
+    heard = len(notes())
+    assert heard > plain
+    comp.gp2m.use_modifiers = True
+    assert len(notes()) == heard
+    comp.gp2m.use_modifiers = False
+
+    # "Mostra sul tratto" off: only the sound changes; on again: shown again.
+    comp.gp2m.show_layer_mods = False
+    assert comp.modifiers.get(name) is None
+    assert len(_evaluated_strokes(comp, first)) == 1
+    assert len(notes()) == heard
+    comp.gp2m.show_layer_mods = True
+    assert comp.modifiers.get(name) is not None
+
+    # Every modifier off: no node modifier left.
+    for prop in props.LAYER_MOD_PROPS:
+        setattr(settings, prop, False)
+    assert comp.modifiers.get(name) is None
+    assert len(_evaluated_strokes(comp, first)) == 1
+
+
 def test_instrument_icons_are_loaded(addon):
     icons, families = sub("icons"), sub("families")
     for name in families.icon_names():  # (icon ids stay 0 without a GPU, as here)

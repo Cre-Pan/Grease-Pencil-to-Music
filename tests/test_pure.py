@@ -1401,3 +1401,50 @@ def test_bit_reads_each_stroke_on_its_lane_drum():
     assert round(tom.z[0] / 0.1 - 0.5) == beat.LANE_PITCH["TOM"]
     assert all(beat.default_drum(0, used=beat.DEFAULT_DRUMS[:i]) == beat.DEFAULT_DRUMS[i]
                for i in range(len(beat.DEFAULT_DRUMS)))
+
+
+# --- Layer modifiers on the strokes (stroke_mods: the formulas of the nodes) ---------------
+
+from grease_pencil_to_music import stroke_mods  # noqa: E402
+
+
+def _node_shift(pitch, steps, scale, root):
+    """The diatonic shift as the node group computes it, from the tables."""
+    degrees, intervals, n = stroke_mods.degree_tables(scale, root)
+    base = np.round(pitch)
+    rel = base - root
+    pc = np.mod(rel, 12)
+    octave = (rel - pc) / 12
+    d = np.array([degrees[int(c)] for c in pc]) + steps
+    q = np.floor(d / n)
+    r = (d - q * n).astype(int)
+    note = root + 12 * (octave + q) + np.array([intervals[i] for i in r])
+    return pitch + (note - base)
+
+
+@pytest.mark.parametrize("scale", [ident for ident, _l, _i in music.SCALES])
+def test_stroke_mods_tables_match_the_diatonic_shift(scale):
+    pitch = np.arange(30.0, 90.0, 0.25)
+    for root in range(12):
+        for steps in (-9, -3, -1, 1, 2, 5, 11):
+            expected = music.diatonic_shift(pitch, steps, scale, root)
+            assert np.allclose(_node_shift(pitch, steps, scale, root), expected), \
+                (scale, root, steps)
+
+
+def test_stroke_mods_inputs_of_a_stack():
+    off = stroke_mods.node_inputs(layer_mods.Stack(), MB)
+    assert off["Array Count"] == 1 and off["Mirror Count"] == 1 and off["Mirror 0"] == 0
+    assert off["Transpose"] == 0 and not off["Fade"] and not off["Noise"]
+    stack = layer_mods.Stack(
+        array=layer_mods.Array(count=3, beats=2.0, decay=0.2),
+        mirror=layer_mods.Mirror(time=True, pitch=True, keep=False),
+        fade=layer_mods.Fade(direction="OUT"))
+    values = stroke_mods.node_inputs(stack, MB)
+    assert values["Array Count"] == 3 and values["Array Step"] == pytest.approx(2 * MB.beat)
+    assert values["Array Decay"] == pytest.approx(0.8)
+    assert values["Mirror Count"] == 3
+    assert [values[f"Mirror {i}"] for i in range(3)] == [1, 2, 3]
+    assert values["Fade"] and values["Fade Out"] and not values["Fade In"]
+    names = {name for name, _kind in stroke_mods.INPUTS}
+    assert set(values) == names
