@@ -510,6 +510,7 @@ def draw_layer_reading(layout, s):
         sub.prop(s, "glide")
     if s.mode in ("LEGATO", "OPTICAL_LEGATO"):
         sub.prop(s, "legato_gap", text="Unisci entro (battiti)")
+        sub.prop(s, "legato_strength", slider=True)
     col.prop(s, "fill_mode")
     col.prop(s, "harmony")
 
@@ -834,6 +835,7 @@ def draw_reading(layout, s):
     sub = col.column(align=True)
     sub.active = s.time_grid != "OFF"
     sub.prop(s, "swing", slider=True)
+    sub.prop(s, "quantize_strength", slider=True)
     col.prop(s, "min_note")
     layout.prop(s, "use_modifiers", text="Modificatori di Blender")
 

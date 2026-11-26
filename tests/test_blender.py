@@ -3959,3 +3959,23 @@ def test_attack_on_time_preference_reaches_the_sound(addon):
         assert not prefs.get_mapping().on_time
     finally:
         preferences.attack_on_time = True
+
+
+
+def test_quantize_and_legato_strength_reach_the_sound(comp):
+    """0.0.44: Forza quantizzazione (composition) and Forza del legato (layer)."""
+    engine, props = sub("engine"), sub("props")
+    add_stroke(comp, 0, line(comp, 1.0, 1.5, 60))
+    add_stroke(comp, 0, line(comp, 1.5, 2.0, 64))
+    settings = props.find_layer_settings(comp.data, "Livello 1")
+    settings.mode = "LEGATO"
+    assert engine.board_spec(comp.gp2m).quantize == 1.0
+    tied = engine.regenerate(comp)
+    comp.gp2m.quantize_strength = 0.5
+    assert engine.board_spec(comp.gp2m).quantize == 0.5
+    settings.legato_strength = 0.0
+    detached = engine.regenerate(comp)
+    assert detached.key != tied.key and detached.voice_count == tied.voice_count == 1
+    log = []
+    sub("ui").draw_layer_reading(MockLayout(log), settings)
+    assert ("prop", "legato_strength") in log

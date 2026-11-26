@@ -80,6 +80,7 @@ class BoardSpec:
     time_grid: str = "OFF"
     min_note: float = 0.06
     swing: float = 0.0
+    quantize: float = 1.0  # strength: 1 = on the grid, 0.5 = half way, 0 = as drawn
 
 
 @dataclass
@@ -111,6 +112,7 @@ class Voice:
     band_low: np.ndarray = None  # noise band edges (MIDI pitch), NOISE clusters only
     band_high: np.ndarray = None
     glide: bool = False  # the pitch moves freely: struck sounds keep a sustained tone
+    joints: tuple = ()  # seconds: where a new note starts inside the voice, with no attack
 
 
 LEGATO_MODES = ("LEGATO", "OPTICAL_LEGATO")
@@ -290,12 +292,16 @@ def _make_voice(start, duration, pitch, channels, i0, i1, attack, instrument):
     )
 
 
-def _snap(seconds, step, swing):
-    """Snap to the rhythmic grid; odd grid steps are delayed by the swing."""
+def _snap(seconds, step, swing, strength=1.0):
+    """Snap to the rhythmic grid; odd grid steps are delayed by the swing. With a
+    ``strength`` below 1 the time moves only that part of the way to the grid (as the
+    quantize strength of a sequencer): the hand's timing is kept a little."""
     if not step:
         return float(seconds)
     k = int(round(seconds / step))
-    return k * step + (swing * step if k % 2 else 0.0)
+    grid = k * step + (swing * step if k % 2 else 0.0)
+    strength = min(max(float(strength), 0.0), 1.0)
+    return float(seconds) + (grid - float(seconds)) * strength
 
 
 def _velocity(amp):
@@ -376,8 +382,9 @@ def _interpret_fill(stroke, spec, mapping, fill_mode, radius_ref):
         for i0, i1, on in _segments(mask.astype(np.int64), min_len):
             if not on:
                 continue
-            start = _snap(float(tc[i0]), step, spec.swing)
-            end = _snap(float(tc[i1]) if i1 < count else t1, step, spec.swing)
+            start = _snap(float(tc[i0]), step, spec.swing, spec.quantize)
+            end = _snap(float(tc[i1]) if i1 < count else t1, step, spec.swing,
+                        spec.quantize)
             if end <= start or start >= spec.length:
                 continue
             voice = _make_voice(start, end - start, pitch, channels, i0, max(i1, i0 + 1),
@@ -467,7 +474,8 @@ def _legato(stroke, result, pitches, tc, count, t1c, channels, spec, step, attac
         start = float(tc[i0])
         end = float(tc[i1]) if i1 < count else t1c
         if step:
-            start, end = _snap(start, step, spec.swing), _snap(end, step, spec.swing)
+            start = _snap(start, step, spec.swing, spec.quantize)
+            end = _snap(end, step, spec.swing, spec.quantize)
         if end <= start or start >= spec.length:
             continue
         notes.append((start, min(end, spec.length), pitch))
@@ -483,7 +491,8 @@ def _legato(stroke, result, pitches, tc, count, t1c, channels, spec, step, attac
     curves = {key: np.interp(times, tc, values) for key, values in channels.items()}
     voice = Voice(start=v_start, duration=v_end - v_start, pitch=pitch_curve, amp=curves["amp"],
                   vibrato=curves["vibrato"], brightness=curves["brightness"], pan=curves["pan"],
-                  attack=attack, instrument=stroke.instrument, glide=True)
+                  attack=attack, instrument=stroke.instrument, glide=True,
+                  joints=tuple(start for start, _end, _pitch in notes[1:]))
     result.voices.append(voice)
     for start, end, pitch in notes:
         mask = (times >= start) & (times <= end)
@@ -546,7 +555,7 @@ def _interpret_run(stroke, x, arrays, spec, mapping, mode, radius_ref, glide=0.1
 
     # A dot or a vertical tap: one short note at the median height.
     if t1 - t0 < max(spec.min_note, 1.0 / CONTROL_RATE):
-        start = _snap(max(t0, 0.0), step, spec.swing)
+        start = _snap(max(t0, 0.0), step, spec.swing, spec.quantize)
         if start >= spec.length:
             return result
         duration = step if step else SHORT_NOTE
@@ -590,8 +599,8 @@ def _interpret_run(stroke, x, arrays, spec, mapping, mode, radius_ref, glide=0.1
     for i0, i1, pitch in _segments(pitches, min_len):
         start, end = float(tc[i0]), note_end(i1)
         if step:
-            start = _snap(start, step, spec.swing)
-            end = _snap(end, step, spec.swing)
+            start = _snap(start, step, spec.swing, spec.quantize)
+            end = _snap(end, step, spec.swing, spec.quantize)
             if end <= start:
                 continue
         if start >= spec.length:
@@ -604,7 +613,7 @@ def _interpret_run(stroke, x, arrays, spec, mapping, mode, radius_ref, glide=0.1
     # Grid snapping may have swallowed every note of a very short stroke.
     if step and not result.voices:
         pitch = int(pitches[0])
-        start = _snap(t0c, step, spec.swing)
+        start = _snap(t0c, step, spec.swing, spec.quantize)
         if start < spec.length:
             voice = _make_voice(start, step, pitch, channels, 0, count, attack,
                                 stroke.instrument)
@@ -710,10 +719,33 @@ def join_voices(voices, glide=None):
             continue
         curve[~known] = np.interp(times[~known], times[known], curve[known])
     first = voices[0]
+    joints = sorted({float(t) for voice in voices for t in voice.joints}
+                    | {float(voice.start) for voice in voices[1:]})
     return Voice(start=float(start), duration=float(end - start), pitch=curves["pitch"],
                  amp=curves["amp"], vibrato=curves["vibrato"],
                  brightness=curves["brightness"], pan=curves["pan"], attack=first.attack,
-                 instrument=first.instrument, glide=True)
+                 instrument=first.instrument, glide=True, joints=tuple(joints))
+
+
+ARTICULATION_DIP = 0.06  # seconds of fade before a new note when the legato is not full
+ARTICULATION_RISE = 0.03  # seconds of its new attack
+
+
+def articulate(voice, strength):
+    """The "Forza del legato": at 1 the notes of a legato voice follow one another with
+    no new attack; lower, the sound dips before each new note and attacks it again
+    (at 0 it fades out completely, like a new note). The pitch still glides."""
+    strength = min(max(float(strength), 0.0), 1.0)
+    if strength >= 1.0 or not voice.joints or len(voice.amp) < 2:
+        return voice
+    times = voice.start + np.arange(len(voice.amp)) / CONTROL_RATE
+    dip = np.zeros(len(times))
+    for joint in voice.joints:
+        before = np.clip(1.0 - (joint - times) / ARTICULATION_DIP, 0.0, 1.0) * (times <= joint)
+        after = np.clip(1.0 - (times - joint) / ARTICULATION_RISE, 0.0, 1.0) * (times > joint)
+        dip = np.maximum(dip, before + after)
+    gain = 1.0 - (1.0 - strength) * dip
+    return replace(voice, amp=np.asarray(voice.amp, dtype=np.float64) * gain)
 
 
 def legato_join(voices, gap, joinable=lambda voice: True, glide=None):

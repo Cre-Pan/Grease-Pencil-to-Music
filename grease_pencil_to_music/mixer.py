@@ -112,6 +112,7 @@ class LayerInput:
     canon_delay: float = 2.0  # seconds between two entries
     canon_transpose: int = 0  # semitones from one voice to the next
     legato_gap: float = 1.0  # beats: in the legato modes closer strokes become one voice
+    legato_strength: float = 1.0  # 1 = no new attack between legato notes, 0 = every note
     harmony: str = "OFF"  # music.HARMONIES: voices added in the scale
     mods: layer_mods.Stack = field(default_factory=layer_mods.Stack)  # modifiers that are on
     rows: int = 36  # semitones on the board (the centre of Simmetria in pitch)
@@ -415,9 +416,11 @@ def _render_legato(layer, spec, mapping, radius_ref, sample_rate, context_key, t
         # Quantizzata legata stays on the scale in the pauses (it slides only into the
         # next note); Ottica legata draws a straight line through them.
         hold = layer.glide if layer.mode == "LEGATO" else None
+        strength = round(float(layer.legato_strength), 4)
         for members, voice in interpret.legato_join(voices, gap, _joinable, hold):
+            voice = interpret.articulate(voice, strength)
             vkey = hashlib.blake2b(repr(([tags[i] for i in members], round(gap, 6),
-                                         layer.harmony, hold)).encode(),
+                                         layer.harmony, hold, strength)).encode(),
                                    digest_size=16).hexdigest()
             value = _stroke_cache.get(vkey)
             if value is None:
@@ -530,7 +533,8 @@ def render_layers(layers, spec, mapping, sample_rate=44100, loop=True, master_vo
 
         layer_key = hashlib.blake2b(
             repr((stroke_keys, astuple(layer.fx), spec.bpm, sample_rate, room,
-                  round(layer.legato_gap, 4) if legato else None, layer.harmony)).encode(),
+                  (round(layer.legato_gap, 4), round(layer.legato_strength, 4)) if legato
+                  else None, layer.harmony)).encode(),
             digest_size=16).hexdigest()
         buffer = _layer_cache.get(layer_key)
         if buffer is None:

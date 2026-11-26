@@ -358,6 +358,16 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.44
+
+- **Forza quantizzazione** (*Ritmica*, sotto lo Swing): quanto le note si spostano verso la
+  griglia. 100% come prima (sulla griglia), 50% a metà strada, 0% dove le hai disegnate: il
+  tempo della mano resta, solo un po' più ordinato. Vale per Quantizzata e Quantizzata legata.
+- **Forza del legato** (lettura *QL* e *OL* del livello): 100% come prima, le note si legano
+  senza riattacco; più bassa, il suono cala un attimo prima di ogni nota nuova e la riattacca
+  (0% = ogni nota staccata), mentre l'altezza continua a scivolare. Vale dentro un tratto e
+  tra i tratti uniti.
+
 ## 0.0.43
 
 - **Il suono arriva quando la testina tocca il tratto.** Archi, violino, violoncello, flauto,

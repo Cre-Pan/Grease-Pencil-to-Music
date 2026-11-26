@@ -1623,3 +1623,73 @@ def test_quantized_legato_layers_hold_in_the_pause():
                        interpret.Mapping(), SR, loop=False)
     assert res.voice_count == 1
     assert _energy_at(res.audio, 60, 1.05, 1.3) > 5 * _energy_at(res.audio, 64, 1.05, 1.3)
+
+
+# --- 0.0.44: quantize strength and legato strength --------------------------------------
+
+def test_quantize_strength_moves_notes_part_of_the_way():
+    spec = interpret.BoardSpec(bpm=120.0, time_grid="1_4")  # a grid step of 0.5 s
+    line = stroke((1.2, 1.8), (C4_ROW, C4_ROW))
+    starts = {}
+    for strength in (1.0, 0.5, 0.0):
+        res = interpret.interpret_stroke(line, replace(spec, quantize=strength),
+                                         interpret.Mapping(), "QUANTIZED")
+        starts[strength] = res.notes[0].start
+    assert starts[1.0] == pytest.approx(1.0)  # on the grid
+    assert starts[0.0] == pytest.approx(1.2, abs=0.01)  # as drawn
+    assert starts[0.5] == pytest.approx(1.1, abs=0.01)  # half way
+    assert interpret._snap(1.2, 0.5, 0.0) == pytest.approx(1.0)  # default: full strength
+
+
+def test_quantize_strength_reaches_the_legato_notes():
+    spec = interpret.BoardSpec(bpm=120.0, time_grid="1_4")
+    rising = stroke((0.1, 2.1), (C4_ROW, C4_ROW + 1))  # into C#4 at t = 1.1
+    full = interpret.interpret_stroke(rising, spec, interpret.Mapping(), "LEGATO")
+    half = interpret.interpret_stroke(rising, replace(spec, quantize=0.5), interpret.Mapping(),
+                                      "LEGATO")
+    assert full.notes[1].start == pytest.approx(1.0)
+    assert half.notes[1].start == pytest.approx(1.05, abs=0.01)
+
+
+def test_legato_voices_know_where_their_notes_start():
+    rising = stroke((0.0, 2.0), (C4_ROW, C4_ROW + 2))  # C, C#, D
+    res = interpret.interpret_stroke(rising, free_spec(), interpret.Mapping(), "LEGATO")
+    v = res.voices[0]
+    assert v.joints == pytest.approx(tuple(n.start for n in res.notes[1:]))
+    spec, mapping = free_spec(), interpret.Mapping()
+    a = interpret.interpret_stroke(stroke((1.0, 1.5), (C4_ROW, C4_ROW)), spec, mapping,
+                                   "LEGATO").voices[0]
+    b = interpret.interpret_stroke(stroke((1.7, 2.2), (C4_ROW + 4, C4_ROW + 4)), spec, mapping,
+                                   "LEGATO").voices[0]
+    joined = interpret.legato_join([a, b], gap=1.0)[0][1]
+    assert joined.joints == pytest.approx((b.start,))
+
+
+def test_legato_strength_reattacks_each_note():
+    rising = stroke((0.0, 2.0), (C4_ROW, C4_ROW + 1))
+    v = interpret.interpret_stroke(rising, free_spec(), interpret.Mapping(), "LEGATO").voices[0]
+    joint = v.joints[0]
+    times = v.start + np.arange(len(v.amp)) / interpret.CONTROL_RATE
+    at = lambda voice, t: float(np.interp(t, times, voice.amp))  # noqa: E731
+    assert interpret.articulate(v, 1.0) is v  # full legato: unchanged
+    half, none = interpret.articulate(v, 0.5), interpret.articulate(v, 0.0)
+    assert at(none, joint) == pytest.approx(0.0, abs=1e-6)  # a new attack
+    assert at(half, joint) == pytest.approx(0.5 * at(v, joint), rel=0.02)
+    for voice in (half, none):  # away from the joint nothing changes
+        assert at(voice, joint - 0.3) == pytest.approx(at(v, joint - 0.3))
+        assert at(voice, joint + 0.3) == pytest.approx(at(v, joint + 0.3))
+    assert np.allclose(none.pitch, v.pitch)  # the pitch still glides
+
+
+def test_legato_strength_in_the_mix():
+    spec = free_spec(length=4.0, bpm=120.0)
+    strokes = [stroke((0.5, 1.0), (C4_ROW, C4_ROW)), stroke((1.0, 1.5), (C4_ROW + 4, C4_ROW + 4))]
+    def render(strength):
+        return mixer.render([mixer.LayerInput("L", strokes, mode="LEGATO",
+                                              legato_strength=strength)], spec,
+                            interpret.Mapping(), SR, loop=False, master_fx=None)
+    tied, detached = render(1.0), render(0.0)
+    assert tied.voice_count == detached.voice_count == 1 and tied.key != detached.key
+    rms = lambda a, t: float(np.sqrt(np.mean(a[int((t - 0.01) * SR):int((t + 0.01) * SR)] ** 2)))  # noqa: E731
+    assert rms(detached.audio, 1.0) < 0.3 * rms(tied.audio, 1.0)
+    assert rms(detached.audio, 1.25) == pytest.approx(rms(tied.audio, 1.25), rel=0.1)
