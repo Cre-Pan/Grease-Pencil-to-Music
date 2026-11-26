@@ -75,16 +75,6 @@ ALL = MELODIC + PERCUSSION + OWN
 # Blender's own icons for the instruments that are not an instrument.
 BUILTIN_ICONS = {"SAMPLE": "FILE_SOUND", "LIBRARY": "ASSET_MANAGER"}
 
-# Instruments with an icon of their own (add-on idents); the rest use their family's.
-_OWN_ICONS = {
-    "organ": ("ORGAN", "S_PIPEORGAN"),
-    "bell": ("BELL", "S_TUBULAR"),
-    "harp": ("S_HARP",),
-    "pad": ("PAD",),
-    "square": ("SQUARE",),
-}
-_ICON_OF = {ident: name for name, idents in _OWN_ICONS.items() for ident in idents}
-
 
 def idents(family):
     """Add-on idents of a family: the recorded ones that are bundled, then the synths."""
@@ -108,16 +98,15 @@ def family_of(ident):
 
 
 def icon_name(ident):
-    """Name of the add-on icon of an instrument ('' for Blender's own icons)."""
+    """Name of the add-on icon of an instrument: its category's ('' for Blender's own
+    icons). The instruments themselves have no icon of their own."""
     if ident in BUILTIN_ICONS:
         return ""
-    if ident in _ICON_OF:
-        return _ICON_OF[ident]
     family = family_of(ident)
     return family.icon if family is not None else ""
 
 
 def icon_names():
     """Every instrument icon name used (one PNG each)."""
-    names = {f.icon for f in ALL if f.icon} | set(_OWN_ICONS)
+    names = {f.icon for f in ALL if f.icon}
     return tuple(sorted(names))

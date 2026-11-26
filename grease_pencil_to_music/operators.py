@@ -324,7 +324,9 @@ class GP2M_OT_add_instrument(bpy.types.Operator):
     @classmethod
     def description(cls, _context, properties):
         _preview(properties.instrument)
-        return cls.__doc__
+        inst = synth.INSTRUMENT_BY_ID.get(properties.instrument)
+        return (inst.description if inst is not None and inst.description else None) \
+            or cls.__doc__
 
     @classmethod
     def poll(cls, context):
@@ -359,7 +361,9 @@ class GP2M_OT_set_instrument(bpy.types.Operator):
     @classmethod
     def description(cls, _context, properties):
         _preview(properties.instrument)
-        return cls.__doc__
+        inst = synth.INSTRUMENT_BY_ID.get(properties.instrument)
+        return (inst.description if inst is not None and inst.description else None) \
+            or cls.__doc__
 
     @classmethod
     def poll(cls, context):

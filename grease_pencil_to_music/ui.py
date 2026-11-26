@@ -25,13 +25,12 @@ def _instrument_button(layout, context, ident, target, text=None, kwargs=None):
         return
     given = kwargs
     if target is None:
-        kwargs = icon_kwargs(*instrument_icon(ident))
+        kwargs = {}  # only the categories have icons
         material, layer = None, getattr(context, "gp2m_layer", None)
     else:
         _comp, index, material, layer = target
         current = material.gp2m_instrument if material is not None else None
-        kwargs = ({"icon": "CHECKMARK"} if ident == current
-                  else icon_kwargs(*instrument_icon(ident)))
+        kwargs = {"icon": "CHECKMARK"} if ident == current else {}
     if given is not None:
         kwargs = given
     text = inst.label if text is None else text

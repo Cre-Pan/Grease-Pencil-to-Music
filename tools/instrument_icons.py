@@ -276,9 +276,10 @@ def found(color):
 
 
 
+# One icon per category (see grease_pencil_to_music/families.py). organ, bell, harp (a lyre),
+# pad and square are drawn too, but not used: the instruments have no icon of their own.
 ICONS = {
-    "keys": keys, "organ": organ, "mallets": mallets, "bell": bell, "violin": violin,
-    "guitar": guitar, "harp": harp, "wind": wind, "trumpet": trumpet, "choir": choir,
-    "pad": pad, "saw": saw, "square": square, "snare": snare,
-    "cymbal": cymbal, "found": found,
+    "keys": keys, "mallets": mallets, "violin": violin, "guitar": guitar, "wind": wind,
+    "trumpet": trumpet, "choir": choir, "saw": saw, "snare": snare, "cymbal": cymbal,
+    "found": found,
 }

@@ -365,8 +365,9 @@ sceglierli e l'anteprima del suono.
   paletta, inclinata al contrario degli archi), arpa (ora una lira), pad (tre note lunghe tenute),
   dente di sega e onda quadra (meno onde, senza la linea sotto), percussioni (bacchette incrociate
   sul tamburo).
-- **Un'icona per categoria:** fiati (una folata di vento), ottoni (una tromba minimal), piatti e
-  strumenti concreti (una bottiglia). Da 34 icone a 16.
+- **Icone solo per le categorie:** i singoli strumenti non hanno più un'icona. Fiati (una folata
+  di vento), ottoni (una tromba minimal), piatti e strumenti concreti (una bottiglia) hanno la loro.
+  Da 34 icone a 11.
 - **Categorie nuove:** il sassofono è negli ottoni; Batteria, Tamburi, Legni e blocchi e Fruscii
   diventano **Percussioni**; hi-hat, crash, piatti, gong, campane nepalesi, sonagli, albero di
   campanelli, tamburello e freno sono nei **Piatti**; triangolo, campanaccio e agogo nelle
@@ -376,7 +377,8 @@ sceglierli e l'anteprima del suono.
   quella categoria; il pennello rende attivo lo strumento per disegnare. Le stesse due tendine
   sono nel pannello *Strumento musicale* del materiale.
 - **Anteprima:** nei menu degli strumenti, fermandoti con il mouse su una voce senti una nota di
-  quello strumento (parte con il suggerimento, dopo circa mezzo secondo). Si spegne in
+  quello strumento (parte con il suggerimento, dopo circa mezzo secondo, che ora descrive lo
+  strumento). Si spegne in
   *Preferenze → Anteprima degli strumenti*.
 
 ## 0.0.30
