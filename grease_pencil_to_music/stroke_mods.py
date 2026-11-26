@@ -531,3 +531,59 @@ def sync(obj):
         obj.update_tag()  # inputs written as ID properties: evaluate again
     return changed
 
+
+
+# --- Applying a modifier (it becomes part of the strokes) ----------------------------------
+
+# The modifiers of a layer: (Stack field, its switch, the prefix of its settings).
+KINDS = {
+    "ARRAY": ("array", "use_array", "array_"),
+    "MIRROR": ("mirror", "use_mirror", "mirror_"),
+    "TRANSPOSE": ("transpose", "use_transpose", "transpose_"),
+    "FADE": ("fade", "use_fade", "fade_"),
+    "NOISE": ("noise", "use_noise", "noise_"),
+}
+BAKE_NAME = "GP2M Applica"
+
+
+def only(stack, kind):
+    """A :class:`layer_mods.Stack` with only the ``kind`` modifier of ``stack``."""
+    field = KINDS[kind][0]
+    return lm.Stack(**{field: getattr(stack, field)})
+
+
+def bake(obj, layer_name, stack, context):
+    """Change the strokes of a layer as ``stack`` would (on every keyframe), for good.
+
+    The same node group that shows the modifiers runs once more as a modifier of its
+    own, and Blender applies it: the copies of Array become strokes of the layer, the
+    thin ends of Fade the radius of their points... Returns True if it worked."""
+    import bpy
+    from . import board, mixer, engine
+    tree = node_group()
+    identifiers = {item.name: item.identifier for item in tree.interface.items_tree
+                   if item.item_type == "SOCKET" and item.in_out == "INPUT"}
+    spec = engine.board_spec(obj.gp2m)
+    mods_board = mixer.mods_board(spec, board.dimensions(obj.gp2m)[0])
+    modifier = obj.modifiers.new(BAKE_NAME, "NODES")
+    modifier.node_group = tree
+    obj.modifiers.move(list(obj.modifiers).index(modifier), 0)
+    values = {"Layer": layer_name, **node_inputs(stack, mods_board, board.origin(obj.gp2m))}
+    for key, value in values.items():
+        _set_input(modifier, identifiers, key, value)
+    name = modifier.name
+    mode = obj.mode
+    try:
+        with context.temp_override(object=obj, active_object=obj,
+                                   selected_objects=[obj], selected_editable_objects=[obj]):
+            if mode != "OBJECT":
+                bpy.ops.object.mode_set(mode="OBJECT")
+            result = bpy.ops.object.modifier_apply(modifier=name, all_keyframes=True,
+                                                   report=False)
+            if mode != "OBJECT":
+                bpy.ops.object.mode_set(mode=mode)
+    finally:
+        leftover = obj.modifiers.get(name)
+        if leftover is not None:
+            obj.modifiers.remove(leftover)
+    return result == {"FINISHED"}

@@ -602,6 +602,20 @@ LAYER_PANELS = (
 )
 
 
+# The modifier panels and the kind the Copia / Incolla / Applica buttons act on.
+MOD_KINDS = {"mod_array": "ARRAY", "mod_mirror": "MIRROR", "mod_transpose": "TRANSPOSE",
+             "mod_fade": "FADE", "mod_noise": "NOISE"}
+
+
+def draw_mod_actions(layout, kind):
+    """Copia, Incolla, Applica under the settings of a modifier (as in Blender's menu
+    of a modifier)."""
+    row = layout.row(align=True)
+    row.operator("gp2m.mod_copy", text="Copia", icon="COPYDOWN").kind = kind
+    row.operator("gp2m.mod_paste", text="Incolla", icon="PASTEDOWN").kind = kind
+    row.operator("gp2m.mod_apply", text="Applica", icon="CHECKMARK").kind = kind
+
+
 def _group_summary(layout, settings, keys):
     """The body of "Modificatori" / "Effetti": how many are on, or a hint."""
     on = [label for key, label, _p, _d, toggle, _h in LAYER_PANELS
@@ -636,8 +650,11 @@ def _layer_panel(base, prefix, layer_parent, key, label, parent, draw, toggle, h
             if key == "mods":
                 self.layout.prop(comp.gp2m, "show_layer_mods")
         else:
-            self.layout.active = getattr(settings, toggle) if toggle else True
-            draw(self.layout, settings)
+            body = self.layout.column()
+            body.active = getattr(settings, toggle) if toggle else True
+            draw(body, settings)
+            if key in MOD_KINDS:
+                draw_mod_actions(self.layout, MOD_KINDS[key])
 
     attrs = {"bl_idname": idname, "bl_label": label, "bl_parent_id": parent_id,
              "bl_options": set() if key == "instruments" else {"DEFAULT_CLOSED"},
