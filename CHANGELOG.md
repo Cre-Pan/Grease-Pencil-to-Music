@@ -355,6 +355,18 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.31
+
+Icone degli strumenti più chiare e minimal.
+
+- **Ridisegnate:** pianoforte (tre tasti bianchi divisi e due neri), percussioni intonate (barre
+  viste dall'alto e una bacchetta), campana, archi (violino con archetto), chitarra (la paletta,
+  inclinata al contrario degli archi), arpa (ora una lira), pad (tre note lunghe tenute), dente di
+  sega e onda quadra (meno onde, senza la linea sotto), batteria (bacchette incrociate sul tamburo).
+- **Fiati:** un'icona sola, una folata di vento, per flauti, flauto dolce, ocarina, clarinetto,
+  oboe, fagotto e armonica.
+- **Ottoni:** un'icona sola, una tromba minimal, per tromba, trombone, corno, tuba e sassofono.
+
 ## 0.0.30
 
 Ctrl+Z e Ctrl+Shift+Z provati azione per azione in Blender 5.3 (tasti e mouse veri): crea

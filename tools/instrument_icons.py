@@ -76,10 +76,16 @@ def _wave(y, amp, x0=6, x1=58, phase=0.0, steps=40):
 # --- Melodic ---------------------------------------------------------------------------------
 
 def keys(color):
+    """Three white keys, divided, and the two black keys between them (cut out)."""
     p = Pen(color)
-    p.rect(6, 12, 58, 52, r=5, t="s")
-    for x in (19, 32, 45):
-        p.rect(x - 4.5, 12, x + 4.5, 36, r=2)
+    gap = 3
+    w = (58 - 6 - gap * 2) / 3
+    for i in range(3):
+        x = 6 + i * (w + gap)
+        p.rect(x, 8, x + w, 56, r=3)
+    for i in (1, 2):
+        m = 6 + i * w + (i - 0.5) * gap
+        p.rect(m - 5.5, 4, m + 5.5, 35, r=2, t="x")
     return p.done()
 
 
@@ -92,104 +98,106 @@ def organ(color):
 
 
 def mallets(color):
+    """Bars seen from above, shorter and shorter, and a mallet striking them."""
     p = Pen(color)
-    for i, x in enumerate((8, 20, 32)):
-        h = 20 - i * 5
-        p.rect(x - 4.5, 30 - h, x + 4.5, 30 + h, r=2.5, t="s")
-    p.stick(30, 58, 52, 26, 5)
-    p.circle(53, 22, 8)
+    for y, (a, b) in ((8, (6, 58)), (22, (11, 53)), (36, (16, 48))):
+        p.rect(a, y, b, y + 9, r=2, t="s")
+    p.stick(14, 58, 34, 34, 7, t="x")
+    p.stick(14, 58, 34, 34, 4.5)
+    p.circle(38, 29, 9, t="x")
+    p.circle(38, 29, 7)
     return p.done()
 
 
 def bell(color):
     p = Pen(color)
-    p.poly([(22, 14), (42, 14), (46, 36), (56, 48), (8, 48), (18, 36)])
-    p.circle(32, 16, 10)
-    p.circle(32, 54, 6, t="s")
+    p.circle(32, 22, 13)
+    p.poly([(19, 22), (45, 22), (52, 46), (12, 46)])
+    p.rect(8, 42, 56, 49, r=3.5)
+    p.circle(32, 55, 5.5, t="s")
     return p.done()
 
 
 def violin(color):
+    """A violin with its bow across."""
     p = Pen(color)
-    p.rect(29, 2, 35, 30, r=3, t="s")
-    p.ellipse(19, 18, 45, 40)
-    p.ellipse(15, 34, 49, 62)
+    p.ellipse(19, 30, 45, 56)
+    p.ellipse(22, 14, 42, 34)
+    p.circle(19, 33, 4, t="x")
+    p.circle(45, 33, 4, t="x")
+    p.rect(30, 2, 34, 22, r=2)
+    p.circle(32, 4, 3)
+    p.stick(4, 46, 60, 28, 7.5, t="x")
+    p.stick(4, 46, 60, 28, 4.5, t="s")
     return p.done()
 
 
 def guitar(color):
+    """The head of a guitar, three pegs a side, leaning the other way from the violin."""
     p = Pen(color)
-    p.rect(29, 0, 35, 30, r=3, t="s")
-    p.ellipse(18, 20, 46, 42)
-    p.ellipse(13, 34, 51, 63)
-    p.circle(32, 40, 5.5, t="s")
-    return p.done(angle=-38)
+    p.rect(22, 4, 42, 42, r=10)
+    p.rect(27, 40, 37, 62, t="s")
+    for y in (12, 22, 32):
+        p.circle(16, y, 3.8)
+        p.circle(48, y, 3.8)
+    return p.done(angle=30)
 
 
 def harp(color):
+    """A lyre: the harps, and every plucked instrument that is not a guitar."""
     p = Pen(color)
-    for x in (22, 30, 38, 46):
-        p.stick(x, 16, x, 62 - x * 0.98, 3.5, t="s")
-    p.path([(10, 58), (10, 10), (56, 12), (12, 58)], 6)
+    p.arc(12, -8, 52, 58, 0, 180, 5)
+    p.stick(14.5, 25, 13, 10, 5)
+    p.stick(49.5, 25, 51, 10, 5)
+    p.stick(14, 16, 50, 16, 4.5)
+    for x in (26, 32, 38):
+        p.stick(x, 17, x, 54 if x == 32 else 52, 2.5, t="s")
     return p.done()
 
 
-def clarinet(color):
+def _gust(x0, y, x1, r, up, turn=250, steps=40):
+    """A line of wind: straight, then a round hook up or down."""
+    points = [(x0, y), (x1, y)]
+    cy = y - r if up else y + r
+    for i in range(1, steps + 1):
+        a = math.radians(90 - turn * i / steps if up else -90 + turn * i / steps)
+        points.append((x1 + r * math.cos(a), cy + r * math.sin(a)))
+    return points
+
+
+def wind(color):
+    """A gust of wind: every woodwind (flutes, reeds, ocarina, harmonica)."""
     p = Pen(color)
-    p.poly([(26, 46), (38, 46), (46, 62), (18, 62)], t="s")
-    p.rect(27.5, 2, 36.5, 48, r=3)
-    return p.done(angle=-40)
-
-
-def flute(color):
-    p = Pen(color)
-    p.rect(27, 1, 37, 63, r=5)
-    for y in (24, 34, 44):
-        p.circle(32, y, 2.6, t="s")
-    return p.done(angle=-45)
-
-
-def ocarina(color):
-    p = Pen(color)
-    p.ellipse(4, 16, 52, 52)
-    p.poly([(42, 22), (60, 12), (62, 22), (50, 34)])
-    for cx, cy in ((18, 34), (28, 30), (38, 34)):
-        p.circle(cx, cy, 3.5, t="s")
+    p.path(_gust(8, 24, 40, 8, up=True), 5)
+    p.path(_gust(8, 34, 48, 9, up=False), 5)
+    p.path(_gust(8, 44, 26, 7, up=False), 5)
     return p.done()
 
 
-def sax(color):
-    p = Pen(color)
-    p.path([(22, 12), (25, 5), (36, 3)], 4.5, t="s")
-    p.stick(22, 14, 22, 44, 10)
-    p.arc(12, 30, 48, 60, 0, 180, 10)
-    p.stick(43, 46, 43, 26, 10)
-    p.poly([(37, 28), (49, 28), (56, 14), (30, 14)])
-    return p.done()
 
 
-def harmonica(color):
-    p = Pen(color)
-    p.rect(3, 20, 61, 44, r=6)
-    for x in range(10, 58, 9):
-        p.rect(x - 2.5, 28, x + 2.5, 36, r=1.5, t="s")
-    return p.done()
+
+
+def _flare(p, x0, x1, cy, h0, h1, steps=24):
+    top, bottom = [], []
+    for i in range(steps + 1):
+        f = i / steps
+        h = h0 + (h1 - h0) * f ** 2.4
+        x = x0 + (x1 - x0) * f
+        top.append((x, cy - h))
+        bottom.append((x, cy + h))
+    p.poly(top + bottom[::-1])
 
 
 def trumpet(color):
+    """A trumpet: every brass instrument (and the saxophone)."""
     p = Pen(color)
-    for x in (18, 27, 36):
-        p.rect(x - 3, 18, x + 3, 34, r=1.5, t="s")
-    p.rect(2, 34, 46, 40, r=2)
-    p.poly([(42, 34), (62, 18), (62, 56), (42, 40)])
+    p.stick(6, 34, 40, 34, 5)
+    _flare(p, 34, 58, 34, 2.5, 13)
+    for x in (13, 22, 31):
+        p.stick(x, 22, x, 34, 4)
     return p.done()
 
-
-def horn(color):
-    p = Pen(color)
-    p.ring(26, 30, 20, 7)
-    p.poly([(36, 42), (46, 34), (63, 52), (63, 63), (46, 63), (40, 50)], t="s")
-    return p.done()
 
 
 def choir(color):
@@ -206,36 +214,36 @@ def choir(color):
 
 
 def pad(color):
+    """Three long held notes."""
     p = Pen(color)
-    p.path(_wave(18, 5, phase=1.0), 5, t="s")
-    p.path(_wave(46, 5, phase=1.0), 5, t="s")
-    p.path(_wave(32, 7), 6)
+    p.rect(6, 14, 46, 22, r=4)
+    p.rect(12, 28, 58, 36, r=4)
+    p.rect(6, 42, 50, 50, r=4)
     return p.done()
 
 
 def saw(color):
     p = Pen(color)
-    p.stick(4, 54, 60, 54, 3.5, t="s")
-    p.path([(6, 44), (22, 14), (22, 44), (40, 14), (40, 44), (58, 14)], 6)
+    p.path([(6, 46), (32, 18), (32, 46), (58, 18), (58, 46)], 5.5)
     return p.done()
 
 
 def square(color):
     p = Pen(color)
-    p.stick(4, 54, 60, 54, 3.5, t="s")
-    p.path([(6, 44), (6, 16), (24, 16), (24, 44), (40, 44), (40, 16), (58, 16), (58, 44)], 6)
+    p.path([(6, 44), (18, 44), (18, 20), (46, 20), (46, 44), (58, 44)], 5.5)
     return p.done()
 
 
 # --- Percussion ------------------------------------------------------------------------------
 
 def snare(color):
+    """A drum with two sticks crossed on its head: the drum kit."""
     p = Pen(color)
-    p.stick(10, 4, 28, 26, 4.5, t="s")
-    p.stick(54, 4, 36, 26, 4.5, t="s")
-    p.rect(8, 32, 56, 54)
-    p.ellipse(8, 46, 56, 60)
-    p.ellipse(8, 25, 56, 39)
+    p.rect(10, 36, 54, 52)
+    p.ellipse(10, 46, 54, 58)
+    p.ellipse(10, 30, 54, 42, t="s")
+    p.stick(12, 6, 36, 34, 5)
+    p.stick(52, 6, 28, 34, 5)
     return p.done()
 
 
@@ -359,8 +367,7 @@ def glass(color):
 
 ICONS = {
     "keys": keys, "organ": organ, "mallets": mallets, "bell": bell, "violin": violin,
-    "guitar": guitar, "harp": harp, "clarinet": clarinet, "flute": flute, "ocarina": ocarina,
-    "sax": sax, "harmonica": harmonica, "trumpet": trumpet, "horn": horn, "choir": choir,
+    "guitar": guitar, "harp": harp, "wind": wind, "trumpet": trumpet, "choir": choir,
     "pad": pad, "saw": saw, "square": square, "snare": snare, "kick": kick, "clap": clap,
     "cymbal": cymbal, "conga": conga, "gong": gong, "triangle": triangle, "cowbell": cowbell,
     "jingle": jingle, "tambourine": tambourine, "block": block, "claves": claves,
