@@ -355,6 +355,33 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.30
+
+Ctrl+Z e Ctrl+Shift+Z provati azione per azione in Blender 5.3 (tasti e mouse veri): crea
+composizione, tratti, strumenti, rig, livelli, gruppi, impostazioni, composizioni, Sequencer.
+
+- **Niente più crash di Blender con Ctrl+Z / Ctrl+Shift+Z.** Dopo *Nuovo livello* (o un'altra
+  azione che crea clip nuove), qualche Ctrl+Z e Ctrl+Shift+Z potevano chiudere Blender. Le clip
+  arrivano un momento dopo il passo di Undo (il suono si calcola dopo) e Blender, che rilegge solo
+  i dati diversi fra due passi, teneva la scena con clip che puntavano a suoni appena buttati.
+  Ora scena, composizioni, griglie e collezioni sono sempre rilette.
+- **Rig: Ctrl+Z della durata non la accorcia più.** Trascinata la maniglia della durata da 8 a
+  9,3 s, Ctrl+Z dava 6,7 s e Ctrl+Shift+Z 10,6 s: la clip ridata indietro sembrava trascinata nel
+  Sequencer. Quello che la lettura del Sequencer confronta ora è salvato nel file con il passo.
+- **Rig e pannello: Ctrl+Shift+Z ridà anche la griglia giusta** (ottave, tasti sopra e sotto,
+  durata, BPM): prima tornavano le impostazioni nuove con la griglia vecchia.
+- **Durata con *Segui In/Out della scena*:** Ctrl+Z tornava indietro di due passi (anche la
+  Durata di prima). Ora il passo sa se è cambiata la Durata o l'End della scena.
+- **Sequencer:** Ctrl+Shift+Z di una clip spostata (G, *Parte dopo*) o allungata dalla maniglia
+  ora tiene lo spostamento; Ctrl+Z di H su un livello e di Ctrl+G sui livelli ora li annulla
+  davvero (il livello restava muto, il gruppo restava).
+- **H / Alt+H sulla clip di una composizione** ora la mette muta o la riaccende (*Muto*), come
+  per i livelli; prima la clip tornava subito accesa.
+- **Livello muto + Ctrl+Shift+Z:** la sua clip non resta più senza file. I file dei suoni
+  vecchi restano su disco per un po' (fino a 160 file o 768 MB, nella cartella temporanea che
+  Blender svuota all'uscita): dopo Ctrl+Z le clip suonano subito quello di prima, poi il suono si
+  ricalcola.
+
 ## 0.0.29
 
 - **Il volume di uno strumento non risintetizza più i tratti.** Le voci di uno strumento

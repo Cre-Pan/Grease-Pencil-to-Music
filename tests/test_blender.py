@@ -3077,3 +3077,173 @@ def test_background_render_in_every_mode(comp, setup):
     assert st["stats"]["only_active"] == (setup == "only_active")
     engine.regenerate(comp)  # the same strokes, computed here: the same sound
     assert engine.state(comp)["key"] == key
+
+
+# --- Ctrl+Z / Ctrl+Shift+Z ---------------------------------------------------------
+#
+# Blender's undo gives back the data of an Undo step all together (in background mode
+# there is no undo stack, so the tests put back what the step holds by hand and call
+# the undo handler). The steps are saved right after the action, before the add-on
+# follows it: the Python side then remembers the moment left, the file the step.
+
+
+def _undo_to(values):
+    """Put back custom properties and settings as an Undo step would, then run the
+    add-on's undo handler."""
+    for (owner, attr), value in values.items():
+        if attr.startswith("["):
+            owner[attr[2:-2]] = value
+        else:
+            setattr(owner, attr, value)
+    sub("handlers").on_undo_redo()
+
+
+def test_undo_of_a_longer_composition_does_not_shorten_it_again(comp):
+    """Rig 'durata' dragged, Ctrl+Z: the meta-clip given back is not read as a clip
+    trimmed in the Sequencer (it came back 8 - 1.29 s long, Ctrl+Shift+Z 9.29 + 1.29)."""
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    comp.gp2m.follow_scene = False
+    _names, meta = _meta_ready(comp)
+    step = {(comp, '["gp2m_sync"]'): comp["gp2m_sync"], (comp.gp2m, "length"): comp.gp2m.length}
+    end = meta.right_handle
+    comp.gp2m.length = 10.0
+    engine.regenerate(comp)
+    engine.arrange(scene)
+    assert engine.meta_strip(scene, comp).right_handle > end
+    engine.meta_strip(scene, comp).right_handle = end  # the clip of the step
+    _undo_to(step)
+    assert comp.gp2m.length == pytest.approx(8.0)
+    assert not seqsync.sync_scene(scene)
+    engine.regenerate(comp)
+    assert comp.gp2m.length == pytest.approx(8.0)
+    assert engine.meta_strip(scene, comp).right_handle == end
+
+
+def test_redo_of_a_clip_moved_in_the_sequencer_keeps_the_move(comp):
+    """G on the composition's clip, Ctrl+Z, Ctrl+Shift+Z: the step holds the moved clip
+    with "Parte dopo" not yet read back; it is read back again (the clip went back)."""
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    _names, meta = _meta_ready(comp)
+    before = comp["gp2m_sync"]
+    meta.channel = meta.channel  # (the clip as it is)
+    meta.frame_start = meta.frame_start + 12
+    step = {(comp, '["gp2m_sync"]'): before, (comp.gp2m, "start_delay"): 0.0}
+    assert seqsync.sync_scene(scene)
+    fps = scene.render.fps / scene.render.fps_base
+    assert comp.gp2m.start_delay == pytest.approx(12 / fps, abs=1e-3)
+    moved = engine.meta_strip(scene, comp).frame_start
+    _undo_to(step)  # Ctrl+Shift+Z: the moved clip, "Parte dopo" 0, the place of before
+    # (setting "Parte dopo" from Python placed the clip again: Undo gives it back moved)
+    engine.meta_strip(scene, comp).frame_start = moved
+    sub("handlers").on_undo_redo()
+    assert comp.gp2m.start_delay == pytest.approx(12 / fps, abs=1e-3)
+    assert engine.meta_sounds(engine.meta_strip(scene, comp))[0].content_start \
+        == scene.frame_start + 12
+
+
+def test_composition_clip_mute_follows_the_sequencer(comp):
+    """H / Alt+H on the composition's clip mutes / unmutes the composition (the clip
+    was unmuted again by the add-on)."""
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    _names, meta = _meta_ready(comp)
+    meta.mute = True
+    assert seqsync.sync_scene(scene)
+    assert comp.gp2m.mute and engine.meta_strip(scene, comp).mute
+    engine.regenerate(comp)
+    assert engine.meta_strip(scene, comp).mute
+    engine.meta_strip(scene, comp).mute = False
+    assert seqsync.sync_scene(scene)
+    assert not comp.gp2m.mute
+
+
+def test_undo_of_durata_with_follow_scene(comp):
+    """'Segui In/Out della scena': the step of a new Durata holds the scene End of
+    before (it follows a moment later). Ctrl+Z / Ctrl+Shift+Z to it must read "the
+    Durata changed", not "the End changed" (Ctrl+Z went back two steps)."""
+    engine = sub("engine")
+    scene = bpy.context.scene
+    comp.gp2m.follow_scene = True
+    engine.link_composition(comp, scene)
+    engine.regenerate(comp)
+    engine.arrange(scene)
+    end = scene.frame_end
+    step = {(scene, '["gp2m_linked_range"]'): list(scene["gp2m_linked_range"]),
+            (comp, '["gp2m_linked_frames"]'): comp["gp2m_linked_frames"],
+            (scene, "frame_end"): end, (comp.gp2m, "length"): 12.0}
+    comp.gp2m.length = 12.0
+    engine.arrange(scene)
+    assert scene.frame_end > end
+    comp.gp2m.length = 4.0  # another step, then back to the one of "Durata 12"
+    engine.arrange(scene)
+    _undo_to(step)
+    assert comp.gp2m.length == pytest.approx(12.0)
+    fps = scene.render.fps / scene.render.fps_base
+    assert scene.frame_end == scene.frame_start + round(12.0 * fps) - 1
+    comp.gp2m.follow_scene = False
+
+
+def test_undo_gives_back_the_grid_of_the_settings(comp):
+    """A step saved before the grid followed new settings (it waits a moment): after
+    Ctrl+Z / Ctrl+Shift+Z the grid is built again for the settings given back."""
+    board = sub("board")
+    assert board.board_current(comp)
+    comp.gp2m.octaves = comp.gp2m.octaves + 1  # the rebuild waits (a timer)
+    assert not board.board_current(comp)
+    sub("handlers").on_undo_redo()
+    board._rebuild_pending()
+    assert board.board_current(comp)
+
+
+def test_sound_files_stay_for_undo(comp, tmp_path):
+    """Files no strip plays any more stay on disk for a while: Ctrl+Z gives back
+    strips that play them (a muted layer is not rendered again: 'missing file')."""
+    engine = sub("engine")
+    engine._trash.clear()
+    paths = []
+    for i in range(5):
+        path = tmp_path / f"s{i}.wav"
+        path.write_bytes(b"x" * 10)
+        paths.append(str(path))
+    user = bpy.context.scene.sequence_editor_create().strips.new_sound(
+        "keep", paths[0], 30, 1)
+    for path in paths:
+        engine._forget_file(path)
+    assert all(os.path.exists(path) for path in paths)
+    engine._empty_trash(files=2)  # the oldest go, never one a strip plays
+    assert [os.path.exists(path) for path in paths] == [True, False, False, False, True]
+    engine._remove_strip(bpy.context.scene.sequence_editor, user)
+    engine._trash.clear()
+
+
+def test_undo_tick_changes_every_step(comp):
+    """Data the add-on changes after a step was saved must never be kept by Ctrl+Z as
+    'equal in both steps' (Blender crashed): a counter keeps them different."""
+    handlers, board = sub("handlers"), sub("board")
+    handlers._tick_names[0] = 0.0
+    ids = [bpy.context.scene, comp, comp.data, board.grid_object(comp)]
+    before = [id_block.get("gp2m_undo_tick", 0) for id_block in ids]
+    handlers.tick_undo()
+    after = [id_block.get("gp2m_undo_tick", 0) for id_block in ids]
+    assert all(a != b for a, b in zip(before, after))
+    assert "gp2m_undo_tick" in comp.bl_rna.properties  # out of Custom Properties
+
+
+def test_redo_of_a_layer_moved_on_the_board_keeps_the_move(comp):
+    """"Sposta livello giù", Ctrl+Z, Ctrl+Shift+Z: the step can hold the moved layers
+    with their clips not placed again yet; those clips are not read as clips moved back
+    in the Sequencer (the layers went back to the order of before)."""
+    engine = sub("engine")
+    scene = bpy.context.scene
+    names, _meta = _meta_ready(comp)
+    sync = comp["gp2m_sync"]
+    gp = comp.data
+    gp.layers.move(gp.layers[names[0]], "UP")  # the layers of the step, clips as before
+    moved = [layer.name for layer in sub("board").user_layers(gp)]
+    assert moved != list(names)
+    before = engine.clip_order(comp)[""]
+    _undo_to({(comp, '["gp2m_sync"]'): sync})
+    assert [layer.name for layer in sub("board").user_layers(gp)] == moved
+    assert engine.clip_order(comp)[""] != before  # the clips followed the layers

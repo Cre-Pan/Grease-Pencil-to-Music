@@ -21,6 +21,7 @@ import bpy
 from . import board, engine, props
 
 _busy = [False]
+_undoing = [False]  # between undo_pre and undo_post: nothing is read back
 
 
 def _settings(gp, name):
@@ -447,12 +448,15 @@ def _sync_order(scene, obj):
         return False  # the layers changed on the board: the Sequencer follows them
     gp = obj.data
     changed = False
-    for container in [meta] + list(engine.layer_group_metas(meta).values()):
+    undo_order = engine.state(obj).get("undo_order") or {}
+    for key, container in [("", meta)] + list(engine.layer_group_metas(meta).items()):
         inside = [strip for strip in container.strips if _node_name(strip)]
         if len(inside) < 2:
             continue
         by_channel = [_node_name(strip) for strip in
                       sorted(inside, key=lambda strip: (strip.channel, _node_name(strip)))]
+        if undo_order.get(key) == by_channel:
+            continue  # after Ctrl+Z: the clips as the step has them, not moved by hand
         group = gp.layer_groups.get(container.get(engine.LAYER_GROUP_KEY) or "") \
             if container != meta else None
         siblings = list(group.children if group is not None else gp.root_nodes)
@@ -584,6 +588,20 @@ def _sync_layer_group_clips(scene, obj):
     return changed
 
 
+def _sync_composition_mute(scene, obj):
+    """H / Alt+H on the composition's clip in the Sequencer: the composition is muted
+    or heard again ("Muto"; before, the clip was simply unmuted again)."""
+    top = engine.top_strip(scene, obj)
+    if top is None or not engine.clip_mute_changed_by_hand(top):
+        return False
+    mute = top.mute
+    engine.set_clip_mute(top, mute)
+    if obj.gp2m.mute == mute:
+        return False  # e.g. Alt+H on a composition silenced by Solo: it stays silent
+    obj.gp2m.mute = mute
+    return True
+
+
 def _sync_channel(scene, obj):
     meta = engine.top_strip(scene, obj)
     if meta is None or not obj.gp2m.channel or meta.channel == obj.gp2m.channel:
@@ -594,7 +612,7 @@ def _sync_channel(scene, obj):
 
 def sync_scene(scene):
     """Read back what was changed in the Sequencer. Returns True if anything changed."""
-    if _busy[0] or engine._arranging[0] or scene.sequence_editor is None:
+    if _busy[0] or _undoing[0] or engine._arranging[0] or scene.sequence_editor is None:
         return False
     from . import rig
     if rig.dragging():  # the rig moves the meta-clip itself while dragging
@@ -610,6 +628,7 @@ def sync_scene(scene):
             if obj.gp2m.layer_channels and _check_clips(scene, obj):
                 changed = True
                 continue
+            changed |= _sync_composition_mute(scene, obj)
             st = engine.state(obj)
             if st.get("muted_stale") and not obj.gp2m.mute \
                     and not engine.muted_by_group(scene, obj):
@@ -637,6 +656,8 @@ def sync_scene(scene):
             changed |= _sync_length(scene, obj)
             changed |= _sync_layer_times(scene, obj)
             changed |= _sync_time(scene, obj)
+        for obj in engine.scene_compositions(scene):
+            engine.save_sync_state(obj)
     finally:
         _busy[0] = False
     if changed:
@@ -654,6 +675,47 @@ def _later():
         except Exception as error:  # keep Blender responsive
             print(f"[Doodle Music] Sequencer sync failed: {error!r}")
     return None
+
+
+def before_undo():
+    """Ctrl+Z / Ctrl+Shift+Z is starting: the clips about to come back are not edits
+    made in the Sequencer."""
+    _undoing[0] = True
+
+
+def after_undo():
+    """Ctrl+Z / Ctrl+Shift+Z gave back the layers, the settings and the clips of an
+    Undo step. The step was saved right after the action, before the add-on followed
+    it (the sound, the clips placed again, a clip moved in the Sequencer read back):
+    what the read-back remembers is taken from the step too (see
+    :func:`engine.save_sync_state`), the clips are read back against it (a clip moved
+    or trimmed in the Sequencer is a new start or length again, Ctrl+Shift+Z included)
+    and then placed from the settings. With what Python remembered of the moment left
+    instead, the clips given back looked like clips dragged or trimmed in the
+    Sequencer: the Durata undone by Ctrl+Z came back shortened by the same amount."""
+    _undoing[0] = True
+    try:
+        scenes = []
+        for scene in bpy.data.scenes:
+            comps = engine.scene_compositions(scene)
+            if not comps or scene.sequence_editor is None:
+                continue
+            for obj in comps:
+                engine.load_sync_state(obj)
+                if not obj.gp2m.use_sections:
+                    engine.state(obj).pop("duration", None)  # the length given back
+            scenes.append(scene)
+    finally:
+        _undoing[0] = False
+    for scene in scenes:
+        try:
+            if not sync_scene(scene):
+                engine.arrange_safe(scene)
+        except Exception as error:  # keep Blender responsive
+            print(f"[Doodle Music] Sequencer sync after undo failed: {error!r}")
+        finally:
+            for obj in engine.scene_compositions(scene):
+                engine.state(obj).pop("undo_order", None)
 
 
 def request(scene):
