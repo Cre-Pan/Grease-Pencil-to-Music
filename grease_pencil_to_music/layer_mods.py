@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Non-destructive modifiers of a layer, as in the web app.
 
-They change the strokes only on their way to the sound: the strokes drawn in
+They change the strokes on their way to the sound: the strokes drawn in
 Blender stay as they are, and every modifier can be turned off at any time.
+``stroke_mods.py`` shows the same changes on the drawing (Geometry Nodes).
 They always run in the order of the panels: Array, Simmetria, Trasponi, Fade,
 Noise (copies made by Array are mirrored, faded and roughened one by one).
 

@@ -12,7 +12,7 @@ import time
 import bpy
 from bpy.app.handlers import persistent
 
-from . import board, engine, feedback, prefs, props
+from . import board, engine, feedback, prefs, props, stroke_mods
 
 _dirty = set()
 _full = set()  # dirty compositions that need every layer rendered again
@@ -101,6 +101,10 @@ def flush(background=False):
             feedback.sync(obj)  # also keeps every modifier off the board
         except Exception as error:
             print(f"[Doodle Music] board update failed: {error!r}")
+        try:
+            stroke_mods.sync(obj)  # the layer modifiers shown on the strokes
+        except Exception as error:
+            print(f"[Doodle Music] stroke modifiers update failed: {error!r}")
         only_active = name not in full and obj.gp2m.auto_active_layer
         if background:
             engine.regenerate_background(obj, only_active=only_active)

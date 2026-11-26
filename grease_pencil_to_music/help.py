@@ -89,8 +89,11 @@ livello.
     "MODIFIERS": """\
 ## Modificatori del livello
 
-Come nella web app: cambiano i tratti **solo nel suono**, quelli disegnati
-restano come sono. La spunta nell'intestazione li accende e li spegne.
+Come nella web app: cambiano il suono e, insieme, il disegno: le copie di
+Array compaiono, il Fade assottiglia l'inizio o la fine di ogni tratto, Trasponi
+lo sposta di grado. I tratti disegnati restano come sono: spegni il modificatore
+e tornano com'erano (**Mostra sul tratto** lascia cambiare solo il suono).
+La spunta nell'intestazione li accende e li spegne.
 Lavorano sempre in quest'ordine, dall'alto in basso:
 
 - **Array**: ripete il tratto ogni tot battiti, anche salendo di grado.

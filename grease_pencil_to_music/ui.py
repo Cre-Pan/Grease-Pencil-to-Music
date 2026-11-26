@@ -594,6 +594,8 @@ def _layer_panel(base, prefix, layer_parent, key, label, parent, draw, toggle, h
             draw_layer_instruments(self.layout, comp, layer, settings)
         elif children:
             _group_summary(self.layout, settings, children)
+            if key == "mods":
+                self.layout.prop(comp.gp2m, "show_layer_mods")
         else:
             self.layout.active = getattr(settings, toggle) if toggle else True
             draw(self.layout, settings)

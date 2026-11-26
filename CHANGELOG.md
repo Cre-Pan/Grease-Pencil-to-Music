@@ -355,6 +355,22 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.34
+
+- **I modificatori dei livelli si vedono sul tratto.** Array, Simmetria, Trasponi, Fade e Noise
+  non cambiano più solo il suono: cambia anche il disegno, con gli stessi calcoli. Il Fade
+  assottiglia l'inizio (In), la fine (Out) o tutte e due le punte di ogni tratto (o del loop,
+  con *Su: Loop*); Array mostra le copie, che salgono di grado e si assottigliano con *Smorza*;
+  Simmetria mostra il tratto specchiato nel tempo e/o in altezza (e nasconde l'originale se
+  *Tieni l'originale* è spento); Trasponi sposta il tratto sulle righe della scala; Noise lo fa
+  tremare di altezza, spessore e tempo come lo si sente.
+- I tratti disegnati non cambiano: ogni livello con modificatori accesi riceve un modificatore
+  Geometry Nodes *GP2M Modificatori <livello>* che segue da solo le impostazioni del livello
+  (anche cambiando scala, tonalità, BPM o durata). Spegni il modificatore e il tratto torna come
+  l'hai disegnato. In Edit Mode si modificano i punti originali e si vede il risultato.
+- *Mostra sul tratto* (pannello Modificatori del livello) lascia cambiare solo il suono, come prima.
+- Con *Usa modificatori* acceso i modificatori del livello non vengono applicati due volte.
+
 ## 0.0.30
 
 Ctrl+Z e Ctrl+Shift+Z provati azione per azione in Blender 5.3 (tasti e mouse veri): crea
