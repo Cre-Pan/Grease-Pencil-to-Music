@@ -135,11 +135,7 @@ def sounds_dir():
 
 def _onset(data, rate):
     """Where the sound starts in the decoded file (MP3 decoders add a little silence)."""
-    peak = float(np.max(np.abs(data))) if len(data) else 0.0
-    if peak <= 0:
-        return 0
-    first = int(np.argmax(np.abs(data) > peak * 0.02))
-    return max(0, first - int(0.004 * rate))
+    return synth.onset(data, rate)
 
 
 def _recorded_note(path):

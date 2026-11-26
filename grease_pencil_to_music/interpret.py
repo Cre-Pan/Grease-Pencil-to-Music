@@ -92,6 +92,7 @@ class Mapping:
     softness: str = "ATTACK"  # ATTACK, NONE
     vibrato_depth: float = 0.6  # semitones at full jitter
     vibrato_rate: float = 5.5  # Hz
+    on_time: bool = True  # slow attacks start early, the note is heard on the stroke
 
 
 @dataclass
@@ -445,6 +446,18 @@ def _interpret_gesture(stroke, spec, mapping, radius_ref):
                           "QUANTIZED", radius_ref)
 
 
+def _arriving_glide(stepped, glide):
+    """Linear slides of ``glide`` seconds between the steps of ``stepped`` that end on
+    each step: the new note is reached when the playhead reaches its row, as it is
+    drawn (a slide centred on the step reached it half a glide late)."""
+    window = max(1, int(round(glide * CONTROL_RATE))) | 1
+    half = window // 2
+    if half == 0 or len(stepped) < 2:
+        return stepped.astype(np.float64)
+    padded = np.concatenate((stepped, np.full(half, stepped[-1])))
+    return _moving_average(padded, window)[half:]
+
+
 def _legato(stroke, result, pitches, tc, count, t1c, channels, spec, step, attack, min_len,
             glide):
     """Scale notes joined by glides: one voice that slides from note to note
@@ -466,8 +479,7 @@ def _legato(stroke, result, pitches, tc, count, t1c, channels, spec, step, attac
     stepped = np.full(n, float(notes[0][2]))
     for start, _end, pitch in notes:
         stepped[times >= start] = pitch
-    window = max(1, int(round(glide * CONTROL_RATE)))
-    pitch_curve = _moving_average(stepped, window | 1)  # linear slides of `glide` seconds
+    pitch_curve = _arriving_glide(stepped, glide)
     curves = {key: np.interp(times, tc, values) for key, values in channels.items()}
     voice = Voice(start=v_start, duration=v_end - v_start, pitch=pitch_curve, amp=curves["amp"],
                   vibrato=curves["vibrato"], brightness=curves["brightness"], pan=curves["pan"],
@@ -641,10 +653,38 @@ def legato_groups(voices, gap):
     return groups
 
 
-def join_voices(voices):
+def _hold_then_glide(curve, known, glide_samples):
+    """In each gap of ``curve`` (where ``known`` is False, between two known parts) the
+    value of before is held, and only the last ``glide_samples`` slide to the next one."""
+    n = len(curve)
+    i = 0
+    while i < n:
+        if known[i]:
+            i += 1
+            continue
+        j = i
+        while j < n and not known[j]:
+            j += 1
+        if 0 < i and j < n:
+            before, after = curve[i - 1], curve[j]
+            length = j - i
+            ramp = min(glide_samples, length)
+            curve[i:j] = before
+            if ramp > 0:
+                curve[j - ramp:j] = before + (after - before) * (
+                    np.arange(1, ramp + 1) / (ramp + 1))
+        i = j
+    return curve
+
+
+def join_voices(voices, glide=None):
     """One voice out of several (sorted by start): where they overlap the one
     that started last sounds; across a gap pitch and loudness glide in a
-    straight line from the end of one to the start of the next."""
+    straight line from the end of one to the start of the next.
+
+    With ``glide`` (seconds, Quantizzata legata) the pitch stays on the note of
+    before in the gap and slides to the next note only in its last ``glide``
+    seconds, so it stays on the scale instead of sliding through it."""
     if len(voices) == 1:
         return voices[0]
     start = voices[0].start
@@ -665,6 +705,9 @@ def join_voices(voices):
     known = ~np.isnan(curves["pitch"])
     for name in _CURVES:
         curve = curves[name]
+        if glide is not None and name == "pitch":
+            curve[:] = _hold_then_glide(curve, known, int(round(glide * CONTROL_RATE)))
+            continue
         curve[~known] = np.interp(times[~known], times[known], curve[known])
     first = voices[0]
     return Voice(start=float(start), duration=float(end - start), pitch=curves["pitch"],
@@ -673,8 +716,9 @@ def join_voices(voices):
                  instrument=first.instrument, glide=True)
 
 
-def legato_join(voices, gap, joinable=lambda voice: True):
-    """Join the voices of the same instrument closer than ``gap`` seconds.
+def legato_join(voices, gap, joinable=lambda voice: True, glide=None):
+    """Join the voices of the same instrument closer than ``gap`` seconds (``glide``:
+    see :func:`join_voices`).
 
     Returns ``[(indices, voice)]``: the indices of the original voices each
     resulting voice is made of (voices that cannot join stay alone)."""
@@ -687,6 +731,7 @@ def legato_join(voices, gap, joinable=lambda voice: True):
     for indices in by_instrument.values():
         members = [voices[i] for i in indices]
         for group in legato_groups(members, gap):
-            out.append(([indices[k] for k in group], join_voices([members[k] for k in group])))
+            out.append(([indices[k] for k in group],
+                        join_voices([members[k] for k in group], glide)))
     out.sort(key=lambda item: item[1].start)
     return out

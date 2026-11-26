@@ -216,7 +216,10 @@ def voice(instrument, midi_pitch=69, duration=1.0):
                                    if i.ident not in ("SAMPLE", "LIBRARY")])
 def test_every_instrument_renders(ident):
     offset, buf = synth.render_voice(voice(ident), SR)
-    assert offset == 0 and buf.shape[1] == 2
+    # A slow attack starts before the voice (synth.attack_lead), never more than MAX_LEAD.
+    lead = synth.attack_lead(voice(ident), SR)
+    assert 0.0 <= lead <= synth.MAX_LEAD
+    assert offset == -int(round(lead * SR)) and buf.shape[1] == 2
     assert np.all(np.isfinite(buf))
     assert np.max(np.abs(buf)) > 0.05
 
@@ -1500,3 +1503,123 @@ def test_array_and_transpose_keep_the_shape_of_a_glide():
     copy = layer_mods.apply([glide], layer_mods.Stack(array=layer_mods.Array(count=2, pitch=2)),
                             board)[1]
     assert (copy.z[0] - glide.z[0]) / H == pytest.approx(3.0)  # C#4 -> E4 + its 0 cents
+
+
+# --- 0.0.43: the sound on time with the drawing ------------------------------------------
+
+def _heard_at(buf, offset):
+    """Seconds (on the voice's clock) when ``buf``, placed at ``offset`` samples, gets
+    to half its loudest (5 ms RMS), as synth.attack_rise measures an attack."""
+    mono = buf.mean(axis=1).astype(np.float64)
+    window = int(0.005 * SR)
+    env = np.sqrt(np.convolve(mono * mono, np.ones(window) / window, mode="same"))
+    span = env[:int(1.5 * SR)]
+    return (offset + int(np.argmax(span >= 0.5 * span.max()))) / SR
+
+
+@pytest.mark.parametrize("ident", ["S_VIOLIN", "S_FLUTE", "S_CLARINET", "S_PIPEORGAN",
+                                   "S_CELLO", "S_HORN"])
+def test_slow_attacks_are_heard_on_the_stroke(ident):
+    """A bowed or blown note is heard (half its loudness) where its stroke begins: its
+    attack starts a little earlier, as players do. Before 0.0.43 a recorded violin or
+    clarinet was heard 0.1-0.2 s after the playhead had reached the stroke."""
+    note = replace(voice(ident, 69, 1.5), start=1.0)
+    late = _heard_at(*synth.render_voice(note, SR, on_time=False)[::-1]) - note.start
+    offset, buf = synth.render_voice(note, SR)
+    on_time = _heard_at(buf, offset) - note.start
+    assert offset < note.start * SR
+    assert abs(on_time) < max(0.02, late - synth.MAX_LEAD + 0.02)
+    assert abs(on_time) < late
+
+
+@pytest.mark.parametrize("ident", ["STRINGS", "PAD", "CHOIR"])
+def test_slow_synths_start_their_ramp_early(ident):
+    """A slow synth is half way up its attack ramp when the playhead reaches the stroke."""
+    note = replace(voice(ident, 60, 1.5), start=1.0)
+    lead = synth.attack_lead(note, SR)
+    assert lead == pytest.approx(min(0.5 * synth.SLOW_ATTACK[ident], synth.MAX_LEAD))
+    offset, buf = synth.render_voice(note, SR)
+    assert offset == int(round(note.start * SR)) - int(round(lead * SR))
+    _o, late = synth.render_voice(note, SR, on_time=False)
+    pre = int(round(lead * SR))
+    rms = lambda b: float(np.sqrt(np.mean(b ** 2)))  # noqa: E731
+    assert rms(buf[pre + int(0.5 * SR):pre + int(1.0 * SR)]) == pytest.approx(
+        rms(late[int(0.5 * SR):int(1.0 * SR)]), rel=0.15)  # the same note after the attack
+
+
+def test_struck_sounds_and_drums_are_not_anticipated():
+    for ident in ("SINE", "PLUCK", "KICK", "S_SNARE_ORCH", "S_TAIKO"):
+        assert synth.attack_lead(voice(ident), SR) == 0.0
+    assert synth.attack_lead(voice("S_PIANO"), SR) < 0.02  # a few ms: already on time
+
+
+def test_a_sample_plays_from_where_its_sound_starts():
+    """A sound with silence before it (a recording, a Campione) is not heard late."""
+    rate = 22050
+    tone = np.sin(2 * np.pi * 440 * np.arange(rate) / rate).astype(np.float32)
+    padded = np.concatenate((np.zeros(rate // 5, np.float32), tone))  # 0.2 s of silence
+    synth.register_sample("test-silence", padded, rate, 69, False)
+    assert synth.SAMPLES["test-silence"][0].offset == pytest.approx(rate // 5, abs=0.005 * rate)
+    note = voice(synth.SAMPLE_PREFIX + "test-silence", 69, 0.8)
+    offset, buf = synth.render_voice(note, SR)
+    assert abs(_heard_at(buf, offset)) < 0.01
+
+
+def test_libraries_skip_the_silence_before_a_sample():
+    data = np.concatenate((np.zeros(4410, np.float32), np.ones(4410, np.float32)))
+    assert libraries._onset(data, 44100, len(data)) == pytest.approx(4410 - 176, abs=2)
+    assert libraries._onset(data, 44100, 1000) == 999  # never past the loop start
+
+
+def test_an_anticipated_attack_at_the_loop_start_comes_from_the_loop_end():
+    spec = free_spec(length=2.0)
+    line = stroke((0.0, 0.8), (C4_ROW, C4_ROW), instrument="S_VIOLIN")
+    looped = mixer.render([mixer.LayerInput("L", [line])], spec, interpret.Mapping(), SR,
+                          master_fx=None)
+    tail = looped.audio[-int(0.05 * SR):]
+    assert np.abs(tail).max() > 1e-4  # the bow starts before the loop comes round
+    once = mixer.render([mixer.LayerInput("L", [line])], spec,
+                        interpret.Mapping(on_time=False), SR, master_fx=None)
+    assert np.abs(once.audio[-int(0.05 * SR):]).max() < np.abs(tail).max()
+
+
+def test_quantized_legato_reaches_each_note_on_its_row():
+    """The slide into a note ends where the line crosses into its row (it used to be
+    centred there, so the note was reached half a glide late)."""
+    rising = stroke((0.0, 2.0), (C4_ROW, C4_ROW + 1))  # C4 to C#4 at t = 1
+    res = interpret.interpret_stroke(rising, free_spec(), interpret.Mapping(), mode="LEGATO",
+                                     glide=0.2)
+    v = res.voices[0]
+    times = v.start + np.arange(len(v.pitch)) / interpret.CONTROL_RATE
+    boundary = res.notes[1].start
+    assert np.interp(boundary, times, v.pitch) == pytest.approx(61, abs=0.03)
+    assert np.interp(boundary - 0.2, times, v.pitch) == pytest.approx(60, abs=0.03)
+    assert np.interp(boundary - 0.1, times, v.pitch) == pytest.approx(60.5, abs=0.1)
+
+
+def test_quantized_legato_stays_on_the_scale_in_a_pause():
+    """Between two joined strokes Quantizzata legata holds the note and slides into the
+    next only at the end of the pause; Ottica legata draws a line through the pause."""
+    spec, mapping = free_spec(), interpret.Mapping()
+    first = interpret.interpret_stroke(stroke((1.0, 1.5), (C4_ROW, C4_ROW)), spec, mapping,
+                                       "LEGATO").voices[0]
+    second = interpret.interpret_stroke(stroke((2.0, 2.5), (C4_ROW + 4, C4_ROW + 4)), spec,
+                                        mapping, "LEGATO").voices[0]
+    held = interpret.legato_join([first, second], gap=1.0, glide=0.1)[0][1]
+    line = interpret.legato_join([first, second], gap=1.0)[0][1]
+    times = held.start + np.arange(len(held.pitch)) / interpret.CONTROL_RATE
+    early = (times > 1.55) & (times < 1.85)
+    assert np.allclose(held.pitch[early], 60, atol=0.01)  # still the C
+    assert np.interp(2.0, times, held.pitch) == pytest.approx(64, abs=0.05)
+    assert np.interp(1.95, times, held.pitch) == pytest.approx(62, abs=0.5)
+    assert np.all(np.abs(line.pitch[early] - 60) > 0.2)  # the optical line slides
+    assert np.all(held.amp[early] > 0)  # and both keep sounding
+
+
+def test_quantized_legato_layers_hold_in_the_pause():
+    spec = free_spec(length=4.0, bpm=120.0)
+    strokes = [stroke((0.5, 1.0), (C4_ROW, C4_ROW)), stroke((1.4, 1.9), (C4_ROW + 7, C4_ROW + 7))]
+    res = mixer.render([mixer.LayerInput("L", strokes, mode="LEGATO", glide=0.05)], spec,
+                       interpret.Mapping(), SR, loop=False)
+    assert res.voice_count == 1
+    assert _energy_at(res.audio, 60, 1.05, 1.3) > 5 * _energy_at(res.audio, 64, 1.05, 1.3)

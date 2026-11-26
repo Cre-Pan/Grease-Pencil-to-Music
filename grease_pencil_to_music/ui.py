@@ -10,7 +10,7 @@
 
 import bpy
 
-from . import beat, board, engine, families, help, music, prefs, props, reader
+from . import beat, board, engine, families, help, music, operators, prefs, props, reader
 from .icons import composition_icon, family_icon, icon, icon_kwargs, instrument_icon
 from .operators import active_composition
 
@@ -938,6 +938,24 @@ def draw_listening(layout, scene, comp=None):
     row = col.row()
     row.active = not (comp is not None and engine.follows_scene(comp, scene))
     row.prop(play, "fit_range")
+    draw_latency(layout, scene)
+
+
+LATENCY_WARN = 0.025  # seconds: above this the sound is felt behind the playhead
+
+
+def draw_latency(layout, scene):
+    """How late the sound is after the picture, with the fix when it is felt."""
+    latency = operators.audio_latency(bpy.context)
+    synced = scene.sync_mode == "AUDIO_SYNC"
+    if latency <= LATENCY_WARN and synced:
+        return
+    col = layout.column(align=True)
+    if not synced:
+        col.label(text="La riproduzione non segue l'audio", icon="ERROR")
+    else:
+        col.label(text=f"Audio in ritardo di {latency * 1000:.0f} ms", icon="INFO")
+    col.operator("gp2m.low_latency", icon="SPEAKER")
 
 
 def draw_sequencer(layout, scene, comp):

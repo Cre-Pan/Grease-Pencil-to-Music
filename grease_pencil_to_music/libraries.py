@@ -17,7 +17,13 @@ import struct
 
 import numpy as np
 
-from .synth import Zone
+from .synth import Zone, onset
+
+
+def _onset(data, rate, limit):
+    """Where the sound of a sample starts (its silence would be heard as a delay),
+    never past ``limit`` (the start of its loop)."""
+    return max(0, min(onset(data, rate), int(limit) - 1))
 
 
 class LibraryError(ValueError):
@@ -162,7 +168,8 @@ class SoundFont:
         return Zone(data=data, rate=float(rate), root=float(root) - tune, lo=lo, hi=hi,
                     loop=bool(loop), loop_start=loop_start - start if loop else 0,
                     loop_end=loop_end - start if loop else len(data),
-                    gain=float(10 ** (-attenuation / 20.0)))
+                    gain=float(10 ** (-attenuation / 20.0)),
+                    offset=_onset(data, rate, loop_start - start if loop else len(data)))
 
 
 def read_sf2(path):
@@ -271,7 +278,9 @@ def sfz_zones(path, read_audio):
             loop_start=max(int(region.get("loop_start", 0)) - offset, 0) if loop else 0,
             loop_end=min(int(region.get("loop_end", len(data))) - offset + 1, len(data))
             if loop else len(data),
-            gain=float(10 ** (float(region.get("volume", 0)) / 20.0))))
+            gain=float(10 ** (float(region.get("volume", 0)) / 20.0)),
+            offset=_onset(data, rate, max(int(region.get("loop_start", 0)) - offset, 0)
+                          if loop else len(data))))
         seen.add((lo, hi))
     if not zones:
         raise LibraryError("nessuna regione SFZ leggibile")

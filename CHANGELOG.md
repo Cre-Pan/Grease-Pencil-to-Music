@@ -358,6 +358,31 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.43
+
+- **Il suono arriva quando la testina tocca il tratto.** Archi, violino, violoncello, flauto,
+  clarinetto, organo a canne, armonica, corno e gli altri strumenti registrati con l'attacco
+  lento impiegano 0,05-0,2 s a farsi sentire: partendo esattamente sul tratto si sentivano
+  dopo. Ora l'attacco comincia un attimo prima (al massimo 0,2 s, come fanno i musicisti e le
+  librerie orchestrali), così la nota è piena dove inizia il tratto. Lo stesso per Archi,
+  Pad e Coro sintetizzati. Colpi, percussioni e pizzicati erano già a tempo e non cambiano.
+  All'inizio del loop l'attacco anticipato si sente alla fine del giro prima. Si spegne in
+  *Preferenze → Cosa suona nel tratto → Attacco a tempo*.
+- **Campione e Libreria senza silenzio iniziale**: un suono importato (o un campione SF2/SFZ)
+  che comincia con un po' di silenzio suonava in ritardo; ora parte da dove inizia il suono.
+- **Ritardo dell'audio di Blender**: Blender mescola l'audio a blocchi (*Preferenze →
+  Sistema → Suono → Mixing Buffer*, 2048 campioni = 43-46 ms). Quando il ritardo si sente,
+  o la riproduzione non segue l'audio, il pannello *Ascolto* lo dice e **Riduci il ritardo
+  dell'audio** mette il buffer a 512 (circa 11 ms) e *Sync to Audio*. Se l'audio gracchia,
+  rimetti un buffer più grande.
+- **Quantizzata legata e Ottica legata più precise**: il glissando tra due note arriva sulla
+  nuova nota proprio dove il tratto entra nella sua riga (prima era centrato lì, e la nota
+  arrivava mezzo glissando dopo).
+- **Quantizzata legata resta sulla scala nelle pause**: tra due tratti uniti tiene la nota
+  di prima e scivola nella successiva solo alla fine della pausa (per il *Tempo di legato*),
+  invece di attraversare lentamente tutte le note intermedie. Ottica legata continua a
+  tracciare una linea dritta nella pausa, come prima.
+
 ## 0.0.42
 
 - **In e Out per ogni composizione** (*Ascolto e Sequencer*): il primo e l'ultimo fotogramma

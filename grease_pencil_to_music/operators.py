@@ -275,6 +275,46 @@ def _target_strip(context):
     return strip
 
 
+LOW_LATENCY_BUFFER = "SAMPLES_512"  # about 11 ms at 48 kHz
+
+
+def audio_latency(context):
+    """Seconds of sound Blender mixes ahead (Preferences > System > Sound > Mixing
+    Buffer): the sound is heard that much after the picture."""
+    system = context.preferences.system
+    try:
+        samples = int(system.audio_mixing_buffer.split("_")[1])
+        rate = int(system.audio_sample_rate.split("_")[1])
+    except (AttributeError, IndexError, ValueError):
+        return 0.0
+    return samples / max(rate, 1)
+
+
+class GP2M_OT_low_latency(bpy.types.Operator):
+    """Il suono arriva prima dopo l'immagine: Blender mescola l'audio a blocchi più
+    piccoli (Preferenze > Sistema > Suono > Mixing Buffer: 512) e la riproduzione segue
+    l'audio (Sync: Sync to Audio). Se l'audio gracchia, rimetti un buffer più grande"""
+
+    bl_idname = "gp2m.low_latency"
+    bl_label = "Riduci il ritardo dell'audio"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        system = context.preferences.system
+        before = audio_latency(context)
+        try:
+            buffers = system.bl_rna.properties["audio_mixing_buffer"].enum_items.keys()
+            if LOW_LATENCY_BUFFER in buffers and before > 512 / 44100 + 1e-6:
+                system.audio_mixing_buffer = LOW_LATENCY_BUFFER
+        except (KeyError, TypeError, AttributeError):
+            pass
+        context.scene.sync_mode = "AUDIO_SYNC"
+        context.preferences.is_dirty = True
+        self.report({"INFO"}, f"Ritardo dell'audio: {before * 1000:.0f} ms -> "
+                    f"{audio_latency(context) * 1000:.0f} ms")
+        return {"FINISHED"}
+
+
 class GP2M_OT_fit_to_strip(bpy.types.Operator):
     """La composizione prende In e Out della clip attiva del Sequencer (un video, un
     suono...): parte con lei e dura quanto lei"""
@@ -1170,6 +1210,7 @@ def _target_group(gp):
 
 
 classes = (
+    GP2M_OT_low_latency,
     GP2M_OT_add_composition,
     GP2M_OT_fit_to_strip,
     GP2M_OT_board_octaves,
