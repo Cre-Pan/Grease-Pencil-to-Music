@@ -16,6 +16,7 @@ from bpy.props import EnumProperty, IntProperty
 from mathutils import Vector
 
 from . import board, engine
+from .icons import composition_icon
 
 GAP = 0.4  # space between two boards stacked on the table
 
@@ -166,14 +167,14 @@ class GP2M_UL_compositions(bpy.types.UIList):
         op.name, op.what = obj.name, "HIDE"
         name = row.row(align=True)
         name.active = not hidden and not obj.gp2m.mute
-        name.prop(obj, "name", text="", emboss=False, icon="OUTLINER_OB_GREASEPENCIL")
+        name.prop(obj, "name", text="", emboss=False, **composition_icon(obj))
         first, last = channel_span(context.scene, obj)
         right = row.row(align=True)
         right.alignment = "RIGHT"
         if first:
             right.label(text=f"{first}" if first == last else f"{first}–{last}")
         right.prop(obj.gp2m, "mute", text="", emboss=False,
-                   icon="MUTE_IPO_ON" if obj.gp2m.mute else "MUTE_IPO_OFF")
+                   icon="MUTE_IPO_OFF" if obj.gp2m.mute else "MUTE_IPO_ON")
 
     def filter_items(self, context, data, propname):
         items = getattr(data, propname)

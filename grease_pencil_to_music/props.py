@@ -207,7 +207,44 @@ def _mute_changed(self, _context):
     _sound_changed(self, _context)
 
 
+_solo_syncing = False
+
+
+def _sync_group_solo(gp_data, item):
+    """Solo of a group and of what is inside it go together: a group in Solo puts all
+    its layers (and sub-groups) in Solo, and back; a group is in Solo when all of its
+    layers are."""
+    from .board import ancestors, is_group, user_tree
+    node = _node(gp_data, item.name)
+    if node is None:
+        return
+    by_name = {s.name: s for s in gp_data.gp2m_layers}
+    tree = [n for n, _depth in user_tree(gp_data)]
+    if item.is_group:
+        for inner in tree:
+            other = by_name.get(inner.name)
+            if other is not None and node in ancestors(inner) and other.solo != item.solo:
+                other.solo = item.solo
+    for group in ancestors(node):
+        settings = by_name.get(group.name)
+        if settings is None:
+            continue
+        inside = [by_name[n.name] for n in tree
+                  if not is_group(n) and group in ancestors(n) and n.name in by_name]
+        value = bool(inside) and all(s.solo for s in inside)
+        if settings.solo != value:
+            settings.solo = value
+
+
 def _solo_changed(self, _context):
+    global _solo_syncing
+    if _solo_syncing:
+        return  # the group, or a layer inside it, follows: one update at the end
+    _solo_syncing = True
+    try:
+        _sync_group_solo(self.id_data, self)
+    finally:
+        _solo_syncing = False
     apply_solo(self.id_data)
     _sync_clip_mutes(self.id_data)
     _sound_changed(self, _context)

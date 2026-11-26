@@ -1757,7 +1757,16 @@ def test_layer_groups(comp):
     settings.solo = True
     assert pitches() == [60, 64]
     assert abs(gp.layers["Livello 3"].opacity - props.SOLO_OPACITY) < 1e-6
+    # The headphones of the group and of its layers light up together.
+    inner = [props.find_layer_settings(gp, n) for n in ("Livello 1", "Livello 2")]
+    assert all(s.solo for s in inner)
+    inner[0].solo = False  # one layer out: the group is no longer all in Solo
+    assert not settings.solo and inner[1].solo
+    assert pitches() == [64]
+    inner[0].solo = True  # all its layers in Solo: the group too
+    assert settings.solo
     settings.solo = False
+    assert not any(s.solo for s in inner)
     assert abs(gp.layers["Livello 3"].opacity - 1.0) < 1e-6
     group.hide = True
     assert pitches() == [67]
