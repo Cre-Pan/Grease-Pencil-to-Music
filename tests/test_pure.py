@@ -1372,3 +1372,32 @@ def test_loud_strokes_are_synthesized_again_at_the_ceiling():
     peak = max(float(np.max(v.amp)) for v in mixer._interpret_stroke(
         replace(loud, gain=1.0), *args)[1].voices)
     assert (unit is None) == (peak * 2.0 >= mixer.AMP_CEILING)
+
+
+# --- Composizione Bit ----------------------------------------------------------------
+
+def test_bit_reads_each_stroke_on_its_lane_drum():
+    from types import SimpleNamespace
+
+    from grease_pencil_to_music import beat
+    from grease_pencil_to_music.interpret import StrokeData
+    lanes = [SimpleNamespace(drum=d) for d in ("KICK", "SNARE", "TOM")]
+    s = SimpleNamespace(kind="BEAT", lanes=3, lane_drums=lanes, row_height=0.1)
+    h = beat.lane_height(s)
+    assert h == pytest.approx(0.45)
+    assert beat.lane_at(s, 0.0) == 0 and beat.lane_at(s, 3 * h - 1e-6) == 2
+    assert beat.lane_at(s, -0.01) is None and beat.lane_at(s, 3 * h) is None
+
+    def stroke(z0, z1):
+        return StrokeData(x=np.array([0.0, 1.0]), z=np.array([z0, z1]),
+                          radius=np.full(2, 0.02), opacity=np.ones(2), instrument="PIANO")
+    low, high, slanted, tom, above = beat.read_strokes(s, [
+        stroke(0.05, 0.06), stroke(0.4, 0.41), stroke(0.46, 0.85),
+        stroke(1.0, 1.1), stroke(5.0, 5.0)])
+    assert low.instrument == high.instrument == "KICK"
+    assert np.allclose(low.z, high.z) and np.ptp(low.z) == 0  # flat, same height
+    assert slanted.instrument == "SNARE" and np.ptp(slanted.z) == 0
+    assert tom.instrument == "TOM" and above.instrument == "TOM"  # clamped to the board
+    assert round(tom.z[0] / 0.1 - 0.5) == beat.LANE_PITCH["TOM"]
+    assert all(beat.default_drum(0, used=beat.DEFAULT_DRUMS[:i]) == beat.DEFAULT_DRUMS[i]
+               for i in range(len(beat.DEFAULT_DRUMS)))

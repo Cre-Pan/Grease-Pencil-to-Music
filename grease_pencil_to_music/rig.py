@@ -31,7 +31,7 @@ from bpy_extras import view3d_utils
 from mathutils import Matrix, Vector
 from mathutils.geometry import intersect_line_plane
 
-from . import board, theme
+from . import beat, board, theme
 
 RIG_ROLE = "gp2m_rig"  # custom property on the rig object of 0.0.22
 RIG_SUFFIX = " · Rig"
@@ -398,13 +398,17 @@ class _HandleMove:
             # One key at a time; Ctrl: whole octaves.
             # The board follows while dragging (rows added or taken away at that
             # edge, the drawing and the other edge stay where they are).
-            raw = dz / max(s.row_height, 1e-9)
-            wanted = 12 * round(raw / 12.0) if event.ctrl else round(raw)
+            # Bit: one lane at a time.
+            lanes = beat.is_beat(s)
+            step = beat.lane_height(s) if lanes else s.row_height
+            raw = dz / max(step, 1e-9)
+            octaves = event.ctrl and not lanes
+            wanted = 12 * round(raw / 12.0) if octaves else round(raw)
             if self.handle == OCT_BOTTOM:
                 wanted = -wanted  # dragging down shows more keys below
             edge = "TOP" if self.handle == OCT_TOP else "BOTTOM"
             delta = board.key_steps(s, edge, wanted - self.applied)
-            if event.ctrl:  # whole octaves from where the drag started
+            if octaves:  # whole octaves from where the drag started
                 delta = int((self.applied + delta) / 12) * 12 - self.applied
             if delta:
                 self.applied += board.shift_keys(comp, edge, delta)
@@ -413,6 +417,8 @@ class _HandleMove:
             sign = "+" if steps > 0 else ""
             if not steps:
                 label = ""
+            elif lanes:
+                label = f"{sign}{steps} corsi{'a' if abs(steps) == 1 else 'e'}"
             elif steps % 12 == 0:
                 label = f"{sign}{steps // 12} ott."
             else:

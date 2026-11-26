@@ -355,6 +355,25 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.33
+
+Composizione Bit (dal Figma "Composizione Bit")
+- **Nuovo tipo di composizione**: *Shift+A → Doodle Music → Composizione Bit*. Stessa finestra,
+  maniglie, cursore blu e anteprima della tavola delle note; al posto di tastiera e righe ci sono
+  **8 corsie**, una percussione ciascuna (dal basso: Cassa, Rullante, Battimani, Tom, Rimshot,
+  Charleston, Charleston aperto, Piatto).
+- **La corsia sceglie il suono**: ogni tratto suona la percussione della corsia dove sta (la sua
+  altezza mediana), qualunque sia la penna. Più in alto o più in basso dentro la corsia non cambia
+  nulla: un tratto storto resta un solo colpo. Spessore e volume della penna danno la forza del colpo.
+- **Bordi come nel disegno**: corsie #272727 / #242424 a righe alterne (la prima in alto è la più
+  chiara), bordo di 2 px #1C1C1C tra una corsia e l'altra, pannelli #1B1B1B tagliati dagli angoli
+  arrotondati (raggio 25) e contorno di 2 px #323232 sopra tutto, a sinistra e sulla griglia.
+- **Nomi delle corsie** sul pannello di sinistra (si spengono con *Nomi delle corsie → Nessuna*).
+- **Corsie dalle maniglie**: la maniglia in alto e quella in basso aggiungono o tolgono una corsia
+  alla volta (da 1 a 16), il disegno non si sposta e ogni corsia tiene la sua percussione.
+- Nel pannello *Tavola* si sceglie la percussione di ogni corsia; *Suona mentre disegni* fa
+  sentire la percussione della corsia dove inizi il tratto.
+
 ## 0.0.32
 
 **Tavola nuova, dal disegno in Figma.** La tavola ora è una finestra scura (#181818, bordo #252525,

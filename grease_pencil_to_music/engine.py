@@ -21,7 +21,7 @@ import aud
 import bpy
 import numpy as np
 
-from . import board, effects, interpret, midi, mixer, music, prefs, props, reader, synth
+from . import beat, board, effects, interpret, midi, mixer, music, prefs, props, reader, synth
 
 STRIP_PREFIX = "GP2M · "
 
@@ -115,6 +115,14 @@ def clip_order(obj):
 
 
 def board_spec(settings):
+    if beat.is_beat(settings):
+        # Bit: the strokes reach the reader on the row of their lane's pitch
+        # (beat.read_strokes), on a chromatic board that starts at MIDI 0.
+        return interpret.BoardSpec(
+            low_note=0, row_height=settings.row_height,
+            seconds_width=settings.seconds_width, length=settings.length,
+            bpm=settings.bpm, scale="CHROMATIC", root=0, time_grid=settings.time_grid,
+            min_note=settings.min_note, swing=settings.swing)
     return interpret.BoardSpec(
         low_note=settings.low_note,
         row_height=settings.row_height,
@@ -192,13 +200,15 @@ def section_frames(obj, scene):
 
 
 def _layer_inputs(obj, reads):
-    beat = 60.0 / max(obj.gp2m.bpm, 1e-6)
+    seconds_per_beat = 60.0 / max(obj.gp2m.bpm, 1e-6)
+    bit = beat.is_beat(obj.gp2m)
+    rows = 128 if bit else board.dimensions(obj.gp2m)[0]
     layers = []
     for read in reads:
         settings = props.find_layer_settings(obj.data, read.name)
         layers.append(mixer.LayerInput(
             name=read.name,
-            strokes=read.strokes,
+            strokes=beat.read_strokes(obj.gp2m, read.strokes) if bit else read.strokes,
             mode=settings.mode if settings else "QUANTIZED",
             fill_mode=settings.fill_mode if settings else "TONAL",
             glide=settings.glide if settings else 0.12,
@@ -206,11 +216,11 @@ def _layer_inputs(obj, reads):
             gain=read.opacity,
             fx=_layer_fx(settings),
             canon_voices=settings.canon_voices if settings and settings.use_canon else 1,
-            canon_delay=settings.canon_delay * beat if settings else 0.0,
+            canon_delay=settings.canon_delay * seconds_per_beat if settings else 0.0,
             canon_transpose=settings.canon_transpose if settings else 0,
             harmony=settings.harmony if settings else "OFF",
             mods=layer_mods(settings),
-            rows=board.dimensions(obj.gp2m)[0],
+            rows=rows,
         ))
     return layers
 
@@ -385,7 +395,7 @@ def _context_signature(obj, scene):
     s = obj.gp2m
     return repr((astuple(board_spec(s)), astuple(prefs.get_mapping()), s.sample_rate, s.loop,
                  round(s.master_volume, 4), astuple(master_fx(s)), s.use_modifiers,
-                 scene.frame_start))
+                 scene.frame_start, beat.is_beat(s) and tuple(beat.lane_drums(s))))
 
 
 def _layer_signatures(obj, layers):
@@ -1650,8 +1660,8 @@ def timeline_data(result, settings):
               for start, pitch, ident in result.curves]
     return {"peaks": (peaks / top).astype(np.float32), "rate": PEAKS_PER_SECOND,
             "notes": notes, "curves": curves, "curve_rate": interpret.CONTROL_RATE / 4,
-            "low": settings.low_note,
-            "high": settings.low_note + board.span(settings),
+            "low": 0 if beat.is_beat(settings) else settings.low_note,
+            "high": 127 if beat.is_beat(settings) else settings.low_note + board.span(settings),
             "length": result.duration or settings.length}
 
 

@@ -93,6 +93,10 @@ DESIGN = {
     "second": hex_srgb("0D0D0D"), "beat": hex_srgb("202020"),
     "playhead": hex_srgb("407FB7"),
     "grip_dot": hex_srgb("D9D9D9"),
+    # Composizione Bit
+    "lane": hex_srgb("272727"), "lane_alt": hex_srgb("242424"),
+    "lane_rim": hex_srgb("1C1C1C"), "panel": hex_srgb("1B1B1B"),
+    "mask_rim": hex_srgb("353535"), "lane_text": hex_srgb("6A6A6A"),
 }
 
 
@@ -116,6 +120,12 @@ def board_palette(context=None):
         "GP2M Etichetta tasti neri": (rgba(mix(d["black_key"], (1.0, 1.0, 1.0), 0.55)), None),
         "GP2M Testina": (rgba(d["playhead"]), None),
         "GP2M Fuori anteprima": (None, (0.0, 0.0, 0.0, 0.65)),
+        # Composizione Bit
+        "GP2M Fondo corsie": (rgba(d["mask_rim"]), rgba(d["panel"])),
+        "GP2M Corsia": (None, rgba(d["lane"])),
+        "GP2M Corsia alterna": (None, rgba(d["lane_alt"])),
+        "GP2M Bordo corsia": (rgba(d["lane_rim"]), None),
+        "GP2M Etichetta corsia": (rgba(d["lane_text"]), None),
     }
 
 

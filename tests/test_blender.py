@@ -3370,3 +3370,83 @@ def test_redo_of_a_layer_moved_on_the_board_keeps_the_move(comp):
     _undo_to({(comp, '["gp2m_sync"]'): sync})
     assert [layer.name for layer in sub("board").user_layers(gp)] == moved
     assert engine.clip_order(comp)[""] != before  # the clips followed the layers
+
+
+# --- Composizione Bit ----------------------------------------------------------------
+
+@pytest.fixture
+def bit(addon):
+    assert bpy.ops.gp2m.add_composition(kind="BEAT") == {"FINISHED"}
+    obj = bpy.context.view_layer.objects.active
+    yield obj
+    sub("engine")._state.pop(obj.name, None)
+
+
+def _lane_z(obj, lane, where=0.5):
+    return (lane + where) * sub("beat").lane_height(obj.gp2m)
+
+
+def test_bit_composition_has_eight_lanes_of_percussion(bit):
+    beat, board = sub("beat"), sub("board")
+    s = bit.gp2m
+    assert bit.name.startswith("Composizione Bit")
+    assert s.kind == "BEAT" and s.lanes == 8 and len(s.lane_drums) == 8
+    drums = beat.lane_drums(s)
+    assert drums[0] == "KICK" and len(set(drums)) == 8
+    assert all(sub("synth").get_instrument(d).percussive for d in drums)
+    # As tall as the three octaves of a note board (630 design px).
+    assert board.dimensions(s)[2] == pytest.approx(36 * s.row_height)
+    gp = _grid(bit)
+    names = {m.name for m in gp.materials}
+    assert {"GP2M Corsia", "GP2M Corsia alterna", "GP2M Bordo corsia",
+            "GP2M Fondo corsie"} <= names
+    assert len(gp.layers["GP2M Tasti"].frames[0].drawing.strokes) == 0  # no piano
+    # 7 borders between the 8 lanes, on the left panel and on the grid, + 2 outlines.
+    assert len(gp.layers["GP2M Righe"].frames[0].drawing.strokes) == 2 * 7 + 2
+    assert len(gp.layers["GP2M Etichette"].frames[0].drawing.strokes) > 8  # the names
+    assert board.board_materials_ok(bit)
+
+
+def test_bit_lane_chooses_the_drum_whatever_the_height(bit):
+    engine, beat = sub("engine"), sub("beat")
+    s = bit.gp2m
+    s.time_grid = "OFF"
+    # Kick at the bottom of its lane, then at the top: the same hit.
+    add_stroke(bit, 0, [(0.5 * s.seconds_width, _lane_z(bit, 0, 0.1)),
+                        (0.6 * s.seconds_width, _lane_z(bit, 0, 0.2))])
+    add_stroke(bit, 0, [(1.5 * s.seconds_width, _lane_z(bit, 0, 0.9)),
+                        (1.6 * s.seconds_width, _lane_z(bit, 0, 0.8))])
+    # A slanted stroke in the snare lane is one snare hit.
+    add_stroke(bit, 0, [(2.5 * s.seconds_width, _lane_z(bit, 1, 0.05)),
+                        (3.5 * s.seconds_width, _lane_z(bit, 1, 0.95))])
+    result = engine.regenerate(bit)
+    hits = sorted((round(n.start, 1), n.instrument, n.pitch) for n in result.notes)
+    assert [h[1] for h in hits] == ["KICK", "KICK", "SNARE"]
+    assert hits[0][2] == hits[1][2]  # the height inside the lane changes nothing
+    # The pen's instrument does not matter: the lane does.
+    s.lane_drums[0].drum = "CLAP"
+    result = engine.regenerate(bit)
+    assert sorted(n.instrument for n in result.notes) == ["CLAP", "CLAP", "SNARE"]
+    assert beat.lane_drums(s)[0] == "CLAP"
+
+
+def test_bit_lanes_grow_and_shrink_without_moving_the_drawing(bit):
+    board, beat = sub("board"), sub("beat")
+    s = bit.gp2m
+    add_stroke(bit, 0, [(1.0, _lane_z(bit, 0)), (1.2, _lane_z(bit, 0))])
+    point = bit.data.layers["Livello 1"].frames[0].drawing.strokes[0].points[0]
+    world = bit.matrix_world @ point.position
+    drums = beat.lane_drums(s)
+    assert board.shift_keys(bit, "BOTTOM", 2) == 2  # two lanes below
+    assert s.lanes == 10
+    after = bit.matrix_world @ bit.data.layers["Livello 1"].frames[0].drawing.strokes[0] \
+        .points[0].position
+    assert (after - world).length < 1e-3  # float32 positions
+    assert beat.lane_drums(s)[2:] == drums  # every lane kept its drum
+    assert board.shift_keys(bit, "BOTTOM", -2) == -2
+    assert beat.lane_drums(s) == drums
+    assert board.shift_keys(bit, "TOP", -3) == -3 and s.lanes == 5
+    assert board.shift_keys(bit, "TOP", 3) == 3
+    assert beat.lane_drums(s) == drums  # hidden lanes come back with their drum
+    assert board.key_steps(s, "TOP", 20) == beat.MAX_LANES - s.lanes
+    assert board.shift_octaves(bit, "TOP", 1) == 1 and s.lanes == 9  # the + button

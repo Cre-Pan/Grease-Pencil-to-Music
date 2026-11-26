@@ -23,7 +23,7 @@ import warnings
 
 import bpy
 
-from . import glyphs, music, synth, theme
+from . import beat, glyphs, music, synth, theme
 
 BOARD_GROUP = "Tavola Composizione"
 LEGACY_BOARD_GROUP = "GP2M Tavola"  # name up to 0.0.12, renamed when found
@@ -326,6 +326,11 @@ def _set_span(settings, semitones):
 
 
 def dimensions(settings):
+    """(rows, width, height) of the grid. The rows of a Bit composition are its lanes."""
+    if beat.is_beat(settings):
+        lanes = beat.lane_count(settings)
+        return lanes, settings.length * settings.seconds_width, \
+            lanes * beat.lane_height(settings)
     rows = span(settings) + 1
     return rows, settings.length * settings.seconds_width, rows * settings.row_height
 
@@ -345,7 +350,11 @@ MIN_LOW_NOTE, MAX_LOW_NOTE, MAX_OCTAVES = 12, 96, 7
 
 def key_steps(settings, edge, delta):
     """How many keys (semitones, signed) can really be added (+) or hidden (-) at
-    ``edge``: the board shows from 1 to 7 octaves."""
+    ``edge``: the board shows from 1 to 7 octaves. A Bit composition counts lanes
+    (from 1 to 16)."""
+    if beat.is_beat(settings):
+        now = beat.lane_count(settings)
+        return max(beat.MIN_LANES, min(beat.MAX_LANES, now + delta)) - now
     now = span(settings)
     if edge == "TOP":
         return max(12, min(MAX_OCTAVES * 12, now + delta)) - now
@@ -370,6 +379,8 @@ def shift_octaves(comp, edge, delta):
     The top only changes "Ottave". At the bottom the lowest note changes, so the
     board origin (z = 0, the lowest row) moves down or up by whole octaves and the
     strokes move the opposite way inside the object. Returns the octaves changed."""
+    if beat.is_beat(comp.gp2m):  # Bit: one lane for each octave of a note board
+        return shift_keys(comp, edge, delta)
     steps = octave_steps(comp.gp2m, edge, delta)
     return shift_keys(comp, edge, 12 * steps) // 12 if steps else 0
 
@@ -377,15 +388,30 @@ def shift_octaves(comp, edge, delta):
 def shift_keys(comp, edge, delta):
     """Like :func:`shift_octaves`, one key (semitone) at a time. Returns the keys
     changed (signed)."""
-    import numpy as np
     s = comp.gp2m
     steps = key_steps(s, edge, delta)
     if not steps:
         return 0
+    if beat.is_beat(s):
+        return _shift_lanes(comp, edge, steps)
     if edge == "TOP":
         _set_span(s, span(s) + steps)
         return steps  # the top edge: the origin stays, the deferred rebuild is enough
-    dz = steps * s.row_height  # local z the strokes move up (down if negative)
+    _move_drawing(comp, steps * s.row_height)
+    _set_span(s, span(s) + steps)
+    s.low_note -= steps
+    # The board at once, with the object that just moved: a board drawn for a moment
+    # with the old rows on the new origin jumped up or down. The sound is deferred.
+    scene = bpy.context.scene
+    build_grid(comp, scene)
+    _build_playhead(comp, scene)
+    return steps
+
+
+def _move_drawing(comp, dz):
+    """Move the strokes up by ``dz`` inside the object and the object down by as much:
+    in the world nothing moves, the board origin (z = 0) goes down."""
+    import numpy as np
     for layer in user_layers(comp.data):
         for frame in layer.frames:
             attr = frame.drawing.attributes.get("position")
@@ -400,10 +426,36 @@ def shift_keys(comp, edge, delta):
     world = comp.matrix_world.copy()
     world.translation = world @ Vector((0.0, 0.0, -dz))
     comp.matrix_world = world
-    _set_span(s, span(s) + steps)
-    s.low_note -= steps
-    # The board at once, with the object that just moved: a board drawn for a moment
-    # with the old rows on the new origin jumped up or down. The sound is deferred.
+
+
+LANE_STASH_KEY = "gp2m_lane_stash"
+
+
+def _shift_lanes(comp, edge, steps):
+    """Lanes of a Bit composition added (+) or taken away (-) at the top or at the
+    bottom; the drawing stays where it is and every lane keeps its percussion."""
+    from . import props
+    s = comp.gp2m
+    props.ensure_lanes(s)
+    items = s.lane_drums
+    if edge == "TOP":
+        # The items above the last lane stay: a lane shown again keeps its drum.
+        s.lanes = s.lanes + steps
+        return steps
+    stash = list(comp.get(LANE_STASH_KEY, []))  # drums of the lanes hidden below
+    if steps > 0:  # new lanes below: their items go first
+        for _ in range(steps):
+            used = {item.drum for item in items}
+            drum = stash.pop() if stash else beat.default_drum(len(items), used)
+            items.add().drum = drum
+            items.move(len(items) - 1, 0)
+    else:
+        for _ in range(-steps):
+            stash.append(items[0].drum)
+            items.remove(0)
+    comp[LANE_STASH_KEY] = stash[-beat.MAX_LANES:]
+    _move_drawing(comp, steps * beat.lane_height(s))
+    s.lanes = s.lanes + steps
     scene = bpy.context.scene
     build_grid(comp, scene)
     _build_playhead(comp, scene)
@@ -680,6 +732,90 @@ def _labels(s, index, rows, top):
         name = "GP2M Etichetta tasti neri" if black else "GP2M Etichetta tasti"
         for line in glyphs.text_polylines(text, x, baseline, height, "LEFT"):
             specs.append((line, height * 0.06, index[name], "line"))
+    return specs
+
+
+# --- Composizione Bit (Figma "Composizione Bit": lanes instead of keys) -------------
+
+LANE_LABEL = 14.0  # design px, height of the drum names
+LANE_LABEL_X = 16.0
+
+
+def _lane_band(z0, z1, x0, x1, box, radius):
+    return _clip_rect(x0, z0, x1, z1, box, radius)
+
+
+def _lane_material(s, lane):
+    """The top lane is the lighter one (#272727), then they alternate."""
+    return "GP2M Corsia" if (beat.lane_count(s) - 1 - lane) % 2 == 0 else "GP2M Corsia alterna"
+
+
+def _beat_background(s, index, lanes, width):
+    """Window, the two panels (KEYBOARD and MASCHERA GRIGLIA, #1B1B1B) and the lanes
+    on both, cut by the rounded corners of their panel (Group 79)."""
+    u = unit(s)
+    h = beat.lane_height(s)
+    window = window_box(s)
+    specs = [(_rounded_rect(*window, WINDOW_RADIUS * u, _arc_steps(WINDOW_RADIUS, 1.0)),
+              u, index["GP2M Finestra"], "both")]
+    for box, radius in ((keyboard_box(s), KEYBOARD_RADIUS), (grid_box(s), GRID_RADIUS)):
+        r = radius * u
+        specs.append((_rounded_rect(*box, r, _arc_steps(radius, 1.0)), 0.001,
+                      index["GP2M Fondo corsie"], "fill"))
+        x0, _z0, x1, _z1 = box
+        for lane in range(lanes):
+            band = _lane_band(lane * h, (lane + 1) * h, x0, x1, box, r)
+            if band:
+                specs.append((band, 0.001, index[_lane_material(s, lane)], "fill"))
+    return specs
+
+
+def _beat_rows(s, index, lanes, width):
+    """The 2 px borders between the lanes (#1C1C1C), then the outlines of the two
+    panels (OUTLINE TASTIERA, OUTLINE GRIGLIA: 2 px #323232, radius 25)."""
+    u = unit(s)
+    h = beat.lane_height(s)
+    specs = []
+    for box, radius in ((keyboard_box(s), KEYBOARD_RADIUS), (grid_box(s), GRID_RADIUS)):
+        r = radius * u
+        x0, _z0, x1, _z1 = box
+        for lane in range(1, lanes):
+            z = lane * h
+            inset = _inset(box, r, z)
+            specs.append(([(x0 + inset, z), (x1 - inset, z)], u,
+                          index["GP2M Bordo corsia"], "line"))
+    for frame, radius in ((grid_box(s), GRID_RADIUS), (keyboard_box(s), KEYBOARD_RADIUS)):
+        outline = _rounded_rect(*frame, radius * u, _arc_steps(radius, 1.0))
+        specs.append((outline + outline[:1], u, index["GP2M Bordo"], "line"))
+    return specs
+
+
+def _plain_upper(text):
+    """Capitals without accents (the single-stroke font of the board)."""
+    import unicodedata
+    text = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in text if not unicodedata.combining(c)).upper()
+
+
+def _beat_labels(s, index, lanes):
+    """The name of each lane's percussion, on the left panel ("Nessuna": none)."""
+    if s.key_labels == "NONE":
+        return []
+    u = unit(s)
+    h = beat.lane_height(s)
+    x0, _z0, x1, _z1 = keyboard_box(s)
+    height = LANE_LABEL * u
+    room = (x1 - x0) - 2 * LANE_LABEL_X * u
+    specs = []
+    for lane, ident in enumerate(beat.lane_drums(s)):
+        text = _plain_upper(synth.get_instrument(ident).label)
+        size = height
+        width = glyphs.text_width(text, size)
+        if width > room > 0:
+            size *= room / width
+        baseline = lane * h + (h - size) / 2.0
+        for line in glyphs.text_polylines(text, x0 + LANE_LABEL_X * u, baseline, size, "LEFT"):
+            specs.append((line, size * 0.07, index["GP2M Etichetta corsia"], "line"))
     return specs
 
 
@@ -1012,12 +1148,13 @@ def rename_legacy_board(gp):
 
 # Board layer -> materials its strokes may use.
 _LAYER_MATERIALS = {
-    "GP2M Sfondo": {"GP2M Finestra", "GP2M Riga bianca", "GP2M Banda tasti neri"},
+    "GP2M Sfondo": {"GP2M Finestra", "GP2M Riga bianca", "GP2M Banda tasti neri",
+                    "GP2M Fondo corsie", "GP2M Corsia", "GP2M Corsia alterna"},
     "GP2M Griglia": {"GP2M Linea battito", "GP2M Linea secondo"},
-    "GP2M Righe": {"GP2M Linea ottava", "GP2M Bordo"},
+    "GP2M Righe": {"GP2M Linea ottava", "GP2M Bordo", "GP2M Bordo corsia"},
     "GP2M Tasti": {"GP2M Tasto bianco", "GP2M Tasto nero"},
     "GP2M Etichette": {"GP2M Pallino Do", "GP2M Etichetta tasti",
-                       "GP2M Etichetta tasti neri"},
+                       "GP2M Etichetta tasti neri", "GP2M Etichetta corsia"},
     SHADE_LAYER: {"GP2M Fuori anteprima"},
     HEAD_LAYER: {"GP2M Testina"},
 }
@@ -1064,8 +1201,10 @@ BOARD_KEY = "gp2m_board"  # on the grid data: the settings it was built for
 def board_signature(settings):
     """The settings the grid and the playhead are drawn from."""
     s = settings
+    lanes = f"|{s.kind}|{','.join(beat.lane_drums(s))}" if beat.is_beat(s) else ""
     return (f"{s.bpm:.4f}|{s.length:.4f}|{s.low_note}|{s.octaves}|{s.extra_keys}|"
-            f"{s.row_height:.5f}|{s.seconds_width:.5f}|{int(s.show_beats)}|{s.key_labels}")
+            f"{s.row_height:.5f}|{s.seconds_width:.5f}|{int(s.show_beats)}|{s.key_labels}"
+            + lanes)
 
 
 def board_current(comp):
@@ -1113,13 +1252,19 @@ def build_grid(comp, scene=None):
         grid_gp.layers.remove(layer)
     board_group = _ensure_group(grid_gp, BOARD_GROUP, bottom=True)
 
-    for name, specs in (
-            ("GP2M Sfondo", _background(s, index, rows, width)),
-            ("GP2M Griglia", _grid(s, index, width, top)),
-            ("GP2M Righe", _rows(s, index, rows, width)),
-            ("GP2M Tasti", _keys(s, index, rows)),
-            ("GP2M Etichette", _labels(s, index, rows, top)),
-            (SHADE_LAYER, _shade(s, index, lit, top))):
+    if beat.is_beat(s):
+        pieces = (("GP2M Sfondo", _beat_background(s, index, rows, width)),
+                  ("GP2M Griglia", _grid(s, index, width, top)),
+                  ("GP2M Righe", _beat_rows(s, index, rows, width)),
+                  ("GP2M Tasti", []),
+                  ("GP2M Etichette", _beat_labels(s, index, rows)))
+    else:
+        pieces = (("GP2M Sfondo", _background(s, index, rows, width)),
+                  ("GP2M Griglia", _grid(s, index, width, top)),
+                  ("GP2M Righe", _rows(s, index, rows, width)),
+                  ("GP2M Tasti", _keys(s, index, rows)),
+                  ("GP2M Etichette", _labels(s, index, rows, top)))
+    for name, specs in pieces + ((SHADE_LAYER, _shade(s, index, lit, top)),):
         layer = grid_gp.layers.new(name, set_active=False, layer_group=board_group)
         layer.use_lights = False
         layer.pass_index = BOARD_PASS

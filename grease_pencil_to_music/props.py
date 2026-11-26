@@ -6,6 +6,7 @@ from bpy.props import (BoolProperty, CollectionProperty, EnumProperty, FloatProp
                        FloatVectorProperty, IntProperty, PointerProperty, StringProperty)
 
 from . import music, synth
+from .beat import KIND_ITEMS
 from .board import KEY_LABEL_ITEMS
 
 
@@ -536,6 +537,42 @@ ROOM_ITEMS = (
 )
 
 
+def _drum_items():
+    from . import beat
+    number = {inst.ident: index for index, inst in enumerate(synth.INSTRUMENTS)}
+    return [(ident, label, description, "NONE", number[ident])
+            for ident, label, description in beat.drum_items()]
+
+
+DRUM_ITEMS = _drum_items()  # kept here: Blender keeps no copy of the items
+
+
+def _lanes_changed(self, _context):
+    from . import beat
+    if self.kind == beat.BEAT:
+        ensure_lanes(self)
+    _board_changed(self, _context)
+
+
+def ensure_lanes(settings):
+    """One item of ``lane_drums`` per lane (new lanes get the next default drum)."""
+    from . import beat
+    items = settings.lane_drums
+    count = beat.lane_count(settings)
+    while len(items) < count:
+        used = {item.drum for item in items}
+        items.add().drum = beat.default_drum(len(items), used)
+
+
+class GP2M_Lane(bpy.types.PropertyGroup):
+    """One lane of a Bit composition: the percussion it plays."""
+
+    drum: EnumProperty(name="Percussione", items=DRUM_ITEMS, default="KICK",
+                       update=_board_changed,
+                       description="La percussione di questa corsia: ogni tratto nella corsia "
+                       "la suona, a qualunque altezza")
+
+
 class GP2M_CompositionSettings(bpy.types.PropertyGroup):
     is_composition: BoolProperty(default=False)
     channel: IntProperty(name="Canale Sequencer", default=0, min=0, max=128,
@@ -588,6 +625,13 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
     show_beats: BoolProperty(name="Mostra battiti", default=True, update=_board_changed)
     key_labels: EnumProperty(name="Etichette tasti", items=KEY_LABEL_ITEMS, default="C",
                              update=_board_changed)
+    kind: EnumProperty(name="Tipo", items=KIND_ITEMS, default="NOTES", update=_lanes_changed,
+                       description="Note: la tavola con la tastiera. Bit: la tavola del ritmo, "
+                       "una percussione per corsia")
+    lanes: IntProperty(name="Corsie", default=8, min=1, max=16, update=_lanes_changed,
+                       description="Corsie della composizione Bit, una percussione ciascuna "
+                       "(le maniglie sopra e sotto ne aggiungono o tolgono una alla volta)")
+    lane_drums: CollectionProperty(type=GP2M_Lane, options={"HIDDEN"})
 
     scale: EnumProperty(name="Scala", items=[(i, l, "") for i, l, _ in music.SCALES],
                         default="CHROMATIC", update=_sound_changed)
@@ -767,8 +811,8 @@ class GP2M_TimelineSettings(bpy.types.PropertyGroup):
                                     update=_timeline_changed)
 
 
-classes = (GP2M_LayerSettings, GP2M_Effects, GP2M_CompositionSettings, GP2M_PlaySettings,
-           GP2M_TimelineSettings)
+classes = (GP2M_LayerSettings, GP2M_Effects, GP2M_Lane, GP2M_CompositionSettings,
+           GP2M_PlaySettings, GP2M_TimelineSettings)
 
 
 def register_properties():
