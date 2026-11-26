@@ -284,6 +284,17 @@ def _audio_prop(layout, gp, item):
              icon=mute_icon(item.mute or silent))
 
 
+def _own_clip_prop(layout, gp, item):
+    """The group's clip of its own in the Sequencer (out of the composition's
+    meta-clip): lit when on, only with 'Un canale per livello'."""
+    sub = layout.row(align=True)
+    comps = [obj for obj in bpy.data.objects
+             if obj.type == "GREASEPENCIL" and obj.data == gp and obj.gp2m.is_composition]
+    sub.enabled = any(obj.gp2m.layer_channels for obj in comps)
+    sub.active = item.own_clip
+    sub.prop(item, "own_clip", text="", emboss=False, icon="SEQ_STRIP_META")
+
+
 INDENT_ICONS = 2  # empty icons per level: the rows inside a group make a staircase
 
 
@@ -292,11 +303,13 @@ def _indent(layout, depth):
         layout.label(text="", icon="BLANK1")
 
 
-def _lock_and_eye(layout, node):
+def _lock_and_eye(layout, node, item):
+    """The eye goes through the settings: a group and its layers hide together."""
     icons = layout.row(align=True)
     icons.emboss = "NONE"
     icons.prop(node, "lock", text="", emboss=False)
-    icons.prop(node, "hide", text="", emboss=False)
+    icons.prop(item, "hidden", text="", emboss=False,
+               icon="HIDE_ON" if node.hide else "HIDE_OFF")
 
 
 class GP2M_UL_layers(bpy.types.UIList):
@@ -318,7 +331,7 @@ class GP2M_UL_layers(bpy.types.UIList):
         row = layout.row(align=True)
         _indent(row, len(board.ancestors(layer)))
         row.label(text="", icon="OUTLINER_DATA_GP_LAYER")
-        _lock_and_eye(row, layer)
+        _lock_and_eye(row, layer, item)
         name = row.row(align=True)
         name.active = not board.is_hidden(layer) and not props.layer_silent(gp, item.name)
         name.prop(layer, "name", text="", emboss=False)
@@ -338,11 +351,12 @@ class GP2M_UL_layers(bpy.types.UIList):
         row.prop(group, "is_expanded", text="", emboss=False,
                  icon="DOWNARROW_HLT" if group.is_expanded else "RIGHTARROW")
         row.label(text="", icon="FILE_FOLDER")
-        _lock_and_eye(row, group)
+        _lock_and_eye(row, group, item)
         name = row.row(align=True)
         name.active = not group.hide and not props.layer_silent(gp, item.name)
         name.prop(group, "name", text="", emboss=False)
         right = row.row(align=True)
+        _own_clip_prop(right, gp, item)
         _audio_prop(right, gp, item)
         _solo_prop(right, item)
 
@@ -1323,6 +1337,7 @@ class GP2M_PT_sequencer_group(bpy.types.Panel):
             col.prop(settings, "clip_volume", text="Volume", slider=True)
             col.prop(settings, "pan_percent", text="Pan", slider=True)
             col.prop(settings, "mute", text="Muto")
+            col.prop(settings, "own_clip")
 
 
 classes = CHANGE_FAMILY_MENUS + (

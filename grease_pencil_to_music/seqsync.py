@@ -63,6 +63,7 @@ def rebuild_clips(scene, obj):
     """Throw away the composition's clips and make them again (everything they carry,
     volume, pan, color, mute, is stored on the layers)."""
     editor = scene.sequence_editor
+    engine.remove_own_clips(scene, obj)
     for strip in engine._top_strips(editor, obj):
         engine._remove_strip(editor, strip)
     engine.state(obj).pop("key", None)
@@ -455,7 +456,7 @@ def _sync_order(scene, obj):
     gp = obj.data
     changed = False
     undo_order = engine.state(obj).get("undo_order") or {}
-    for key, container in [("", meta)] + list(engine.layer_group_metas(meta).items()):
+    for key, container in [("", meta)] + list(engine.group_clips(scene, obj, meta).items()):
         inside = [strip for strip in container.strips if _node_name(strip)]
         if len(inside) < 2:
             continue
@@ -493,7 +494,7 @@ def _sync_layer_groups(scene, obj):
     st = engine.state(obj)
     from . import operators
     changed = False
-    for container in [meta] + list(engine.layer_group_metas(meta).values()):
+    for container in [meta] + list(engine.group_clips(scene, obj, meta).values()):
         parent = gp.layer_groups.get(container.get(engine.LAYER_GROUP_KEY) or "") \
             if container != meta else None
         for strip in list(container.strips):
@@ -527,7 +528,7 @@ def _sync_layer_groups(scene, obj):
             changed = True
     if changed or st.get("tree") != engine.tree_signature(obj):
         return changed  # the layers changed on the board: the Sequencer follows them
-    metas = engine.layer_group_metas(meta)
+    metas = engine.group_clips(scene, obj, meta)
 
     def group_of(strip):
         holder = strip.parent_meta()
@@ -538,8 +539,8 @@ def _sync_layer_groups(scene, obj):
     clips = list(engine.layer_strips(scene, obj).items()) + list(metas.items())
     for name, strip in clips:
         node = _node(gp, name)
-        if node is None:
-            continue
+        if node is None or strip.get(engine.OWN_CLIP_KEY) is not None:
+            continue  # a clip of its own is out of the meta-clip by choice
         target = group_of(strip)
         if target is not None and target.name == name:
             continue
@@ -577,7 +578,7 @@ def _sync_layer_group_clips(scene, obj):
     if meta is None:
         return False
     changed = False
-    for name, group_meta in engine.layer_group_metas(meta).items():
+    for name, group_meta in engine.group_clips(scene, obj, meta).items():
         item = props.find_layer_settings(obj.data, name)
         if item is None:
             continue

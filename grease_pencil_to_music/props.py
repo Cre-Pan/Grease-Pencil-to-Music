@@ -55,6 +55,17 @@ def _arrangement_changed(self, context):
         engine.arrange_safe(scene)
 
 
+def _own_clip_changed(self, _context):
+    """A group of layers gets (or leaves) a clip of its own: the Sequencer is laid out
+    again, the sound does not change."""
+    from . import engine
+    for obj in bpy.data.objects:
+        if obj.type == "GREASEPENCIL" and obj.data == self.id_data and obj.gp2m.is_composition:
+            scene = engine.scene_of(obj)
+            if scene is not None:
+                engine.arrange_safe(scene)
+
+
 def _follow_changed(self, _context):
     from . import engine
     obj = self.id_data
@@ -250,6 +261,38 @@ def _solo_changed(self, _context):
     _sound_changed(self, _context)
 
 
+def _get_hidden(self):
+    node = _node(self.id_data, self.name)
+    return bool(node is not None and node.hide)
+
+
+def _set_hidden(self, value):
+    """The eye of a group and of what is inside it go together, like Solo: hiding
+    a group hides all its layers (and sub-groups), and back; a group is hidden when
+    all of its layers are, so showing one layer shows its groups again."""
+    node = _node(self.id_data, self.name)
+    if node is None:
+        return
+    node.hide = bool(value)
+    sync_group_hide(self.id_data, node)
+
+
+def sync_group_hide(gp_data, node):
+    """After ``node``'s eye changed: its inner nodes follow (for a group), then its
+    groups are hidden when all of their layers are."""
+    from .board import ancestors, is_group, user_tree
+    tree = [n for n, _depth in user_tree(gp_data)]
+    if is_group(node):
+        for inner in tree:
+            if node in ancestors(inner) and inner.hide != node.hide:
+                inner.hide = node.hide
+    for group in ancestors(node):
+        inside = [n for n in tree if not is_group(n) and group in ancestors(n)]
+        value = bool(inside) and all(n.hide for n in inside)
+        if group.hide != value:
+            group.hide = value
+
+
 def _live_settings(gp_data):
     """Settings of the layers and groups that still exist."""
     return [item for item in gp_data.gp2m_layers
@@ -393,6 +436,14 @@ class GP2M_LayerSettings(bpy.types.PropertyGroup):
     solo: BoolProperty(name="Solo", default=False, update=_solo_changed,
                        description="Ascolta solo questo livello: gli altri tacciono e scendono "
                        "al 10% di opacità (anche negli export)")
+    hidden: BoolProperty(name="Nascosto", get=_get_hidden, set=_set_hidden,
+                         description="Mostra o nascondi il livello; l'occhio di un gruppo "
+                         "e quelli dei suoi livelli vanno insieme, come il Solo")
+    own_clip: BoolProperty(
+        name="Clip propria", default=False, update=_own_clip_changed,
+        description="Il gruppo esce dalla meta-clip della composizione e ha una clip tutta "
+        "sua nel Video Sequencer, sul canale sopra (con 'Un canale per livello'). Si muove "
+        "nel tempo con la composizione e tace con lei")
     solo_saved_opacity: FloatProperty(default=-1.0, options={"HIDDEN"},
                                       description="Opacità del livello prima del Solo "
                                       "(-1 = non attenuato)")
@@ -1000,12 +1051,12 @@ def find_layer_settings(gp_data, layer_name):
     return None
 
 
-_COPY_SKIP = {"rna_type", "name", "is_group", "solo", "color", "color_assigned"}
+_COPY_SKIP = {"rna_type", "name", "is_group", "solo", "hidden", "color", "color_assigned"}
 
 
 # What "Copia impostazioni" carries from a layer to another: reading, modifiers,
 # effects... but not its name, its audio switches or what the interface shows.
-_PASTE_SKIP = _COPY_SKIP | {"mute", "solo_saved_opacity", "expanded", "show_fx",
+_PASTE_SKIP = _COPY_SKIP | {"mute", "own_clip", "solo_saved_opacity", "expanded", "show_fx",
                             "settings_version"}
 
 

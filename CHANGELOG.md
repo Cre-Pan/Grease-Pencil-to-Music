@@ -358,6 +358,19 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.41
+
+- **L'occhio segue i gruppi, come le cuffie**: nella lista dei livelli, chiudendo l'occhio di un
+  gruppo si chiudono quelli di tutti i suoi livelli (e sottogruppi), e riaprendolo si riaprono;
+  quando tutti i livelli di un gruppo sono nascosti si chiude anche l'occhio del gruppo, e
+  mostrando di nuovo un livello il gruppo torna visibile.
+- **Clip propria per un gruppo di livelli** (opzione, icona clip sulla riga del gruppo o
+  *Clip propria* nel pannello *Gruppo* del Sequencer): con *Un canale per livello* il gruppo
+  esce dalla meta-clip della composizione e diventa una clip a sé nel Video Sequencer, sul
+  canale sopra, con i suoi livelli dentro. Parte e si sposta con la composizione, tace quando
+  la composizione o il gruppo sono muti; spegnendo l'opzione torna dentro la meta-clip.
+- Questa versione contiene anche la 0.0.38, la 0.0.39 e la 0.0.40 insieme.
+
 ## 0.0.40
 
 - **Copia, Incolla e Applica in ogni modificatore** (Array, Simmetria, Trasponi, Fade, Noise),

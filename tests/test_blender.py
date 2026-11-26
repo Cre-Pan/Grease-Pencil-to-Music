@@ -3351,6 +3351,94 @@ def test_deleting_a_group_clip_mutes_the_group(comp):
     assert name in engine.layer_group_metas(engine.meta_strip(scene, comp))
 
 
+def test_eye_of_a_group_and_of_its_layers_go_together(comp):
+    props, board = sub("props"), sub("board")
+    gp = comp.data
+    gp.layers.active = gp.layers["Livello 2"]
+    assert bpy.ops.gp2m.add_group() == {"FINISHED"}
+    gp.layers.active = gp.layers["Livello 1"]
+    assert bpy.ops.gp2m.move_to_group(group="Gruppo 1") == {"FINISHED"}
+    group = gp.layer_groups["Gruppo 1"]
+    settings = props.find_layer_settings(gp, "Gruppo 1")
+    inner = [props.find_layer_settings(gp, n) for n in ("Livello 1", "Livello 2")]
+    # The group's eye closes the eyes of its layers, and opens them again.
+    settings.hidden = True
+    assert group.hide and all(gp.layers[n].hide for n in ("Livello 1", "Livello 2"))
+    assert all(s.hidden for s in inner) and not gp.layers["Livello 3"].hide
+    settings.hidden = False
+    assert not group.hide and not any(s.hidden for s in inner)
+    # All its layers hidden: the group too; one shown again: the group is shown.
+    inner[0].hidden = True
+    assert not group.hide
+    inner[1].hidden = True
+    assert group.hide and settings.hidden
+    inner[0].hidden = False
+    assert not group.hide and gp.layers["Livello 2"].hide
+    assert not board.is_hidden(gp.layers["Livello 1"])
+    # Copying a layer's settings does not carry its eye.
+    assert "hidden" in props._COPY_SKIP
+
+
+def test_a_group_of_layers_with_a_clip_of_its_own(comp):
+    engine, seqsync, props = sub("engine"), sub("seqsync"), sub("props")
+    scene = bpy.context.scene
+    names, meta, group_meta = _layer_group(comp)
+    engine.arrange(scene)
+    name = group_meta[engine.LAYER_GROUP_KEY]
+    item = props.find_layer_settings(comp.data, name)
+    item.own_clip = True  # out of the composition's meta-clip
+    meta = engine.meta_strip(scene, comp)
+    clips = engine.own_clips(scene, comp)
+    assert list(clips) == [name]
+    clip = clips[name]
+    assert clip.parent_meta() is None and clip.channel == meta.channel + 1
+    assert name not in engine.layer_group_metas(meta)
+    strips = engine.layer_strips(scene, comp)
+    assert sorted(strips) == sorted(names)  # every layer still has its clip
+    assert all(strips[n].parent_meta().name == clip.name for n in names[:2])
+    assert all(strips[n].parent_meta().name == meta.name for n in names[2:])
+    assert engine.meta_strip(scene, comp).name == meta.name  # still one composition
+    assert engine._channel_count(scene, comp) == 2
+    # A new sound keeps it out, starting with the composition.
+    engine.regenerate(comp, force=True)
+    engine.arrange(scene)
+    clip = engine.own_clips(scene, comp)[name]
+    strips = engine.layer_strips(scene, comp)
+    assert all(strips[n].parent_meta().name == clip.name for n in names[:2])
+    start = min(s.content_start for s in engine.meta_sounds(engine.meta_strip(scene, comp)))
+    assert all(strips[n].content_start == start for n in names)
+    # The Sequencer sync does not read it as a copy or a group taken apart.
+    count = len(engine.scene_compositions(scene))
+    assert not seqsync.sync_scene(scene)
+    assert comp.data.layer_groups.get(name) is not None
+    assert len(engine.scene_compositions(scene)) == count
+    # Muted with the composition, and with the group.
+    comp.gp2m.mute = True
+    engine.arrange(scene)
+    assert engine.own_clips(scene, comp)[name].mute
+    comp.gp2m.mute = False
+    engine.arrange(scene)
+    assert not engine.own_clips(scene, comp)[name].mute
+    item.mute = True
+    assert engine.own_clips(scene, comp)[name].mute
+    item.mute = False
+    # Off again: back inside the meta-clip.
+    item.own_clip = False
+    meta = engine.meta_strip(scene, comp)
+    assert not engine.own_clips(scene, comp)
+    assert not engine._own_clips_all(scene.sequence_editor, comp)
+    metas = engine.layer_group_metas(meta)
+    assert name in metas
+    strips = engine.layer_strips(scene, comp)
+    assert all(strips[n].parent_meta().name == metas[name].name for n in names[:2])
+    # With one mix strip the option has no clip.
+    item.own_clip = True
+    assert engine.own_clips(scene, comp)
+    comp.gp2m.layer_channels = False
+    engine.regenerate(comp, force=True)
+    assert not engine._own_clips_all(scene.sequence_editor, comp)
+
+
 def test_reordering_clips_inside_a_group_of_layers(comp):
     engine, seqsync = sub("engine"), sub("seqsync")
     scene = bpy.context.scene
