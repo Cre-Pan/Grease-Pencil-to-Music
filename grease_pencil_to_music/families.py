@@ -30,33 +30,33 @@ MELODIC = (
     Family("KEYS", "Tastiere", "keys",
            ("PIANO", "GRAND", "HARPSI", "PIPEORGAN"), ("EPIANO", "ORGAN")),
     Family("MALLETS", "Percussioni intonate", "mallets",
-           ("MARIMBA", "VIBES", "XYLO", "GLOCK", "KALIMBA", "TUBULAR"), ("MARIMBA", "BELL")),
+           ("MARIMBA", "VIBES", "XYLO", "GLOCK", "KALIMBA", "TUBULAR", "TRIANGLE", "COWBELL",
+            "AGOGO"),
+           ("MARIMBA", "BELL", "COWBELL")),
     Family("STRINGS", "Archi", "violin",
            ("STRINGS", "STRINGS_TREM", "STRINGS_PIZZ", "VIOLIN", "VIOLIN_STAC", "VIOLIN_PIZZ",
             "CELLO", "CELLO_STAC", "CELLO_PIZZ"), ("STRINGS",)),
     Family("PLUCKED", "Corde pizzicate", "guitar", ("HARP",), ("PLUCK", "BASS")),
-    Family("WOODWINDS", "Legni", "clarinet",
-           ("FLUTE", "RECORDER", "OCARINA", "CLARINET", "OBOE", "BASSOON", "SAX", "HARMONICA"),
+    Family("WOODWINDS", "Legni", "wind",
+           ("FLUTE", "RECORDER", "OCARINA", "CLARINET", "OBOE", "BASSOON", "HARMONICA"),
            ("SINE", "TRIANGLE")),
-    Family("BRASS", "Ottoni", "trumpet", ("TRUMPET", "TROMBONE", "HORN", "TUBA"), ("BRASS",)),
+    Family("BRASS", "Ottoni", "trumpet", ("TRUMPET", "TROMBONE", "HORN", "TUBA", "SAX"),
+           ("BRASS",)),
     Family("VOICES", "Voci e pad", "choir", (), ("CHOIR", "PAD")),
     Family("SYNTH", "Synth", "saw", (), ("SAW", "SQUARE")),
 )
 
 PERCUSSION = (
-    Family("KIT", "Batteria", "snare", (),
-           ("DRUM", "KICK", "SNARE", "TOM", "RIM", "CLAP", "HIHAT", "OPENHAT", "CRASH")),
-    Family("SKINS", "Tamburi", "conga",
+    Family("DRUMS", "Percussioni", "snare",
            ("GRANCASSA", "SNARE_ORCH", "TAIKO", "FRAME", "BONGO", "CONGA", "TUMBA", "DARBUKA",
-            "CAJON"), ()),
-    Family("METALS", "Metalli", "cymbal",
-           ("GONG", "SUSCYMB", "CLASH", "TRIANGLE", "NEPAL", "SLEIGH", "BELLTREE", "AGOGO",
-            "COWBELL", "BRAKE"), ("COWBELL",)),
-    Family("WOODS", "Legni e blocchi", "block", ("CLAVES", "TEMPLE", "LOGDRUM"), ()),
-    Family("SHAKERS", "Fruscii e sfregamenti", "maracas",
-           ("SHAKER", "MARACAS", "CABASA", "TAMB", "TAMBROLL", "GUIRO", "RATCHET", "RUB", "BOW",
-            "GONGSCRAPE"), ("SHAKER",)),
-    Family("FOUND", "Oggetti", "hammer",
+            "CAJON", "RUB", "CLAVES", "TEMPLE", "LOGDRUM", "SHAKER", "MARACAS", "CABASA",
+            "GUIRO", "RATCHET"),
+           ("DRUM", "KICK", "SNARE", "TOM", "RIM", "CLAP", "SHAKER")),
+    Family("CYMBALS", "Piatti", "cymbal",
+           ("SUSCYMB", "CLASH", "BOW", "GONG", "GONGSCRAPE", "NEPAL", "SLEIGH", "BELLTREE",
+            "TAMB", "TAMBROLL", "BRAKE"),
+           ("HIHAT", "OPENHAT", "CRASH")),
+    Family("FOUND", "Strumenti concreti", "found",
            ("ANVIL", "METAL", "SPOONS", "CHAIN", "BRICK", "BUBBLES", "GLASS"), ()),
 )
 
@@ -74,33 +74,6 @@ ALL = MELODIC + PERCUSSION + OWN
 
 # Blender's own icons for the instruments that are not an instrument.
 BUILTIN_ICONS = {"SAMPLE": "FILE_SOUND", "LIBRARY": "ASSET_MANAGER"}
-
-# Instruments with an icon of their own (add-on idents); the rest use their family's.
-_OWN_ICONS = {
-    "organ": ("ORGAN", "S_PIPEORGAN"),
-    "bell": ("BELL", "S_TUBULAR"),
-    "harp": ("S_HARP",),
-    "flute": ("SINE", "S_FLUTE", "S_RECORDER"),
-    "ocarina": ("TRIANGLE", "S_OCARINA"),
-    "sax": ("S_SAX",),
-    "harmonica": ("S_HARMONICA",),
-    "horn": ("S_HORN", "S_TUBA"),
-    "pad": ("PAD",),
-    "square": ("SQUARE",),
-    "kick": ("KICK", "S_GRANCASSA", "S_RUB"),
-    "clap": ("CLAP",),
-    "cymbal": ("HIHAT", "OPENHAT", "CRASH"),
-    "gong": ("S_GONG", "S_GONGSCRAPE", "S_NEPAL"),
-    "triangle": ("S_TRIANGLE",),
-    "cowbell": ("COWBELL", "S_COWBELL", "S_AGOGO"),
-    "jingle": ("S_SLEIGH", "S_BELLTREE"),
-    "tambourine": ("S_TAMB", "S_TAMBROLL", "S_FRAME"),
-    "snare": ("S_SNARE_ORCH",),
-    "claves": ("S_CLAVES", "S_GUIRO", "S_RATCHET"),
-    "bubbles": ("S_BUBBLES",),
-    "glass": ("S_GLASS",),
-}
-_ICON_OF = {ident: name for name, idents in _OWN_ICONS.items() for ident in idents}
 
 
 def idents(family):
@@ -125,16 +98,15 @@ def family_of(ident):
 
 
 def icon_name(ident):
-    """Name of the add-on icon of an instrument ('' for Blender's own icons)."""
+    """Name of the add-on icon of an instrument: its category's ('' for Blender's own
+    icons). The instruments themselves have no icon of their own."""
     if ident in BUILTIN_ICONS:
         return ""
-    if ident in _ICON_OF:
-        return _ICON_OF[ident]
     family = family_of(ident)
     return family.icon if family is not None else ""
 
 
 def icon_names():
     """Every instrument icon name used (one PNG each)."""
-    names = {f.icon for f in ALL if f.icon} | set(_OWN_ICONS)
+    names = {f.icon for f in ALL if f.icon}
     return tuple(sorted(names))

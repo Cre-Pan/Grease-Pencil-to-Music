@@ -301,6 +301,16 @@ def use_instrument(comp, layer_name, index=None):
         comp.active_material_index = index
 
 
+def _preview(ident):
+    """Hear the instrument under the mouse in the instrument menus."""
+    try:
+        from . import keyboard, prefs
+        if prefs.get_preview():
+            keyboard.preview(ident)
+    except Exception as error:  # noqa: BLE001 - a tooltip must never fail
+        print(f"[Doodle Music] anteprima non suonata: {error!r}")
+
+
 class GP2M_OT_add_instrument(bpy.types.Operator):
     """Aggiungi uno strumento al livello"""
 
@@ -310,6 +320,13 @@ class GP2M_OT_add_instrument(bpy.types.Operator):
 
     instrument: EnumProperty(name="Strumento", items=props.INSTRUMENT_ITEMS)
     layer: StringProperty(name="Livello", description="Vuoto = livello attivo")
+
+    @classmethod
+    def description(cls, _context, properties):
+        _preview(properties.instrument)
+        inst = synth.INSTRUMENT_BY_ID.get(properties.instrument)
+        return (inst.description if inst is not None and inst.description else None) \
+            or cls.__doc__
 
     @classmethod
     def poll(cls, context):
@@ -340,6 +357,13 @@ class GP2M_OT_set_instrument(bpy.types.Operator):
 
     instrument: EnumProperty(name="Strumento", items=props.INSTRUMENT_ITEMS)
     index: IntProperty(default=-1, description="Slot dello strumento (-1 = strumento attivo)")
+
+    @classmethod
+    def description(cls, _context, properties):
+        _preview(properties.instrument)
+        inst = synth.INSTRUMENT_BY_ID.get(properties.instrument)
+        return (inst.description if inst is not None and inst.description else None) \
+            or cls.__doc__
 
     @classmethod
     def poll(cls, context):

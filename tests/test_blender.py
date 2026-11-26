@@ -450,7 +450,8 @@ def test_panels_menus_and_preferences_draw(comp):
     menu = _Drawer(log)
     ui.GP2M_MT_add_instrument.draw(menu, bpy.context)
     ui.GP2M_MT_change_instrument.draw(_Drawer(log), bpy.context)
-    for family in ui.ADD_FAMILY_MENUS + ui.CHANGE_FAMILY_MENUS:  # one submenu per family
+    ui.GP2M_MT_instrument_category.draw(_Drawer(log), bpy.context)
+    for family in ui.CHANGE_FAMILY_MENUS:  # one submenu per family
         family.draw(_Drawer(log), bpy.context)
     ui.VIEW3D_MT_gp2m_add.draw(_Drawer(log), bpy.context)
     ui.draw_export_menu(_Drawer(log), bpy.context)
@@ -458,14 +459,14 @@ def test_panels_menus_and_preferences_draw(comp):
     preferences = bpy.context.preferences.addons[MODULE].preferences
     type(preferences).draw(_Drawer(log, preferences), bpy.context)
     drawn = {entry[1] for entry in log}
-    assert {"gp2m_instrument", "gp2m_volume", "mode", "fill_mode", "reverb_mix",
+    assert {"GP2M_MT_instrument_category", "gp2m_volume", "mode", "fill_mode", "reverb_mix",
             "map_thickness", "note_naming", "gp2m.export", "gp2m.add_instrument",
             "VIEW3D_MT_gp2m_add", "GP2M_MT_add_instrument", "gp2m.use_instrument",
             "gp2m.add_layer", "gp2m.remove_layer", "hide", "gp2m_library_path",
             "gp2m_sample", "gp2m_sample_root", "gp2m.load_sample", "gp2m.play_keyboard",
             "channel", "new_bpm", "volume_feedback", "gp2m.import_midi", "gp2m.export_web",
             "GP2M_PT_help_main", "GP2M_PT_help_reading", "GP2M_PT_help_instrument",
-            "GP2M_PT_help_export", "GP2M_UL_layers", "GP2M_MT_change_instrument",
+            "GP2M_PT_help_export", "GP2M_UL_layers", "preview_instruments",
             "gp2m.set_instrument", ui.CHANGE_FAMILY_MENUS[0].bl_idname,
             "solo", "mute", "lock", "use_array", "array_count", "mirror_time",
             "transpose_steps", "fade_direction", "noise_pitch", "use_echo", "delay_mix",
@@ -475,6 +476,34 @@ def test_panels_menus_and_preferences_draw(comp):
             "gp2m.composition_move", "gp2m.composition_toggle", "gp2m.table_stack",
             "gp2m.board_octaves"} <= drawn
     assert sum(1 for entry in log if entry[0] == "markdown") == len(sub("help").classes)
+
+
+def test_instrument_pickers_category_then_instrument(comp):
+    ui, families = sub("ui"), sub("families")
+    material = comp.material_slots[0].material
+    material.gp2m_instrument = "S_SAX"
+    log = []
+    ui.draw_instrument_pickers(MockLayout(log), material)
+    drawn = [entry[1] for entry in log]
+    brass = next(f for f in families.ALL if f.key == "BRASS")
+    assert families.family_of("S_SAX") is brass  # the saxophone is with the brass
+    assert "GP2M_MT_instrument_category" in drawn
+    assert ui._family_menu_id(brass, True) in drawn  # only the brass in the second menu
+
+
+def test_hovering_an_instrument_previews_it(addon, monkeypatch):
+    keyboard, operators = sub("keyboard"), sub("operators")
+    heard = []
+    monkeypatch.setattr(keyboard, "note_on", lambda ident, *a, **k: heard.append(ident))
+    keyboard._preview.update(handle=None, ident=None, time=-10.0)
+    props = type("P", (), {"instrument": "S_VIOLIN"})()
+    tip = operators.GP2M_OT_set_instrument.description(bpy.context, props)
+    assert tip and heard == ["S_VIOLIN"]
+    operators.GP2M_OT_add_instrument.description(bpy.context, props)
+    assert heard == ["S_VIOLIN"]  # the same one right after: not again
+    props.instrument = "SAMPLE"
+    operators.GP2M_OT_set_instrument.description(bpy.context, props)
+    assert heard == ["S_VIOLIN"]  # own sounds have nothing to preview
 
 
 def test_deleting_a_composition_removes_its_sound(addon):

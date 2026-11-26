@@ -355,6 +355,32 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.31
+
+Icone degli strumenti più chiare e minimal, strumenti in nuove categorie, due tendine per
+sceglierli e l'anteprima del suono.
+
+- **Icone ridisegnate:** pianoforte (tre tasti bianchi divisi e due neri), percussioni intonate
+  (barre viste dall'alto e una bacchetta), campana, archi (violino con archetto), chitarra (la
+  paletta, inclinata al contrario degli archi), arpa (ora una lira), pad (tre note lunghe tenute),
+  dente di sega e onda quadra (meno onde, senza la linea sotto), percussioni (bacchette incrociate
+  sul tamburo).
+- **Icone solo per le categorie:** i singoli strumenti non hanno più un'icona. Fiati (una folata
+  di vento), ottoni (una tromba minimal), piatti e strumenti concreti (una bottiglia) hanno la loro.
+  Da 34 icone a 11.
+- **Categorie nuove:** il sassofono è negli ottoni; Batteria, Tamburi, Legni e blocchi e Fruscii
+  diventano **Percussioni**; hi-hat, crash, piatti, gong, campane nepalesi, sonagli, albero di
+  campanelli, tamburello e freno sono nei **Piatti**; triangolo, campanaccio e agogo nelle
+  **Percussioni intonate**; gli Oggetti diventano **Strumenti concreti**.
+- **Due tendine:** nella lista dei livelli l'icona dello strumento apre le categorie (scegliendone
+  una passi al suo primo strumento) e accanto la seconda tendina mostra solo gli strumenti di
+  quella categoria; il pennello rende attivo lo strumento per disegnare. Le stesse due tendine
+  sono nel pannello *Strumento musicale* del materiale.
+- **Anteprima:** nei menu degli strumenti, fermandoti con il mouse su una voce senti una nota di
+  quello strumento (parte con il suggerimento, dopo circa mezzo secondo, che ora descrive lo
+  strumento). Si spegne in
+  *Preferenze → Anteprima degli strumenti*.
+
 ## 0.0.30
 
 Ctrl+Z e Ctrl+Shift+Z provati azione per azione in Blender 5.3 (tasti e mouse veri): crea

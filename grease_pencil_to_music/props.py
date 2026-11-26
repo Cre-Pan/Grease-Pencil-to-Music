@@ -647,19 +647,18 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
 
 
 def _instrument_items():
-    """Every instrument, by family (see families.py), with its icon. The numbers are the
+    """Every instrument, by family (see families.py). The numbers are the
     instruments' places in ``synth.INSTRUMENTS``, so .blend files saved by older versions
     (where the list was shorter or in another order) keep their instruments. Built when the
     add-on is registered, after the icons are loaded."""
-    from . import families, icons
+    from . import families
     number = {inst.ident: index for index, inst in enumerate(synth.INSTRUMENTS)}
     items, listed = [], set()
 
     def item(ident):
         inst = synth.INSTRUMENT_BY_ID[ident]
-        name, value = icons.instrument_icon(ident)
-        listed.add(ident)
-        return (ident, inst.label, inst.description, value or name, number[ident])
+        listed.add(ident)  # no icon: only the categories have one
+        return (ident, inst.label, inst.description, "NONE", number[ident])
 
     for family in families.ALL:
         items.append(("", family.title, ""))

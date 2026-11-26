@@ -17,26 +17,29 @@ from .operators import active_composition
 
 # --- Instruments menus: sections of families, each family a submenu ----------------------
 
-def _instrument_button(layout, context, ident, target):
+def _instrument_button(layout, context, ident, target, text=None, kwargs=None):
     """Add the instrument to the layer, or (with a target) change the instrument."""
     from . import synth
     inst = synth.INSTRUMENT_BY_ID.get(ident)
     if inst is None:
         return
+    given = kwargs
     if target is None:
-        kwargs = icon_kwargs(*instrument_icon(ident))
+        kwargs = {}  # only the categories have icons
         material, layer = None, getattr(context, "gp2m_layer", None)
     else:
         _comp, index, material, layer = target
         current = material.gp2m_instrument if material is not None else None
-        kwargs = ({"icon": "CHECKMARK"} if ident == current
-                  else icon_kwargs(*instrument_icon(ident)))
+        kwargs = {"icon": "CHECKMARK"} if ident == current else {}
+    if given is not None:
+        kwargs = given
+    text = inst.label if text is None else text
     if material is None:  # adding, or a layer without instruments: add one
-        op = layout.operator("gp2m.add_instrument", text=inst.label, **kwargs)
+        op = layout.operator("gp2m.add_instrument", text=text, **kwargs)
         op.instrument = ident
         op.layer = layer.name if layer is not None else ""
     else:
-        op = layout.operator("gp2m.set_instrument", text=inst.label, **kwargs)
+        op = layout.operator("gp2m.set_instrument", text=text, **kwargs)
         op.instrument = ident
         op.index = index
 
@@ -73,33 +76,36 @@ def _family_menu(family, change):
                                              "draw": draw})
 
 
-ADD_FAMILY_MENUS = tuple(_family_menu(f, False) for f in families.ALL if f not in families.OWN)
-CHANGE_FAMILY_MENUS = tuple(_family_menu(f, True) for f in families.ALL
-                            if f not in families.OWN)
+CHANGE_FAMILY_MENUS = tuple(_family_menu(f, True) for f in families.ALL)
 
 
 def _draw_sections(layout, context, change):
-    """One column per section (melodic, percussion, own sounds): a submenu per family,
-    the own sounds as buttons."""
+    """One column per section (melodic, percussion, own sounds), one button per category:
+    a category gives its first instrument (or keeps the one in use); the instrument itself
+    is chosen in the second dropdown, beside the category."""
+    target = None
     current = None
     if change:
-        _comp, _index, material, _layer = _change_target(context)
-        if _comp is None:
+        target = _change_target(context)
+        if target[0] is None:
             return
+        material = target[2]
         current = material.gp2m_instrument if material is not None else None
+    mine = families.family_of(current) if current else None
     row = layout.row()
     for title, section in families.SECTIONS:
         col = row.column()
         col.label(text=title)
         for family in section:
-            if family in families.OWN:
-                _family_buttons(col, context, family, change)
+            idents = families.idents(family)
+            if not idents:
                 continue
-            if current is not None and current in families.idents(family):
-                kwargs = {"icon": "CHECKMARK"}
+            if family is mine:
+                _instrument_button(col, context, current, target, text=family.title,
+                                   kwargs={"icon": "CHECKMARK"})
             else:
-                kwargs = icon_kwargs(*family_icon(family))
-            col.menu(_family_menu_id(family, change), text=family.title, **kwargs)
+                _instrument_button(col, context, idents[0], target, text=family.title,
+                                   kwargs=icon_kwargs(*family_icon(family)))
 
 
 class GP2M_MT_add_instrument(bpy.types.Menu):
@@ -120,6 +126,40 @@ class GP2M_MT_change_instrument(bpy.types.Menu):
 
     def draw(self, context):
         _draw_sections(self.layout, context, change=True)
+
+
+class GP2M_MT_instrument_category(bpy.types.Menu):
+    """The categories of instruments: choosing one gives its first instrument (the one
+    in use if it is already there); the instrument is chosen in the menu beside it."""
+
+    bl_idname = "GP2M_MT_instrument_category"
+    bl_label = "Categoria"
+
+    def draw(self, context):
+        _draw_sections(self.layout, context, change=True)
+
+
+def draw_instrument_pickers(layout, material, label=True, icon_only=False):
+    """Two dropdowns: the category, then the instrument of that category."""
+    from . import synth
+    ident = material.gp2m_instrument
+    family = families.family_of(ident)
+    row = layout.row(align=True)
+    row.context_pointer_set("gp2m_material", material)
+    if icon_only:
+        row.menu(GP2M_MT_instrument_category.bl_idname, text="",
+                 **icon_kwargs(*instrument_icon(ident)))
+    else:
+        row.menu(GP2M_MT_instrument_category.bl_idname,
+                 text=family.title if family is not None else "Categoria",
+                 **icon_kwargs(*(family_icon(family) if family is not None else ("SOUND", 0))))
+    inst = synth.INSTRUMENT_BY_ID.get(ident)
+    text = board.material_label(material) if label else (inst.label if inst else ident)
+    if family is not None:
+        row.menu(_family_menu_id(family, True), text=text)
+    else:
+        row.menu(GP2M_MT_change_instrument.bl_idname, text=text)
+    return row
 
 
 # --- Layer list, like Blender's Grease Pencil layers ---------------------------------------
@@ -340,14 +380,10 @@ def _instrument_row(layout, comp, layer_name, index, material, active):
     swatch = row.row()
     swatch.ui_units_x = 1.0
     swatch.prop(material.grease_pencil, "color", text="")
-    sub = row.row(align=True)
-    op = sub.operator("gp2m.use_instrument", text=board.material_label(material),
-                      depress=active, emboss=active,
-                      **icon_kwargs(*instrument_icon(material.gp2m_instrument)))
+    sub = draw_instrument_pickers(row, material, icon_only=True)
+    op = sub.operator("gp2m.use_instrument", text="", icon="GREASEPENCIL", depress=active)
     op.layer = layer_name
     op.index = index
-    sub.context_pointer_set("gp2m_material", material)
-    sub.menu("GP2M_MT_change_instrument", text="", icon="DOWNARROW_HLT")
     volume = row.row(align=True)
     volume.ui_units_x = 3.5
     volume.prop(material, "gp2m_volume", text="", slider=True)
@@ -776,7 +812,10 @@ def draw_instrument_details(layout, material):
     layout.use_property_split = True
     layout.use_property_decorate = False
     col = layout.column(align=True)
-    col.prop(material, "gp2m_instrument")
+    split = col.split(factor=0.4, align=True)
+    split.alignment = "RIGHT"
+    split.label(text="Strumento")
+    draw_instrument_pickers(split, material, label=False)
     col.prop(material, "gp2m_volume", slider=True)
     if material.gp2m_instrument == "SAMPLE":
         col = layout.column(align=True)
@@ -1128,9 +1167,10 @@ class GP2M_PT_sequencer_group(bpy.types.Panel):
             col.prop(settings, "mute", text="Muto")
 
 
-classes = ADD_FAMILY_MENUS + CHANGE_FAMILY_MENUS + (
+classes = CHANGE_FAMILY_MENUS + (
     GP2M_MT_add_instrument,
     GP2M_MT_change_instrument,
+    GP2M_MT_instrument_category,
     GP2M_MT_layer_specials,
     GP2M_MT_move_to_group,
     GP2M_UL_layers,
