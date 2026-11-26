@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """The add-on's own icons (``icons/*.png``, drawn by tools/build_icons.py), loaded with
-``bpy.utils.previews``: Solo and the instruments.
+``bpy.utils.previews``: Solo, the two kinds of composition and the instruments.
 
 Loaded first when the add-on is enabled, so the instrument list (an EnumProperty) can
 show them too.
@@ -38,6 +38,14 @@ def family_icon(family):
     return ("", value) if value else ("SOUND", 0)
 
 
+def composition_icon(obj=None, beat=False):
+    """``icon=`` / ``icon_value=`` of a composition: our piano roll (Musicale) or step
+    grid (Ritmica); Blender's Grease Pencil icon if they are missing."""
+    if obj is not None:
+        beat = getattr(obj.gp2m, "kind", "NOTES") == "BEAT"
+    return icon_kwargs("OUTLINER_OB_GREASEPENCIL", icon("comp_beat" if beat else "comp_notes"))
+
+
 def icon_kwargs(icon_name, value):
     """``icon=`` or ``icon_value=`` for a layout call."""
     return {"icon_value": value} if value else {"icon": icon_name or "NONE"}
@@ -50,12 +58,23 @@ def load():
         return
     _previews = bpy.utils.previews.new()
     folder = os.path.join(os.path.dirname(__file__), "icons")
-    names = ["solo_on", "solo_off"]
+    names = ["solo_on", "solo_off", "comp_notes", "comp_beat"]
     names += ["inst_" + n for n in families.icon_names()]
     for name in names:
         path = os.path.join(folder, f"{name}.png")
         if os.path.isfile(path):
-            _previews.load(name, path, "IMAGE")
+            _load_now(_previews.load(name, path, "IMAGE"))
+
+
+def _load_now(preview):
+    """Read the pixels right away. Blender loads a preview image lazily, the first time
+    it is drawn, and meanwhile draws a "loading" circle: the Solo headphones and the
+    instrument icons flickered for a moment when they first showed up."""
+    try:
+        preview.icon_size[0]
+        preview.icon_pixels[0]
+    except (AttributeError, IndexError):
+        pass
 
 
 def free():

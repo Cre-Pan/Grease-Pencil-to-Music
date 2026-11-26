@@ -357,6 +357,37 @@
 
 ## 0.0.36
 
+Pannelli più ordinati, a tendine come in Blender
+- **Tavola e tempo** è diviso in tre sottopannelli: *Tempo* (BPM, durata, In/Out della scena,
+  Loop e sezioni da keyframe), *Estensione* (nota più bassa, ottave, tasti in più; nella
+  Composizione Ritmica le corsie con le loro percussioni) e *Aspetto* (etichette, opacità della
+  griglia, altezza riga, larghezza secondo, battiti; chiuso all'inizio). *Ricostruisci tavola* è
+  l'icona ↻ nell'intestazione del pannello.
+- **Ottave in cima / in fondo**: la riga "Sopra + − Sotto + −" diventa due righe allineate alle
+  altre proprietà, con l'etichetta a sinistra e i pulsanti *Mostra* / *Nascondi* a destra
+  (*Aggiungi* / *Togli* per le corsie). L'etichetta non esce più dal bordo.
+- **Sequencer e ascolto** è diviso in *Ascolto* (tutte insieme, solo l'attiva, una dopo l'altra) e
+  *Clip nel Sequencer* (un canale per livello, canale, partenza, ordine).
+- **Effetti dello strumento** (Materiale) ha un sottopannello per effetto, come gli effetti del
+  livello: *Eco*, *Riverbero* e *Lo-fi*, con l'elenco di quelli accesi in cima.
+
+Livelli e icone
+- **Solo di gruppo e livelli insieme**: le cuffie di un gruppo accendono (e spengono) quelle di
+  tutti i livelli dentro, e un gruppo si accende da solo quando tutti i suoi livelli sono in Solo.
+  Spegnendo il Solo di un livello dentro un gruppo in Solo, si spegne quello del gruppo e gli
+  altri livelli restano in Solo.
+- **Muto**: l'altoparlante con le onde (`MUTE_IPO_ON`) è il suono acceso, quello vuoto
+  (`MUTE_IPO_OFF`) il muto, nella lista dei livelli, nelle composizioni e nel pannello Musica.
+- *Aggiungi strumento* ha l'icona dell'altoparlante (`SPEAKER`).
+- **Icone delle composizioni**: un piano roll per la Composizione Musicale e una griglia di passi
+  per la Composizione Ritmica, in *Shift+A → Doodle Music*, nella lista Composizioni e nei pannelli.
+- **Niente più sfarfallio nella lista dei livelli**: le icone dell'add-on (cuffie del Solo,
+  strumenti, composizioni) vengono caricate subito all'avvio. Prima Blender le caricava la prima
+  volta che comparivano e per un attimo disegnava al loro posto un cerchio di caricamento.
+- Nella tendina delle categorie, la categoria in uso tiene la sua icona (prima diventava una
+  spunta, che sui Piatti sembrava una "v").
+
+Modificatori sul tratto
 - **Array e Trasponi non deformano più il tratto.** Spostando "di grado" (nella scala) ogni
   punto andava sulla sua nota della scala, così una curva diventava a zigzag e a scalini, nel
   disegno e nel suono. Ora il tratto si sposta intero: il primo punto sale (o scende) dei gradi
