@@ -21,8 +21,8 @@ from . import music
 
 MODIFIER_PREFIX = "GP2M Modificatori "
 GROUP_NAME = "GP2M Modificatori"
-GROUP_VERSION = 4  # 2: board coordinates (the origin is on the C4 dot); 4: copies made
-# before moving to the board (Edit Mode selection)
+GROUP_VERSION = 4  # 2: board coordinates (origin on the C4 dot); 3: a stroke moves whole;
+# 4: copies made before moving to the board (Edit Mode selection)
 VERSION_KEY = "gp2m_version"
 
 
@@ -291,8 +291,16 @@ def _build(tree):
         return node.outputs[0]
 
     def shift(z, steps, diatonic):
-        """z moved by ``steps`` (float field) semitones or degrees (layer_mods._shift_z)."""
-        pitch = b.sub(b.add(gi("Low"), b.div(z, row)), 0.5)
+        """z moved by ``steps`` (float field) semitones or degrees (layer_mods._shift_z):
+        the degrees are counted from the first point of each stroke, and the whole
+        stroke moves by the same number of semitones (it keeps its shape)."""
+        first = b.node("GeometryNodePointsOfCurve")
+        b.put(first, "Curve Index", curve_index())
+        b.put(first, "Sort Index", 0)
+        start = b.node("GeometryNodeFieldAtIndex", domain="POINT", data_type="FLOAT")
+        b.put(start, "Value", z)
+        b.put(start, "Index", b.socket(first.outputs, "Point Index"))
+        pitch = b.sub(b.add(gi("Low"), b.div(start.outputs[0], row)), 0.5)
         base = b.math("ROUND", pitch)
         rel = b.sub(base, gi("Root"))
         pc = b.math("FLOORED_MODULO", rel, 12.0)

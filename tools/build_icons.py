@@ -62,12 +62,46 @@ def speaker(color, crossed=False):
     return img.resize((SIZE, SIZE), Image.LANCZOS)
 
 
+def composition_notes(color):
+    """Composizione Musicale: a piano roll, the keys on the left and a melody of notes."""
+    s = SIZE * SS
+    img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    u = SS
+    # The keys: a rounded strip cut by three gaps.
+    d.rounded_rectangle((4 * u, 6 * u, 15 * u, 58 * u), 3 * u, fill=color)
+    for y in (18, 31, 44):
+        d.rectangle((4 * u, y * u, 15 * u, (y + 3) * u), fill=(0, 0, 0, 0))
+    # The notes: bars at different heights, like a short tune.
+    for x0, x1, y in ((21, 33, 40), (35, 45, 26), (47, 60, 10), (47, 60, 46)):
+        d.rounded_rectangle((x0 * u, y * u, x1 * u, (y + 9) * u), 4 * u, fill=color)
+    return img.resize((SIZE, SIZE), Image.LANCZOS)
+
+
+def composition_beat(color):
+    """Composizione Ritmica: three lanes of a step sequencer, with their hits."""
+    s = SIZE * SS
+    img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    u = SS
+    dim = color[:3] + (int(color[3] * 0.35),)
+    hits = ((1, 0, 1, 0), (0, 1, 0, 1), (1, 1, 0, 1))
+    for row, pattern in enumerate(hits):
+        y = (6 + row * 18) * u
+        for col, on in enumerate(pattern):
+            x = (4 + col * 15) * u
+            d.rounded_rectangle((x, y, x + 12 * u, y + 15 * u), 3 * u, fill=color if on else dim)
+    return img.resize((SIZE, SIZE), Image.LANCZOS)
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     headphones((255, 255, 255, 255)).save(OUT / "solo_on.png")
     headphones((230, 230, 230, 120)).save(OUT / "solo_off.png")
     speaker((255, 255, 255, 255)).save(OUT / "audio_on.png")
     speaker((230, 230, 230, 120), crossed=True).save(OUT / "audio_off.png")
+    composition_notes((255, 255, 255, 255)).save(OUT / "comp_notes.png")
+    composition_beat((255, 255, 255, 255)).save(OUT / "comp_beat.png")
     for name, draw in instrument_icons.ICONS.items():
         draw((255, 255, 255, 255)).save(OUT / f"inst_{name}.png", optimize=True)
     print(f"Icons written to {OUT}")
