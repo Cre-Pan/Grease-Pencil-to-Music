@@ -482,7 +482,8 @@ def test_panels_menus_and_preferences_draw(comp):
             "gp2m.copy_layer_settings", "gp2m.paste_layer_settings",
             "GP2M_PT_help_modifiers", "GP2M_PT_help_table", "GP2M_UL_compositions",
             "gp2m.composition_move", "gp2m.composition_toggle", "gp2m.table_stack",
-            "gp2m.board_octaves"} <= drawn
+            "gp2m.board_octaves", "gp2m.mod_copy", "gp2m.mod_paste",
+            "gp2m.mod_apply"} <= drawn
     assert sum(1 for entry in log if entry[0] == "markdown") == len(sub("help").classes)
 
 
@@ -2186,6 +2187,61 @@ def test_layer_modifiers_show_on_the_strokes(comp):
         setattr(settings, prop, False)
     assert comp.modifiers.get(name) is None
     assert len(_evaluated_strokes(comp, first)) == 1
+
+
+def test_modifier_copy_paste_and_apply(comp):
+    """Copia, Incolla and Applica of one modifier of a layer."""
+    props, engine, stroke_mods = sub("props"), sub("engine"), sub("stroke_mods")
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60), radius=0.03)
+    add_stroke(comp, 1, line(comp, 0.5, 1.5, 64), radius=0.03)
+    first, second = [layer.name for layer in sub("board").user_layers(comp.data)[:2]]
+    a = props.find_layer_settings(comp.data, first)
+    b = props.find_layer_settings(comp.data, second)
+    notes = lambda: engine.render_composition(comp, bpy.context.scene)[0].notes  # noqa: E731
+
+    # Copia on one layer, Incolla on another: the settings, and the modifier is on.
+    a.use_array = True
+    a.array_count = 3
+    a.array_beats = 2.0
+    a.array_unit = "SEMITONES"
+    a.array_pitch = 3
+    comp.data.layers.active = comp.data.layers[first]
+    assert bpy.ops.gp2m.mod_copy(kind="ARRAY") == {"FINISHED"}
+    assert bpy.ops.gp2m.mod_paste(kind="FADE") == {"CANCELLED"}  # no Fade copied
+    comp.data.layers.active = comp.data.layers[second]
+    assert bpy.ops.gp2m.mod_paste(kind="ARRAY") == {"FINISHED"}
+    assert b.use_array and b.array_count == 3 and b.array_beats == pytest.approx(2.0)
+    assert b.array_unit == "SEMITONES" and b.array_pitch == 3
+    assert not b.use_fade
+
+    # Applica: the copies become strokes, the modifier goes off, the sound stays.
+    comp.data.layers.active = comp.data.layers[first]
+    a.use_fade = True
+    a.fade_direction = "OUT"
+    heard = sorted((round(n.start, 3), n.pitch) for n in notes())
+    assert bpy.ops.gp2m.mod_apply(kind="ARRAY") == {"FINISHED"}
+    assert not a.use_array and a.use_fade
+    drawing = comp.data.layers[first].frames[0].drawing
+    assert len(drawing.strokes) == 3
+    assert comp.modifiers.get(stroke_mods.BAKE_NAME) is None
+    assert sorted((round(n.start, 3), n.pitch) for n in notes()) == heard
+    # Fade too: the radius of the points is thin at the end; nothing left on the layer.
+    assert bpy.ops.gp2m.mod_apply(kind="FADE") == {"FINISHED"}
+    assert not a.use_fade
+    assert comp.modifiers.get(stroke_mods.MODIFIER_PREFIX + first) is None
+    for stroke in comp.data.layers[first].frames[0].drawing.strokes:
+        radii = [p.radius for p in stroke.points]
+        assert radii[0] == pytest.approx(0.03, rel=1e-3) and radii[-1] < 0.01
+    assert len(comp.data.layers[second].frames[0].drawing.strokes) == 1  # left alone
+    # A modifier that is off is not applied.
+    assert bpy.ops.gp2m.mod_apply(kind="NOISE") == {"CANCELLED"}
+    # Also from Edit Mode, which stays on.
+    comp.data.layers.active = comp.data.layers[second]
+    bpy.ops.object.mode_set(mode="EDIT")
+    assert bpy.ops.gp2m.mod_apply(kind="ARRAY") == {"FINISHED"}
+    assert comp.mode == "EDIT" and not b.use_array
+    bpy.ops.object.mode_set(mode="OBJECT")
+    assert len(comp.data.layers[second].frames[0].drawing.strokes) == 3
 
 
 def test_layer_modifiers_keep_edit_mode_selection(comp):

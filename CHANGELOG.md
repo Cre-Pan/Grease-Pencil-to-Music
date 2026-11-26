@@ -355,6 +355,16 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.40
+
+- **Copia, Incolla e Applica in ogni modificatore** (Array, Simmetria, Trasponi, Fade, Noise),
+  sotto le sue impostazioni. *Copia* prende le impostazioni del modificatore; *Incolla* le mette
+  nello stesso modificatore del livello attivo, anche di un'altra composizione, e lo accende
+  (dal pannello *Ultima operazione* si può incollare in tutti i livelli). *Applica*, come in
+  Blender, rende il modificatore parte dei tratti in tutti i keyframe e lo spegne: le copie di
+  Array diventano tratti veri, Fade e Noise cambiano spessore e punti, il suono resta lo stesso
+  (Noise prende la forma che si vede sul tratto). Va anche da Edit Mode e su un livello bloccato.
+
 ## 0.0.37
 
 Tutto insieme: le novità di 0.0.36 (pannelli a tendine e Array/Trasponi che spostano il

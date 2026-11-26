@@ -970,6 +970,157 @@ class GP2M_OT_paste_layer_settings(bpy.types.Operator):
         return {"FINISHED"}
 
 
+# --- Copia, Incolla, Applica of one modifier of a layer (Array, Simmetria...) ---------------
+
+MOD_KINDS = (("ARRAY", "Array", ""), ("MIRROR", "Simmetria", ""),
+             ("TRANSPOSE", "Trasponi", ""), ("FADE", "Fade", ""), ("NOISE", "Noise", ""))
+_MOD_LABELS = {ident: label for ident, label, _d in MOD_KINDS}
+
+# {kind: {setting: value}}: one copied modifier per kind, kept for the session.
+_mod_clipboard = {}
+
+
+def mod_values(settings, kind):
+    """The settings of one modifier of a layer (without its switch), as a dict."""
+    from .stroke_mods import KINDS
+    _field, _toggle, prefix = KINDS[kind]
+    return {prop.identifier: getattr(settings, prop.identifier)
+            for prop in settings.bl_rna.properties
+            if prop.identifier.startswith(prefix) and not prop.is_readonly}
+
+
+def set_mod_values(settings, kind, values):
+    """Write ``mod_values`` into a layer and switch the modifier on."""
+    from .stroke_mods import KINDS
+    for key, value in values.items():
+        if getattr(settings, key) != value:
+            setattr(settings, key, value)
+    toggle = KINDS[kind][1]
+    if not getattr(settings, toggle):
+        setattr(settings, toggle, True)
+
+
+class GP2M_OT_mod_copy(bpy.types.Operator):
+    """Copia le impostazioni di questo modificatore, per incollarle in un altro livello
+    o in un'altra composizione"""
+
+    bl_idname = "gp2m.mod_copy"
+    bl_label = "Copia modificatore"
+    bl_options = {"REGISTER"}
+
+    kind: EnumProperty(name="Modificatore", items=MOD_KINDS)
+
+    @classmethod
+    def poll(cls, context):
+        return _active_settings(context)[1] is not None
+
+    def execute(self, context):
+        _comp, settings = _active_settings(context)
+        _mod_clipboard[self.kind] = mod_values(settings, self.kind)
+        self.report({"INFO"}, f"{_MOD_LABELS[self.kind]} di {settings.name} copiato")
+        return {"FINISHED"}
+
+
+class GP2M_OT_mod_paste(bpy.types.Operator):
+    """Incolla le impostazioni copiate in questo modificatore (e lo accende)"""
+
+    bl_idname = "gp2m.mod_paste"
+    bl_label = "Incolla modificatore"
+    bl_options = {"REGISTER", "UNDO"}
+
+    kind: EnumProperty(name="Modificatore", items=MOD_KINDS)
+    every: BoolProperty(name="In tutti i livelli", default=False,
+                        description="Incolla in tutti i livelli della composizione")
+
+    @classmethod
+    def description(cls, _context, properties):
+        if properties.kind not in _mod_clipboard:
+            return (f"Prima copia un modificatore {_MOD_LABELS[properties.kind]} "
+                    "(anche di un altro livello o di un'altra composizione)")
+        return "Incolla le impostazioni copiate in questo modificatore (e lo accende)"
+
+    @classmethod
+    def poll(cls, context):
+        if not _mod_clipboard:
+            cls.poll_message_set("Prima copia un modificatore")
+            return False
+        return _active_settings(context)[1] is not None
+
+    def execute(self, context):
+        values = _mod_clipboard.get(self.kind)
+        if values is None:
+            self.report({"WARNING"}, f"Prima copia un modificatore {_MOD_LABELS[self.kind]}")
+            return {"CANCELLED"}
+        comp, settings = _active_settings(context)
+        gp = comp.data
+        targets = ([props.find_layer_settings(gp, layer.name) for layer in board.user_layers(gp)]
+                   if self.every else [settings])
+        targets = [item for item in targets if item is not None]
+        for item in targets:
+            set_mod_values(item, self.kind, values)
+        engine.state(comp).pop("layers", None)
+        self.report({"INFO"}, f"{_MOD_LABELS[self.kind]} incollato in {len(targets)} livell"
+                    + ("o" if len(targets) == 1 else "i"))
+        return {"FINISHED"}
+
+
+class GP2M_OT_mod_apply(bpy.types.Operator):
+    """Applica il modificatore ai tratti del livello, per sempre, e lo spegne: le copie
+    di Array diventano tratti veri, Fade cambia lo spessore dei punti... (come Applica
+    dei modificatori di Blender)"""
+
+    bl_idname = "gp2m.mod_apply"
+    bl_label = "Applica modificatore"
+    bl_options = {"REGISTER", "UNDO"}
+
+    kind: EnumProperty(name="Modificatore", items=MOD_KINDS)
+
+    @classmethod
+    def poll(cls, context):
+        comp, settings = _active_settings(context)
+        if settings is None:
+            return False
+        if comp.library is not None or comp.data.library is not None:
+            cls.poll_message_set("La composizione viene da un altro file")
+            return False
+        return True
+
+    def execute(self, context):
+        from . import stroke_mods
+        comp, settings = _active_settings(context)
+        field, toggle, _prefix = stroke_mods.KINDS[self.kind]
+        label = _MOD_LABELS[self.kind]
+        if not getattr(settings, toggle):
+            self.report({"WARNING"}, f"{label} è spento: accendilo per applicarlo")
+            return {"CANCELLED"}
+        stack = engine.layer_mods(settings)
+        # As in Blender: the modifier is applied to the strokes as drawn. The modifiers
+        # before it (in the order of the panels) then run after it.
+        order = list(stroke_mods.KINDS)
+        before = [stroke_mods.KINDS[k][0] for k in order[:order.index(self.kind)]]
+        if any(getattr(stack, f) is not None for f in before):
+            self.report({"WARNING"}, f"{label} non era il primo modificatore acceso: "
+                        "il risultato può cambiare")
+        layer = comp.data.layers.get(settings.name)
+        was_locked = layer is not None and layer.lock
+        if was_locked:
+            layer.lock = False
+        try:
+            done = stroke_mods.bake(comp, settings.name, stroke_mods.only(stack, self.kind),
+                                    context)
+        finally:
+            if was_locked:
+                layer.lock = True
+        if not done:
+            self.report({"ERROR"}, f"{label} non è stato applicato")
+            return {"CANCELLED"}
+        setattr(settings, toggle, False)  # the strokes now carry it
+        engine.state(comp).pop("layers", None)
+        engine.regenerate_safe(comp, context.scene, force=True)
+        self.report({"INFO"}, f"{label} applicato ai tratti di {settings.name}")
+        return {"FINISHED"}
+
+
 def _target_group(gp):
     """The active group, or the group of the active layer."""
     group = gp.layer_groups.active
@@ -1004,4 +1155,7 @@ classes = (
     GP2M_OT_merge_layer,
     GP2M_OT_copy_layer_settings,
     GP2M_OT_paste_layer_settings,
+    GP2M_OT_mod_copy,
+    GP2M_OT_mod_paste,
+    GP2M_OT_mod_apply,
 )
