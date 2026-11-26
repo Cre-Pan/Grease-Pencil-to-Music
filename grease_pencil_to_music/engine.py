@@ -122,7 +122,8 @@ def board_spec(settings):
             low_note=0, row_height=settings.row_height,
             seconds_width=settings.seconds_width, length=settings.length,
             bpm=settings.bpm, scale="CHROMATIC", root=0, time_grid=settings.time_grid,
-            min_note=settings.min_note, swing=settings.swing)
+            min_note=settings.min_note, swing=settings.swing,
+            quantize=settings.quantize_strength)
     return interpret.BoardSpec(
         low_note=settings.low_note,
         row_height=settings.row_height,
@@ -134,6 +135,7 @@ def board_spec(settings):
         time_grid=settings.time_grid,
         min_note=settings.min_note,
         swing=settings.swing,
+        quantize=settings.quantize_strength,
     )
 
 
@@ -223,6 +225,7 @@ def _layer_inputs(obj, reads):
             fill_mode=settings.fill_mode if settings else "TONAL",
             glide=settings.glide if settings else 0.12,
             legato_gap=settings.legato_gap if settings else 1.0,
+            legato_strength=settings.legato_strength if settings else 1.0,
             gain=read.opacity,
             fx=_layer_fx(settings),
             canon_voices=settings.canon_voices if settings and settings.use_canon else 1,

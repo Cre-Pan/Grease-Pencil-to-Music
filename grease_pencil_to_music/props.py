@@ -546,6 +546,12 @@ class GP2M_LayerSettings(bpy.types.PropertyGroup):
                               "strumento più vicini di così diventano una sola voce che "
                               "scivola nella pausa (0 = solo quelli che si toccano)",
                               update=_sound_changed)
+    legato_strength: FloatProperty(
+        name="Forza del legato", default=1.0, min=0.0, max=1.0, subtype="FACTOR",
+        update=_sound_changed,
+        description="100% = le note si legano senza riattacco; più basso, il suono cala "
+        "prima di ogni nota nuova e la riattacca (0% = ogni nota staccata), mentre "
+        "l'altezza continua a scivolare")
     delay_mix: FloatProperty(name="Eco", default=0.0, min=0.0, max=1.0, subtype="FACTOR",
                              update=_sound_changed)
     delay_beats: FloatProperty(name="Tempo eco (battiti)", default=0.75, min=0.125, max=4.0,
@@ -850,6 +856,11 @@ class GP2M_CompositionSettings(bpy.types.PropertyGroup):
     swing: FloatProperty(name="Swing", default=0.0, min=0.0, max=0.5, subtype="FACTOR",
                          description="Ritarda le note sui contrattempi della griglia ritmica",
                          update=_sound_changed)
+    quantize_strength: FloatProperty(
+        name="Forza quantizzazione", default=1.0, min=0.0, max=1.0, subtype="FACTOR",
+        update=_sound_changed,
+        description="Quanto le note si spostano verso la griglia ritmica: 100% = sulla "
+        "griglia, 50% = a metà strada, 0% = dove le hai disegnate (resta il tuo tempo)")
     show_layer_mods: BoolProperty(name="Mostra sul tratto", default=True,
                                   update=_mods_changed,
                                   description="I modificatori dei livelli (Array, Simmetria, "

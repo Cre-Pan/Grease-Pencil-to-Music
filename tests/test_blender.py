@@ -3922,3 +3922,61 @@ def test_percussion_preview_repeats_the_hit(addon):
     step = int(every * 44100)
     for i in range(count):  # a hit at the start of every step
         assert np.abs(buffer[i * step:i * step + 2000]).max() > 0.1
+
+
+def test_audio_latency_shown_and_reduced(comp):
+    """0.0.43: Blender mixes the sound ahead in blocks (Mixing Buffer): with a large
+    buffer the sound is heard after the picture. The Ascolto panel says so and one
+    button makes it small (and playback follow the audio)."""
+    ui, operators = sub("ui"), sub("operators")
+    system = bpy.context.preferences.system
+    scene = bpy.context.scene
+    before = (system.audio_mixing_buffer, scene.sync_mode)
+    try:
+        system.audio_mixing_buffer = "SAMPLES_4096"
+        scene.sync_mode = "NONE"
+        assert operators.audio_latency(bpy.context) > 0.08
+        log = []
+        ui.draw_latency(MockLayout(log), scene)
+        assert ("operator", "gp2m.low_latency") in log
+        assert bpy.ops.gp2m.low_latency() == {"FINISHED"}
+        assert system.audio_mixing_buffer == operators.LOW_LATENCY_BUFFER
+        assert scene.sync_mode == "AUDIO_SYNC"
+        assert operators.audio_latency(bpy.context) < 0.015
+        log = []
+        ui.draw_latency(MockLayout(log), scene)
+        assert not log  # nothing to say any more
+    finally:
+        system.audio_mixing_buffer, scene.sync_mode = before
+
+
+def test_attack_on_time_preference_reaches_the_sound(addon):
+    preferences = bpy.context.preferences.addons[MODULE].preferences
+    prefs = sub("prefs")
+    assert preferences.attack_on_time and prefs.get_mapping().on_time
+    preferences.attack_on_time = False
+    try:
+        assert not prefs.get_mapping().on_time
+    finally:
+        preferences.attack_on_time = True
+
+
+
+def test_quantize_and_legato_strength_reach_the_sound(comp):
+    """0.0.44: Forza quantizzazione (composition) and Forza del legato (layer)."""
+    engine, props = sub("engine"), sub("props")
+    add_stroke(comp, 0, line(comp, 1.0, 1.5, 60))
+    add_stroke(comp, 0, line(comp, 1.5, 2.0, 64))
+    settings = props.find_layer_settings(comp.data, "Livello 1")
+    settings.mode = "LEGATO"
+    assert engine.board_spec(comp.gp2m).quantize == 1.0
+    tied = engine.regenerate(comp)
+    comp.gp2m.quantize_strength = 0.5
+    assert engine.board_spec(comp.gp2m).quantize == 0.5
+    settings.legato_strength = 0.0
+    detached = engine.regenerate(comp)
+    assert detached.key != tied.key and detached.voice_count == tied.voice_count == 1
+    log = []
+    sub("ui").draw_layer_reading(MockLayout(log), settings)
+    assert ("prop", "legato_strength") in log
+

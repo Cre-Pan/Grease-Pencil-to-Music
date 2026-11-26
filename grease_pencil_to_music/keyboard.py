@@ -52,7 +52,7 @@ def note_buffer(instrument, pitch, sample_rate=44100):
         brightness=np.full(count, interpret.DEFAULT_BRIGHTNESS), pan=np.zeros(count),
         attack=0.005, instrument=instrument)
     try:
-        _offset, buffer = synth.render_voice(voice, sample_rate)
+        _offset, buffer = synth.render_voice(voice, sample_rate, on_time=False)
     except Exception as error:  # noqa: BLE001 - e.g. a recording that cannot be read
         print(f"[Doodle Music] nota non suonata: {error!r}")
         return np.zeros((1, 2), dtype=np.float32)  # not cached: tried again next time

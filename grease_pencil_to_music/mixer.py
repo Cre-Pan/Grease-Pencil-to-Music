@@ -112,6 +112,7 @@ class LayerInput:
     canon_delay: float = 2.0  # seconds between two entries
     canon_transpose: int = 0  # semitones from one voice to the next
     legato_gap: float = 1.0  # beats: in the legato modes closer strokes become one voice
+    legato_strength: float = 1.0  # 1 = no new attack between legato notes, 0 = every note
     harmony: str = "OFF"  # music.HARMONIES: voices added in the scale
     mods: layer_mods.Stack = field(default_factory=layer_mods.Stack)  # modifiers that are on
     rows: int = 36  # semitones on the board (the centre of Simmetria in pitch)
@@ -229,12 +230,13 @@ class _Errors:
         self.count += 1
 
 
-def _render_voices(voices, sample_rate, vibrato_rate, errors):
+def _render_voices(voices, sample_rate, mapping, errors):
     """Render each voice on its own: one broken voice does not silence the rest."""
     out = []
     for voice in voices:
         try:
-            out.append(synth.render_voice(voice, sample_rate, vibrato_rate))
+            out.append(synth.render_voice(voice, sample_rate, mapping.vibrato_rate,
+                                          mapping.on_time))
         except Exception as error:  # noqa: BLE001 - keep the other voices
             errors.add(error, "voice")
     return out
@@ -352,7 +354,7 @@ def _render_stroke(stroke, spec, mapping, mode, fill_mode, radius_ref, sample_ra
         rendered = _stroke_cache.get(unit_key)
         if rendered is None:
             before = errors.count
-            voices = _render_voices(unit_interp.voices, sample_rate, mapping.vibrato_rate,
+            voices = _render_voices(unit_interp.voices, sample_rate, mapping,
                                     errors)
             rendered = (voices, unit_interp.notes, _curves_of(unit_interp.voices))
             if errors.count == before:
@@ -360,7 +362,7 @@ def _render_stroke(stroke, spec, mapping, mode, fill_mode, radius_ref, sample_ra
         return key, (_scaled(rendered[0], stroke.gain), interp.notes,
                      _curves_of(interp.voices))
     before = errors.count
-    rendered = _render_voices(interp.voices, sample_rate, mapping.vibrato_rate, errors)
+    rendered = _render_voices(interp.voices, sample_rate, mapping, errors)
     value = (rendered, interp.notes, _curves_of(interp.voices))
     if errors.count == before:
         _stroke_cache.put(key, value)
@@ -411,9 +413,14 @@ def _render_legato(layer, spec, mapping, radius_ref, sample_rate, context_key, t
     for fx, (tags, voices) in by_fx.items():
         scale = next(iter(gains[fx])) if fx in unit_fx else None
         rendered = []
-        for members, voice in interpret.legato_join(voices, gap, _joinable):
+        # Quantizzata legata stays on the scale in the pauses (it slides only into the
+        # next note); Ottica legata draws a straight line through them.
+        hold = layer.glide if layer.mode == "LEGATO" else None
+        strength = round(float(layer.legato_strength), 4)
+        for members, voice in interpret.legato_join(voices, gap, _joinable, hold):
+            voice = interpret.articulate(voice, strength)
             vkey = hashlib.blake2b(repr(([tags[i] for i in members], round(gap, 6),
-                                         layer.harmony)).encode(),
+                                         layer.harmony, hold, strength)).encode(),
                                    digest_size=16).hexdigest()
             value = _stroke_cache.get(vkey)
             if value is None:
@@ -421,7 +428,7 @@ def _render_legato(layer, spec, mapping, radius_ref, sample_rate, context_key, t
                 drawn = any(tags[i][0] not in filled for i in members)
                 with_harmony = harmonize(interpret.Interpretation([voice], []),
                                          layer.harmony if drawn else "OFF", spec).voices
-                value = _render_voices(with_harmony, sample_rate, mapping.vibrato_rate, errors)
+                value = _render_voices(with_harmony, sample_rate, mapping, errors)
                 if errors.count == before:
                     _stroke_cache.put(vkey, value)
             rendered.extend(value if scale is None else _scaled(value, scale))
@@ -443,13 +450,19 @@ def _shift_notes(notes, seconds, length, loop):
     return out
 
 
-def _sum(rendered, length):
+def _sum(rendered, length, loop=False):
+    """Mix rendered voices. A voice that starts before 0 (an attack anticipated at the
+    start, see synth.attack_lead) has that part at the end of the loop with ``loop``,
+    where it is heard before the loop starts again; without it is cut."""
     end = max([offset + len(buf) for offset, buf in rendered], default=0)
     out = np.zeros((max(end, length), 2), dtype=np.float32)
     for offset, buf in rendered:
         start = max(offset, 0)
         clip = buf[start - offset:]
         out[start:start + len(clip)] += clip
+        if offset < 0 and loop and length > 0:
+            head = buf[:min(-offset, len(buf))][-length:]
+            out[length - len(head):length] += head
     return out
 
 
@@ -520,7 +533,8 @@ def render_layers(layers, spec, mapping, sample_rate=44100, loop=True, master_vo
 
         layer_key = hashlib.blake2b(
             repr((stroke_keys, astuple(layer.fx), spec.bpm, sample_rate, room,
-                  round(layer.legato_gap, 4) if legato else None, layer.harmony)).encode(),
+                  (round(layer.legato_gap, 4), round(layer.legato_strength, 4)) if legato
+                  else None, layer.harmony)).encode(),
             digest_size=16).hexdigest()
         buffer = _layer_cache.get(layer_key)
         if buffer is None:
@@ -530,7 +544,7 @@ def render_layers(layers, spec, mapping, sample_rate=44100, loop=True, master_vo
                 groups.setdefault(fx, []).extend(rendered)
             buffer = np.zeros((loop_n, 2), dtype=np.float32)
             for fx, rendered in groups.items():
-                part = _sum(rendered, loop_n)
+                part = _sum(rendered, loop_n, loop)
                 if fx is not None:
                     part = effects.apply_chain(part, sample_rate, LayerFx(*fx), spec.bpm, room)
                 buffer = _add(buffer, part)

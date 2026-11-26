@@ -132,6 +132,11 @@ class GP2M_Preferences(bpy.types.AddonPreferences):
     vibrato_rate: FloatProperty(name="Velocità vibrato", default=5.5, min=1.0, max=12.0,
                                 unit="NONE", description="Oscillazioni al secondo (Hz)",
                                 update=_changed)
+    attack_on_time: BoolProperty(
+        name="Attacco a tempo", default=True, update=_changed,
+        description="Archi, fiati, organo e gli strumenti con l'attacco lento cominciano "
+        "un attimo prima (fino a 0,2 s), così la nota si sente quando la testina arriva "
+        "al tratto e non dopo. Spento: ogni suono parte esattamente dove inizia il tratto")
     debounce: FloatProperty(name="Ritardo aggiornamento", default=0.35, min=0.05, max=3.0,
                             description="Secondi di pausa dopo una modifica prima di "
                             "rigenerare il suono")
@@ -206,6 +211,7 @@ class GP2M_Preferences(bpy.types.AddonPreferences):
         col = box.column(align=True)
         col.prop(self, "vibrato_depth")
         col.prop(self, "vibrato_rate")
+        col.prop(self, "attack_on_time")
         box = layout.box()
         box.label(text="Nuove composizioni", icon="OUTLINER_OB_GREASEPENCIL")
         grid = box.grid_flow(row_major=True, columns=2, even_columns=True, align=False)
@@ -247,6 +253,7 @@ class _Defaults:
     volume_feedback = "AUTO"
     vibrato_depth = 0.6
     vibrato_rate = 5.5
+    attack_on_time = True
     debounce = 0.35
     background_render = True
     mp3_bitrate = 192
@@ -302,7 +309,8 @@ def get_mapping():
     p = get_prefs()
     return Mapping(thickness=p.map_thickness, opacity=p.map_opacity,
                    vertex_color=p.map_vertex_color, softness=p.map_softness,
-                   vibrato_depth=p.vibrato_depth, vibrato_rate=p.vibrato_rate)
+                   vibrato_depth=p.vibrato_depth, vibrato_rate=p.vibrato_rate,
+                   on_time=bool(getattr(p, "attack_on_time", True)))
 
 
 def applied_preset(p=None):

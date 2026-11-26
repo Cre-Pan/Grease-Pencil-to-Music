@@ -160,6 +160,7 @@ class Zone:
     gain: float = 1.0
     offset: int = 0  # where the sound starts (MP3 decoders add a little silence)
     source: object = None  # () -> (data, rate, offset): the recording, read when first played
+    rise: int = -1  # samples from ``offset`` to half the loudness of the attack (-1: not yet)
 
 
 def zone_ready(zone):
@@ -175,10 +176,47 @@ def zone_ready(zone):
     return zone
 
 
+def onset(data, rate):
+    """Where the sound starts in ``data`` (samples): MP3 decoders and many recordings
+    have a little silence before it."""
+    peak = float(np.max(np.abs(data))) if len(data) else 0.0
+    if peak <= 0:
+        return 0
+    first = int(np.argmax(np.abs(data) > peak * 0.02))
+    return max(0, first - int(0.004 * rate))
+
+
+RISE_WINDOW = 0.005  # seconds of the loudness (RMS) envelope used to measure an attack
+RISE_SPAN = 1.5  # seconds after the onset where the attack is looked for
+
+
+def attack_rise(data, rate, start=0):
+    """Samples from ``start`` until the sound is half as loud as its loudest moment
+    (within :data:`RISE_SPAN`): when we hear the note begin. A bowed or blown note
+    takes 0.1-0.2 s to get there, a struck one a few milliseconds."""
+    part = np.asarray(data[start:start + int(RISE_SPAN * rate)], dtype=np.float64)
+    if len(part) < 2:
+        return 0
+    window = max(1, int(RISE_WINDOW * rate))
+    env = np.sqrt(np.convolve(part * part, np.ones(window) / window, mode="same"))
+    peak = float(env.max())
+    if peak <= 0:
+        return 0
+    return int(np.argmax(env >= 0.5 * peak))
+
+
+def zone_rise(zone):
+    """:func:`attack_rise` of a zone (measured once)."""
+    if zone.rise < 0:
+        zone.rise = attack_rise(zone.data, zone.rate, zone.offset) if len(zone.data) else 0
+    return zone.rise
+
+
 def register_sample(key, data, rate, root, loop):
     """A single sound over the whole keyboard (the "Campione" instrument)."""
     data = np.asarray(data, dtype=np.float32)
-    SAMPLES[key] = [Zone(data, float(rate), float(root), 0, 127, bool(loop), 0, len(data))]
+    SAMPLES[key] = [Zone(data, float(rate), float(root), 0, 127, bool(loop), 0, len(data),
+                         offset=onset(data, rate))]
 
 
 def register_zones(key, zones):
@@ -392,19 +430,27 @@ def _noise_band(n, sample_rate, low_hz, high_hz, rng, frame=2048, hop=512):
     return out / max(float(np.sqrt(np.mean(out ** 2))), 1e-9) * 0.25
 
 
-def _sample(ident, freq, sample_rate):
-    """Play the registered zone closest to the pitch, following ``freq`` (resampling)."""
+def _sample_zone(voice):
+    """The registered zone that plays ``voice`` (Campione, Libreria), or None."""
+    ident = voice.instrument
     key = ident.split(":", 1)[1] if ":" in ident else ident
     zones = SAMPLES.get(key)
     if not zones:
+        return None
+    return pick_zone(zones, float(np.median(voice.pitch)) if len(voice.pitch) else 60.0)
+
+
+def _sample(voice, freq, sample_rate):
+    """Play the registered zone closest to the pitch, following ``freq`` (resampling),
+    from where its sound starts (the silence before it would be heard as a delay)."""
+    zone = _sample_zone(voice)
+    if zone is None:
         return np.zeros(len(freq))
-    pitch = 69.0 + 12.0 * np.log2(max(float(np.median(freq)), 1e-6) / 440.0)
-    zone = pick_zone(zones, pitch)
     data = zone.data
     if len(data) < 2:
         return np.zeros(len(freq))
     ratio = freq / float(music.midi_to_freq(zone.root)) * (zone.rate / sample_rate)
-    position = np.concatenate(([0.0], np.cumsum(ratio[:-1])))
+    position = zone.offset + np.concatenate(([0.0], np.cumsum(ratio[:-1])))
     if zone.loop and zone.loop_end - zone.loop_start > 2:
         span = zone.loop_end - zone.loop_start
         past = position >= zone.loop_end
@@ -443,9 +489,20 @@ def _sustain(data, position, rate, offset):
     return out
 
 
-def _recorded(voice, inst, freq, ts, sample_rate, brightness):
+def _recorded_zone(voice, inst):
+    """The recorded note (or hit) that plays ``voice``, decoded; None without one."""
+    zones = recorded_zones(inst.ident)
+    if not zones:
+        return None
+    if inst.percussive:
+        return zone_ready(zones[0])
+    return zone_ready(pick_zone(zones, float(voice.pitch[0])))
+
+
+def _recorded(voice, inst, freq, ts, sample_rate, brightness, lead=0.0):
     """A recorded instrument: the nearest recorded note retuned to follow the line, or one
-    recorded hit (as long as the line for scrapes and rolls)."""
+    recorded hit (as long as the line for scrapes and rolls). ``ts`` starts with the
+    sound, ``lead`` seconds before the voice (see :func:`attack_lead`)."""
     rec = RECORDINGS[inst.ident]
     zones = recorded_zones(inst.ident)
     if not zones:
@@ -458,7 +515,7 @@ def _recorded(voice, inst, freq, ts, sample_rate, brightness):
         hit = np.interp(position, np.arange(len(zone.data)), zone.data)
         hit *= position < len(zone.data) - 1
         if rec.hold:
-            cut = max(voice.duration, HOLD_MIN)
+            cut = max(voice.duration, HOLD_MIN) + lead
             hit *= np.clip(1.0 - (ts - cut) / HOLD_FADE, 0.0, 1.0)
         return hit * (0.6 + 0.4 * float(np.mean(brightness))) * zone.gain
     zone = zone_ready(pick_zone(zones, float(voice.pitch[0])))
@@ -557,6 +614,36 @@ SLOW_ATTACK = {"STRINGS": 0.12, "PAD": 0.4, "CHOIR": 0.22}
 
 # --- Voice rendering ---------------------------------------------------------
 
+MAX_LEAD = 0.2  # seconds: the longest attack started before its note
+
+
+def attack_lead(voice, sample_rate=44100):
+    """Seconds by which ``voice`` starts sounding before its own start, so that the
+    note is heard (half its loudness) exactly when the playhead reaches the stroke.
+
+    A recorded violin, flute or organ takes 0.1-0.2 s to speak, a slow synth (strings,
+    pad, choir) has its own slow attack: started on time they are heard late, as if
+    the sound lagged behind the drawing. Like players, and like the "negative delay" of
+    orchestral sample libraries, the attack starts a little earlier (at most
+    :data:`MAX_LEAD`). The attack drawn with the stroke softness is not anticipated:
+    it is a slow swell chosen by hand."""
+    inst = get_instrument(voice.instrument)
+    if inst.ident in SLOW_ATTACK:
+        return min(0.5 * SLOW_ATTACK[inst.ident], MAX_LEAD)  # half way up its ramp
+    if inst.percussive:  # a hit is heard with its first transient, already on time
+        return 0.0
+    # A recording that cannot be read raises here, as it would while rendering.
+    if inst.ident in RECORDINGS:
+        zone = _recorded_zone(voice, inst)
+    elif inst.ident in ("SAMPLE", "LIBRARY"):
+        zone = _sample_zone(voice)
+    else:
+        return 0.0
+    if zone is None or len(zone.data) < 2:
+        return 0.0
+    return min(zone_rise(zone) / zone.rate, MAX_LEAD)
+
+
 # Struck / plucked: the sound dies before the line ends.
 GLIDE_HOLD = ("PLUCK", "BELL", "EPIANO", "MARIMBA") + tuple(
     ident for ident, rec in RECORDINGS.items()
@@ -583,15 +670,22 @@ def voice_length(voice, sample_rate):
     return max(1, int(round(voice.duration * sample_rate))) + int(inst.release * sample_rate)
 
 
-def render_voice(voice, sample_rate=44100, vibrato_rate=5.5):
-    """Return ``(offset_in_samples, stereo_float32_buffer)``."""
+def render_voice(voice, sample_rate=44100, vibrato_rate=5.5, on_time=True):
+    """Return ``(offset_in_samples, stereo_float32_buffer)``.
+
+    With ``on_time`` slow attacks start before the voice (:func:`attack_lead`): the
+    offset is earlier, and the note is heard at ``voice.start``."""
     inst = get_instrument(voice.instrument)
-    n = voice_length(voice, sample_rate)
-    ts = np.arange(n) / sample_rate
+    lead = attack_lead(voice, sample_rate) if on_time else 0.0
+    pre = int(round(lead * sample_rate))
+    lead = pre / sample_rate
+    n = voice_length(voice, sample_rate) + pre
+    ts = np.arange(n) / sample_rate  # since the sound starts
+    vt = ts - lead  # since the voice starts (negative while the attack is anticipated)
     ctrl_t = np.arange(len(voice.pitch)) / CONTROL_RATE
 
     def ctrl(curve):
-        return np.interp(ts, ctrl_t, curve)
+        return np.interp(vt, ctrl_t, curve)
 
     rng = _rng(voice)
     pitch = ctrl(voice.pitch)
@@ -648,9 +742,9 @@ def render_voice(voice, sample_rate=44100, vibrato_rate=5.5):
         growl = _lowpass(_saw(phase, freq, sample_rate), sample_rate, 180.0 + b * 450.0)
         signal = np.tanh(1.6 * (0.55 * np.sin(phase) + 0.3 * growl)) / np.tanh(1.6)
     elif inst.ident in ("SAMPLE", "LIBRARY"):
-        signal = _sample(voice.instrument, freq, sample_rate)
+        signal = _sample(voice, freq, sample_rate)
     elif inst.ident in RECORDINGS:
-        signal = _recorded(voice, inst, freq, ts, sample_rate, brightness)
+        signal = _recorded(voice, inst, freq, ts, sample_rate, brightness, lead)
     elif inst.ident == "ORGAN":
         signal = _organ(freq, ts, sample_rate, brightness, rng)
     elif inst.ident == "CHOIR":
@@ -675,14 +769,14 @@ def render_voice(voice, sample_rate=44100, vibrato_rate=5.5):
     envelope = ctrl(voice.amp) * np.clip(ts / max(attack, 1e-4), 0.0, 1.0)
     if not inst.percussive:
         if inst.release > 0:
-            envelope *= np.clip(1.0 - (ts - voice.duration) / inst.release, 0.0, 1.0)
+            envelope *= np.clip(1.0 - (vt - voice.duration) / inst.release, 0.0, 1.0)
         else:
-            envelope *= ts <= voice.duration
+            envelope *= vt <= voice.duration
     mono = signal * envelope * inst.gain
     pan = ctrl(voice.pan)
     angle = (np.clip(pan, -1.0, 1.0) + 1.0) * np.pi / 4.0
     stereo = np.stack((mono * np.cos(angle), mono * np.sin(angle)), axis=1)
-    offset = int(round(voice.start * sample_rate))
+    offset = int(round(voice.start * sample_rate)) - pre
     return offset, stereo.astype(np.float32)
 
 
