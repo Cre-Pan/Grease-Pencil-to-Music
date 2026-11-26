@@ -2095,14 +2095,16 @@ def test_layer_modifiers_effects_and_copy_paste(comp):
 
 
 def _evaluated_strokes(comp, layer_name):
-    """(x, z, radius) of the strokes Blender shows on a layer (after the modifiers)."""
+    """(x, z, radius) of the strokes Blender shows on a layer (after the modifiers), in
+    board coordinates."""
     bpy.context.view_layer.update()
     gp = comp.evaluated_get(bpy.context.evaluated_depsgraph_get()).data
     drawing = gp.layers[layer_name].current_frame().drawing
+    ox, oz = sub("board").origin(comp.gp2m)
     out = []
     for stroke in drawing.strokes:
-        out.append((np.array([p.position[0] for p in stroke.points]),
-                    np.array([p.position[2] for p in stroke.points]),
+        out.append((np.array([p.position[0] + ox for p in stroke.points]),
+                    np.array([p.position[2] + oz for p in stroke.points]),
                     np.array([p.radius for p in stroke.points])))
     return out
 
