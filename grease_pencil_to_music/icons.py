@@ -63,7 +63,18 @@ def load():
     for name in names:
         path = os.path.join(folder, f"{name}.png")
         if os.path.isfile(path):
-            _previews.load(name, path, "IMAGE")
+            _load_now(_previews.load(name, path, "IMAGE"))
+
+
+def _load_now(preview):
+    """Read the pixels right away. Blender loads a preview image lazily, the first time
+    it is drawn, and meanwhile draws a "loading" circle: the Solo headphones and the
+    instrument icons flickered for a moment when they first showed up."""
+    try:
+        preview.icon_size[0]
+        preview.icon_pixels[0]
+    except (AttributeError, IndexError):
+        pass
 
 
 def free():

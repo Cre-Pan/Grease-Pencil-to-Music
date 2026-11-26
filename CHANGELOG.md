@@ -381,6 +381,9 @@ Livelli e icone
 - *Aggiungi strumento* ha l'icona dell'altoparlante (`SPEAKER`).
 - **Icone delle composizioni**: un piano roll per la Composizione Musicale e una griglia di passi
   per la Composizione Ritmica, in *Shift+A → Doodle Music*, nella lista Composizioni e nei pannelli.
+- **Niente più sfarfallio nella lista dei livelli**: le icone dell'add-on (cuffie del Solo,
+  strumenti, composizioni) vengono caricate subito all'avvio. Prima Blender le caricava la prima
+  volta che comparivano e per un attimo disegnava al loro posto un cerchio di caricamento.
 - Nella tendina delle categorie, la categoria in uso tiene la sua icona (prima diventava una
   spunta, che sui Piatti sembrava una "v").
 
