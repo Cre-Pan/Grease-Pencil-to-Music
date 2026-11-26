@@ -807,9 +807,26 @@ def register_properties():
         description="Volume di questo strumento", update=_instrument_changed)
     bpy.types.GreasePencil.gp2m_active_layer = IntProperty(
         name="Livello attivo", get=_get_active_layer, set=_set_active_layer)
+    # Kept in the file for Ctrl+Z (see handlers.tick_undo, engine.save_sync_state and
+    # engine._follow_scene); registered only so that they stay out of the Custom
+    # Properties panels. Written and read as custom properties (no update).
+    for id_type in _TICK_TYPES:
+        id_type.gp2m_undo_tick = IntProperty(options={"HIDDEN"})
+    bpy.types.Object.gp2m_sync = StringProperty(options={"HIDDEN"})
+    bpy.types.Object.gp2m_linked_frames = IntProperty(options={"HIDDEN"})
+    bpy.types.Scene.gp2m_linked_range = FloatVectorProperty(size=3, options={"HIDDEN"})
+
+
+_TICK_TYPES = (bpy.types.Scene, bpy.types.Object, bpy.types.GreasePencil,
+               bpy.types.Collection)
 
 
 def unregister_properties():
+    del bpy.types.Scene.gp2m_linked_range
+    del bpy.types.Object.gp2m_linked_frames
+    del bpy.types.Object.gp2m_sync
+    for id_type in _TICK_TYPES:
+        del id_type.gp2m_undo_tick
     del bpy.types.GreasePencil.gp2m_active_layer
     del bpy.types.Material.gp2m_volume
     del bpy.types.Material.gp2m_library_preset

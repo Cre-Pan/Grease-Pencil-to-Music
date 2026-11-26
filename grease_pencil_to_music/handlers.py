@@ -325,8 +325,69 @@ def _show_popups():
         pass  # the warning is also shown in the N panel
 
 
+UNDO_TICK = "gp2m_undo_tick"  # custom property: changes all the time (see tick_undo)
+UNDO_TICK_INTERVAL = 0.1  # seconds
+_tick_names = [0.0, ()]  # when the compositions were last listed, their names
+
+
+def tick_undo(only_scenes=False):
+    """Keep every Undo step different from the one before, for the data the add-on
+    changes by itself after a step was saved (the sound computed in the background,
+    the clips placed again, a clip edited in the Sequencer read back, the grid rebuilt
+    a moment later...).
+
+    Blender's Ctrl+Z reads again only the data that differs between two steps and
+    keeps the rest as it is in memory. Data equal in both steps but changed by the
+    add-on after the last one was then kept as it was changed: after H on a layer's
+    clip and Ctrl+Z the layer stayed muted, and a scene kept with clips made after
+    the last step pointed to sounds Blender had just thrown away, so Blender crashed
+    (Nuovo livello, Ctrl+Z, Ctrl+Shift+Z, Ctrl+Z). A counter on the scenes, the
+    compositions, their drawings, grids and collections changes after every update
+    and ten times a second: two steps are never equal there, Ctrl+Z reads them again.
+    ``only_scenes``: while a brush or a transform is running (their data is left
+    alone)."""
+    now = time.monotonic()
+    if now - _tick_names[0] > 2.0:
+        _tick_names[0] = now
+        _tick_names[1] = tuple(obj.name for obj in compositions())
+    if not _tick_names[1]:
+        return
+    ids = set()
+    for name in _tick_names[1]:
+        obj = bpy.data.objects.get(name)
+        if obj is None or obj.type != "GREASEPENCIL" or not obj.gp2m.is_composition:
+            continue
+        ids.update(obj.users_scene)
+        if only_scenes:
+            continue
+        for owner in (obj, board.grid_object(obj)):
+            if owner is None:
+                continue
+            ids.add(owner)
+            if owner.data is not None:
+                ids.add(owner.data)
+            ids.update(owner.users_collection)
+    for id_block in ids:
+        try:
+            id_block[UNDO_TICK] = (id_block.get(UNDO_TICK, 0) + 1) % 1000000
+        except (TypeError, AttributeError, ReferenceError):
+            pass  # linked (read-only) data
+
+
+def _undo_tick_timer():
+    try:
+        tick_undo(only_scenes=transform_running() or brush_running())
+    except Exception as error:
+        print(f"[Doodle Music] undo tick failed: {error!r}")
+    return UNDO_TICK_INTERVAL
+
+
 @persistent
 def on_depsgraph_update(_scene, depsgraph):
+    try:
+        tick_undo(only_scenes=transform_running() or brush_running())
+    except Exception as error:
+        print(f"[Doodle Music] undo tick failed: {error!r}")
     comps = None
     for update in depsgraph.updates:
         original = getattr(update.id, "original", update.id)
@@ -363,6 +424,7 @@ def on_depsgraph_update(_scene, depsgraph):
             signature = _signature()
             if signature != _object_signature[0]:
                 _object_signature[0] = signature
+                _tick_names[0] = 0.0  # list the compositions again
                 _cleanup_needed[0] = True
                 _ensure_timer()
 
@@ -439,6 +501,7 @@ def _check_scene_timing(scene):
 @persistent
 def on_load_post(*_args):
     _dirty.clear()
+    _tick_names[0] = 0.0
     _full.clear()
     _stack_counts.clear()
     _scaled.clear()
@@ -448,7 +511,6 @@ def on_load_post(*_args):
     engine._state.clear()  # runtime state of the previous file (keyed by object name)
     _scene_timing.clear()
     _scene_preview.clear()
-    engine._linked_range.clear()
     _layer_syncs.clear()  # names of the previous file
     _layer_names.clear()
     _shade_scenes.clear()
@@ -512,6 +574,8 @@ def subscribe():
 @persistent
 def on_undo_pre(*_args):
     _was_playing[0] = is_playing()
+    from . import seqsync
+    seqsync.before_undo()
 
 
 def _resume_playback():
@@ -544,9 +608,14 @@ def _resume_playback():
 
 @persistent
 def on_undo_redo(*_args):
+    from . import seqsync
+    seqsync.after_undo()
     for obj in compositions():
         # Paint-mode undo does not restore material slots: fix the board colours.
-        if board.has_board(obj) and not board.board_materials_ok(obj):
+        # The grid may also be the one of other settings (its rebuild came after the
+        # Undo step of the change, e.g. Ctrl+Shift+Z of a rig handle or of "Ottave").
+        if board.has_board(obj) and (not board.board_materials_ok(obj)
+                                     or not board.board_current(obj)):
             board.request_rebuild(obj)
     mark_all_dirty()
     for obj in compositions():
@@ -575,6 +644,9 @@ def register():
             handler_list.append(func)
     _object_signature[0] = None
     subscribe()
+    if not bpy.app.background and not bpy.app.timers.is_registered(_undo_tick_timer):
+        bpy.app.timers.register(_undo_tick_timer, first_interval=UNDO_TICK_INTERVAL,
+                                persistent=True)
 
 
 def unregister():
@@ -583,7 +655,7 @@ def unregister():
             handler_list.remove(func)
     bpy.msgbus.clear_by_owner(_msgbus_owner)
     for timer in (_tick, _resume_playback, _shade_tick, _layer_sync_tick,
-                  board._rebuild_pending):
+                  board._rebuild_pending, _undo_tick_timer):
         if bpy.app.timers.is_registered(timer):
             bpy.app.timers.unregister(timer)
     engine.stop_background()

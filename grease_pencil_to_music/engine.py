@@ -6,6 +6,7 @@ folder and (re)places it as a sound strip in the Video Sequencer, so pressing
 Play in Blender plays the drawing.
 """
 
+import collections
 import os
 import queue
 import re
@@ -30,6 +31,87 @@ _state = {}
 
 def state(obj):
     return _state.setdefault(obj.name, {})
+
+
+# What the Sequencer read-back (seqsync) compares the clips with: how the add-on last
+# placed them. A copy is kept in the file, on the composition, so that every Undo
+# step has the one that goes with its clips: Ctrl+Shift+Z of a clip moved in the
+# Sequencer gives back the moved clip with the place it had before, and the move is
+# read again (otherwise the clip went back where it was).
+SYNC_KEY = "gp2m_sync"
+SYNC_STATE = ("meta_span", "had_meta", "bus", "tree", "layer_groups", "offset_frames",
+              "delay_frames")
+
+
+def _sync_value(key, value):
+    if key in ("meta_span", "bus"):
+        return tuple(value)
+    if key == "tree":
+        return [tuple(item) for item in value]
+    if key == "layer_groups":
+        return list(value)
+    return value
+
+
+def save_sync_state(obj):
+    """Copy the read-back state of ``obj`` into the file (only when it changed)."""
+    import json
+    st = state(obj)
+    data = {key: st[key] for key in SYNC_STATE if key in st}
+    data["owner"] = obj.name  # a copy (Shift+D) starts without one
+    data["order"] = clip_order(obj)
+    try:
+        text = json.dumps(data, sort_keys=True)
+    except (TypeError, ValueError):
+        return
+    if obj.get(SYNC_KEY) != text:
+        try:
+            obj[SYNC_KEY] = text
+        except (TypeError, AttributeError):
+            pass  # linked data
+
+
+def load_sync_state(obj):
+    """After Ctrl+Z / Ctrl+Shift+Z: the read-back state of the step given back."""
+    import json
+    st = state(obj)
+    for key in SYNC_STATE:
+        st.pop(key, None)
+    try:
+        data = json.loads(obj.get(SYNC_KEY) or "{}")
+    except (TypeError, ValueError):
+        return
+    if not isinstance(data, dict) or data.get("owner") != obj.name:
+        return
+    for key in SYNC_STATE:
+        if key in data:
+            try:
+                st[key] = _sync_value(key, data[key])
+            except (TypeError, ValueError):
+                pass
+    if isinstance(data.get("order"), dict):
+        st["undo_order"] = data["order"]
+
+
+def clip_order(obj):
+    """The clips of the layers and groups of layers, by channel, inside the meta-clip
+    of ``obj`` and the meta-clips of its groups ("" = the composition's meta-clip):
+    saved with the Undo step, so that after Ctrl+Z / Ctrl+Shift+Z only clips moved
+    since then are read as moved in the Sequencer (the step can hold layers moved on
+    the board with their clips not placed again yet)."""
+    scene = next((sc for sc in obj.users_scene if sc.sequence_editor is not None), None)
+    meta = meta_strip(scene, obj) if scene is not None else None
+    if meta is None:
+        return {}
+    order = {}
+    containers = [("", meta)] + list(layer_group_metas(meta).items())
+    for key, container in containers:
+        inside = [strip for strip in container.strips
+                  if strip.get(LAYER_KEY) or strip.get(LAYER_GROUP_KEY)]
+        order[key] = [strip.get(LAYER_KEY) or strip.get(LAYER_GROUP_KEY) for strip in
+                      sorted(inside, key=lambda strip: (
+                          strip.channel, strip.get(LAYER_KEY) or strip.get(LAYER_GROUP_KEY)))]
+    return order
 
 
 def board_spec(settings):
@@ -217,7 +299,36 @@ def _range_key(scene):
     return (scene.frame_start, scene.frame_end, round(_fps(scene), 6))
 
 
-_linked_range = {}  # scene name -> Start, End and fps the compositions were matched to
+# What the compositions that follow the scene were last matched to, kept in the file
+# (not in Python) so that Ctrl+Z and Ctrl+Shift+Z give it back with the settings: an
+# Undo step saved before the scene End followed a new Durata must still read as "the
+# Durata changed", not as "the scene End changed" (which shortened it back).
+LINKED_RANGE_KEY = "gp2m_linked_range"  # on the scene: Start, End, fps
+LINKED_FRAMES_KEY = "gp2m_linked_frames"  # on a composition: its loop, in frames
+
+
+def _linked_range(scene):
+    value = scene.get(LINKED_RANGE_KEY)
+    try:
+        return (int(value[0]), int(value[1]), round(float(value[2]), 6))
+    except (TypeError, IndexError, KeyError, ValueError):
+        return None
+
+
+def _set_linked_range(scene):
+    start, end, fps = _range_key(scene)
+    if _linked_range(scene) != (start, end, fps):
+        scene[LINKED_RANGE_KEY] = [float(start), float(end), float(fps)]
+
+
+def _linked_frames(obj):
+    value = obj.get(LINKED_FRAMES_KEY)
+    return int(value) if isinstance(value, (int, float)) else None
+
+
+def _set_linked_frames(obj, frames):
+    if _linked_frames(obj) != int(frames):
+        obj[LINKED_FRAMES_KEY] = int(frames)
 
 
 def link_composition(obj, scene):
@@ -238,8 +349,8 @@ def link_composition(obj, scene):
         end = scene.frame_start + frames - 1
         if scene.frame_end != end:
             scene.frame_end = end
-        state(obj)["linked_frames"] = _loop_frames(obj, fps)
-        _linked_range[scene.name] = _range_key(scene)
+        _set_linked_frames(obj, _loop_frames(obj, fps))
+        _set_linked_range(scene)
 
 
 def _follow_scene(scene, linked):
@@ -251,9 +362,9 @@ def _follow_scene(scene, linked):
     the loop keeps its length and the last section lasts until the End."""
     fps = _fps(scene)
     loops = [obj for obj in linked if not obj.gp2m.use_sections]
-    if _linked_range.get(scene.name) == _range_key(scene):  # the scene did not change
+    if _linked_range(scene) == _range_key(scene):  # the scene did not change
         moved = [obj for obj in loops
-                 if state(obj).get("linked_frames") not in (None, _loop_frames(obj, fps))]
+                 if _linked_frames(obj) not in (None, _loop_frames(obj, fps))]
         if moved:
             active = _active_composition(scene)
             source = active if active in moved else moved[0]
@@ -265,8 +376,8 @@ def _follow_scene(scene, linked):
     for obj in loops:
         if _loop_frames(obj, fps) != target:
             obj.gp2m.length = target / fps
-        state(obj)["linked_frames"] = target
-    _linked_range[scene.name] = _range_key(scene)
+        _set_linked_frames(obj, target)
+    _set_linked_range(scene)
 
 
 def _context_signature(obj, scene):
@@ -901,12 +1012,52 @@ def _same_audio(previous, audio):
                                  and bool(np.array_equal(previous, audio)))
 
 
+TRASH_FILES = 160  # sound files no strip plays any more, kept for Ctrl+Z ...
+TRASH_BYTES = 768 * 1024 * 1024  # ... up to this much disk (the oldest go first)
+_trash = collections.deque()  # (path, bytes), oldest first
+
+
+def _norm(path):
+    return os.path.normcase(os.path.abspath(bpy.path.abspath(path)))
+
+
 def _forget_file(path):
-    if path:
+    """A sound file no strip plays any more. It stays on disk for a while: Ctrl+Z and
+    Ctrl+Shift+Z give back strips that play the files of that moment (a muted layer
+    is not rendered again, so it would keep a deleted file and stay silent with
+    'missing file'). The oldest go once there are too many or they take too much
+    room, never one that a sound still uses; the session's temporary folder, where
+    they are, is emptied by Blender on quit."""
+    if not path:
+        return
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return  # already gone
+    key = _norm(path)
+    if any(_norm(old) == key for old, _size in _trash):
+        return
+    _trash.append((path, size))
+    _empty_trash()
+
+
+def _empty_trash(files=TRASH_FILES, room=TRASH_BYTES):
+    total = sum(size for _path, size in _trash)
+    if len(_trash) <= files and total <= room:
+        return
+    used = {_norm(sound.filepath) for sound in bpy.data.sounds if sound.filepath and sound.users}
+    kept = []
+    while _trash and (len(_trash) + len(kept) > files or total > room):
+        path, size = _trash.popleft()
+        if _norm(path) in used:
+            kept.append((path, size))  # a strip plays it again (after Ctrl+Z)
+            continue
+        total -= size
         try:
             os.remove(path)
         except OSError:
             pass  # still in use (Windows) or already gone
+    _trash.extendleft(reversed(kept))
 
 
 def _ensure_meta(scene, obj, start):
@@ -1109,7 +1260,7 @@ def layer_channel_order(obj, names):
     return sorted(names, key=lambda name: order.index(name) if name in order else len(order))
 
 
-MUTE_KEY = "gp2m_mute"  # the mute the add-on last gave a layer strip
+MUTE_KEY = "gp2m_mute"  # the mute the add-on last gave a strip (layer or composition)
 
 
 def set_clip_mute(strip, mute):
@@ -1340,6 +1491,8 @@ def arrange(scene):
     _arranging[0] = True
     try:
         _arrange(scene)
+        for obj in scene_compositions(scene):
+            save_sync_state(obj)
     finally:
         _arranging[0] = False
 
@@ -1407,8 +1560,7 @@ def _arrange(scene):
             obj.gp2m.channel = strip.channel  # show the automatic choice
         elif strip.channel != obj.gp2m.channel:
             strip.channel = obj.gp2m.channel
-        if strip.mute != mute:
-            strip.mute = mute
+        set_clip_mute(strip, mute)  # H / Alt+H on it in the Sequencer: see seqsync
 
     fit_groups(scene)
 
@@ -1444,8 +1596,7 @@ def _arrange_layers(scene, obj, strips, target, mute):
         return  # layer strips of 0.0.21: they move into a meta-clip at the next sound
     state(obj)["had_meta"] = True
     if meta.lock:  # locked in the Sequencer: the add-on leaves it where it is
-        if meta.mute != mute:
-            meta.mute = mute
+        set_clip_mute(meta, mute)
         return
     if obj.gp2m.channel == 0:
         obj.gp2m.channel = meta.channel  # the automatic choice
@@ -1463,8 +1614,7 @@ def _arrange_layers(scene, obj, strips, target, mute):
                 strip.content_start = target
     _fit_tree(meta)
     state(obj)["meta_span"] = (int(meta.left_handle), int(meta.right_handle))
-    if meta.mute != mute:
-        meta.mute = mute
+    set_clip_mute(meta, mute)  # H / Alt+H on it in the Sequencer: see seqsync
 
 
 _last_solo = {}

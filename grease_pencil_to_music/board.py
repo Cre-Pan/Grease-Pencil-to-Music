@@ -899,6 +899,25 @@ def _materials_ok(gp):
     return True
 
 
+BOARD_KEY = "gp2m_board"  # on the grid data: the settings it was built for
+
+
+def board_signature(settings):
+    """The settings the grid and the playhead are drawn from."""
+    s = settings
+    return (f"{s.bpm:.4f}|{s.length:.4f}|{s.low_note}|{s.octaves}|{s.extra_keys}|"
+            f"{s.row_height:.5f}|{s.seconds_width:.5f}|{int(s.show_beats)}|{s.key_labels}")
+
+
+def board_current(comp):
+    """False when the grid was built for other settings. The rebuild after a change
+    waits a moment (sliders), so the Undo step of the change can keep the grid of
+    before: Ctrl+Shift+Z then gives back the new settings with the old grid."""
+    grid = grid_object(comp)
+    return grid is not None and grid.data is not None \
+        and grid.data.get(BOARD_KEY) == board_signature(comp.gp2m)
+
+
 def rebuild(comp, scene=None):
     """(Re)create the grid object (board and labels) and the playhead."""
     scene = scene or bpy.context.scene
@@ -914,6 +933,7 @@ def rebuild(comp, scene=None):
     frame = _first_frame(scene)
     lit = preview_lit(comp, scene)
     grid_gp[SHADE_KEY] = _shade_signature(s, lit)
+    grid_gp[BOARD_KEY] = board_signature(s)
 
     for layer in [layer for layer in grid_gp.layers if is_board_layer(layer)]:
         grid_gp.layers.remove(layer)
