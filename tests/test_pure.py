@@ -1693,3 +1693,21 @@ def test_legato_strength_in_the_mix():
     rms = lambda a, t: float(np.sqrt(np.mean(a[int((t - 0.01) * SR):int((t + 0.01) * SR)] ** 2)))  # noqa: E731
     assert rms(detached.audio, 1.0) < 0.3 * rms(tied.audio, 1.0)
     assert rms(detached.audio, 1.25) == pytest.approx(rms(tied.audio, 1.25), rel=0.1)
+
+
+@pytest.mark.parametrize("mode", ["LEGATO", "OPTICAL_LEGATO"])
+def test_a_stroke_fading_in_over_another_does_not_silence_it(mode):
+    """Ale's case: a low stroke is playing, a high one starts over it with Fade In (it
+    begins silent). The low one goes on as if it were alone."""
+    spec = free_spec(length=4.0, bpm=120.0)
+    stack = layer_mods.Stack(fade=layer_mods.Fade(direction="IN"))
+    low = stroke((0.3, 2.8), (C4_ROW, C4_ROW), instrument="S_VIOLIN")
+    high = stroke((1.0, 2.5), (C4_ROW + 7, C4_ROW + 7), instrument="S_VIOLIN")
+    def render(strokes):
+        return mixer.render([mixer.LayerInput("L", strokes, mode=mode, mods=stack)], spec,
+                            interpret.Mapping(), SR, loop=False, master_fx=None)
+    alone, both = render([low]), render([low, high])
+    assert both.voice_count == 2
+    for t0 in (1.1, 1.6, 2.1):
+        assert _energy_at(both.audio, 60, t0, t0 + 0.3) == pytest.approx(
+            _energy_at(alone.audio, 60, t0, t0 + 0.3), rel=0.05)

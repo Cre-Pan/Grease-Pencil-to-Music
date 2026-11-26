@@ -3979,3 +3979,4 @@ def test_quantize_and_legato_strength_reach_the_sound(comp):
     log = []
     sub("ui").draw_layer_reading(MockLayout(log), settings)
     assert ("prop", "legato_strength") in log
+
