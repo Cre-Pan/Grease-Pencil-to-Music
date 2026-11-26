@@ -112,6 +112,8 @@ def reverb_ir(sample_rate, size=0.5, seed=7):
 
 ROOMS = ("HALL", "ROOM", "CONCERT", "CHURCH")  # HALL: the synthetic response above
 ROOM_LOADER = None  # (room, rate) -> (n, 2) recorded response (samples.py, needs bpy)
+_ROOM_FAILED = set()  # rooms whose recording could not be read
+_ROOM_IRS = {}  # ("room", room, rate) -> recorded response
 
 
 def room_ir(room, sample_rate):
@@ -120,18 +122,19 @@ def room_ir(room, sample_rate):
     if room in (None, "", "HALL") or ROOM_LOADER is None:
         return None
     key = ("room", room, int(sample_rate))
-    found = _IRS.get(key)
+    if key in _ROOM_FAILED:
+        return None
+    found = _ROOM_IRS.get(key)
     if found is None:
         try:
             found = np.asarray(ROOM_LOADER(room, sample_rate), dtype=np.float64)
         except Exception as error:  # noqa: BLE001 - the synthetic hall plays instead
             print(f"[Doodle Music] ambiente {room} non letto: {error!r}")
+            _ROOM_FAILED.add(key)  # not read again at every render (nor in a thread)
             return None
         found = found / np.maximum(np.sqrt(np.sum(found ** 2, axis=0)), 1e-9)
         found.flags.writeable = False
-        if len(_IRS) > 8:
-            _IRS.clear()
-        _IRS[key] = found
+        _ROOM_IRS[key] = found  # a few rooms at most: kept (never read in a thread)
     return found, key
 
 
@@ -229,8 +232,24 @@ def _smooth(target, rate, attack, release):
 
 
 def _block_gain_to_samples(gain, n):
-    centers = (np.arange(len(gain)) + 0.5) * MASTER_BLOCK
-    return np.interp(np.arange(n), centers, gain)
+    """Linear interpolation of a per-block gain between the block centres (as
+    ``np.interp`` would, without searching: the centres are evenly spaced)."""
+    gain = np.asarray(gain, dtype=np.float64)
+    count = len(gain)
+    half = MASTER_BLOCK // 2
+    if count < 2 or MASTER_BLOCK % 2:
+        centers = (np.arange(count) + 0.5) * MASTER_BLOCK
+        return np.interp(np.arange(n), centers, gain)
+    out = np.empty(n)
+    head = min(half, n)
+    out[:head] = gain[0]
+    steps = np.arange(MASTER_BLOCK, dtype=np.float64)
+    slope = (gain[1:] - gain[:-1]) / float(MASTER_BLOCK)
+    ramp = (slope[:, None] * steps[None, :] + gain[:-1, None]).ravel()
+    body = min(len(ramp), max(n - half, 0))
+    out[half:half + body] = ramp[:body]
+    out[half + body:] = gain[-1]
+    return out
 
 
 def _blocks(buffer, stat):
@@ -374,6 +393,42 @@ def master(buffer, rate, ambience=0.25, loop=True, wrap=2.0, room="HALL"):
     return master_dynamics([linear], rate, loop, wrap)[0]
 
 
+MASTER_ROOM_SIZE = 0.55
+_MASTER_SPECTRA = {}  # (n, rate, ambience, room) -> response of the whole linear part
+_MASTER_SPECTRA_MAX = 4
+
+
+def _master_spectrum(n, rate, ambience, room):
+    """Frequency response, over one loop of ``n`` samples, of the room folded onto
+    the loop followed by the low cut: (channels, n // 2 + 1), or None when the
+    room's response is longer than the loop (it would fold more than once)."""
+    key = (n, int(rate), round(float(ambience), 9), room)
+    found = _MASTER_SPECTRA.get(key)
+    if found is not None:
+        _MASTER_SPECTRA[key] = _MASTER_SPECTRA.pop(key)  # most recently used
+        return found
+    f = np.maximum(np.fft.rfftfreq(n, 1.0 / rate), 1e-3)
+    response = ((f / 30.0) ** 4 / (1.0 + (f / 30.0) ** 4))[None, :]
+    if ambience > 0:
+        recorded = room_ir(room, rate)
+        ir, _key = recorded if recorded is not None else reverb_ir(rate, MASTER_ROOM_SIZE)
+        ir = np.asarray(ir, dtype=np.float64)
+        ir = ir[:, None] if ir.ndim == 1 else ir
+        predelay = 0 if recorded is not None else int(0.015 * rate)
+        if predelay + len(ir) > n:
+            return None
+        kernel = np.zeros((ir.shape[1], n))
+        kernel[:, predelay:predelay + len(ir)] = ir.T
+        wet = 0.35 * float(np.clip(ambience, 0.0, 1.0))
+        response = response * (1.0 + wet * np.fft.rfft(kernel, axis=-1))
+    found = np.ascontiguousarray(response)
+    found.flags.writeable = False
+    _MASTER_SPECTRA[key] = found
+    while len(_MASTER_SPECTRA) > _MASTER_SPECTRA_MAX:
+        del _MASTER_SPECTRA[next(iter(_MASTER_SPECTRA))]
+    return found
+
+
 def master_linear(buffer, rate, ambience=0.25, loop=True, room="HALL"):
     """The linear part of the master bus: the shared room and the low cut.
 
@@ -383,9 +438,18 @@ def master_linear(buffer, rate, ambience=0.25, loop=True, room="HALL"):
     n = len(out)
     if n == 0:
         return out
+    if loop and n >= 4 and _fast_fft_length(n):
+        # One loop of a fast FFT length: the room folded onto the loop and the low
+        # cut are both circular, so they are one product in the frequency domain
+        # (the same filters as below, two FFTs instead of four).
+        response = _master_spectrum(n, rate, ambience, room)
+        if response is not None:
+            spectrum = np.fft.rfft(np.ascontiguousarray(out.T), axis=-1)
+            spectrum *= response
+            return np.fft.irfft(spectrum, n=n, axis=-1).T
     if ambience > 0:
         dry = out
-        wet = reverb(out.astype(np.float32), rate, 1.0, 0.55, room=room).astype(np.float64)
+        wet = reverb(out.astype(np.float32), rate, 1.0, MASTER_ROOM_SIZE, room=room).astype(np.float64)
         wet[:n] -= dry  # reverb() returns dry + wet
         wet *= 0.35 * float(np.clip(ambience, 0.0, 1.0))
         if loop:
@@ -421,14 +485,14 @@ def master_dynamics(stems, rate, loop=True, wrap=2.0, want_stems=False):
     np.clip(mix, -ceiling, ceiling, out=mix)
     # gain = glue * (saturated / driven) * final; the ratio is exactly 1 below the knee,
     # where soft_clip is the identity, so it is computed only above it.
-    gain = np.empty_like(driven)
-    gain[:] = glue * final
-    over = np.abs(driven) >= SOFT_CLIP_KNEE
-    if over.any():
-        rows = np.nonzero(over)[0]
-        gain[over] = glue[rows, 0] * (saturated[over] / driven[over]) * final[rows, 0]
     outs = None
     if want_stems:
+        gain = glue * final  # one gain per sample, both channels...
+        over = np.abs(driven) >= SOFT_CLIP_KNEE
+        if over.any():  # ...but each channel above the knee has its own
+            gain = np.repeat(gain, 2, axis=1)
+            rows = np.nonzero(over)[0]
+            gain[over] = glue[rows, 0] * (saturated[over] / driven[over]) * final[rows, 0]
         outs = []
         for stem in stems:
             if len(stem) < n:

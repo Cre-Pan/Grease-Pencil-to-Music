@@ -2985,3 +2985,95 @@ def test_undo_brings_back_a_group(addon):
     seqsync.sync_scene(scene)
     assert comp.get(engine.GROUP_KEY) == key
     assert engine.meta_strip(scene, comp).parent_meta()[engine.GROUP_KEY] == key
+
+
+# --- 0.0.28: less lag while drawing --------------------------------------------------
+
+def _stems_of(engine, scene, comp):
+    return {name: read_wav(bpy.path.abspath(strip.sound.filepath))[1]
+            for name, strip in engine.layer_strips(scene, comp).items()}
+
+
+def test_background_render_makes_the_same_sound(comp):
+    engine = sub("engine")
+    scene = bpy.context.scene
+    add_stroke(comp, 0, line(comp, 0.5, 2.5, 60))
+    add_stroke(comp, 1, line(comp, 1.0, 3.0, 67), material_index=1)
+    engine.regenerate(comp, force=True)
+    expected = _stems_of(engine, scene, comp)
+    key = engine.state(comp)["key"]
+    add_stroke(comp, 2, line(comp, 3.0, 4.0, 64), material_index=2)  # then taken away
+    engine.regenerate(comp)
+    layer = sub("board").user_layers(comp.data)[2]
+    drawing = layer.frames[0].drawing
+    drawing.remove_strokes(indices=[len(drawing.strokes) - 1])
+    engine.regenerate_background(comp)
+    assert engine.wait_background()
+    if bpy.app.timers.is_registered(engine._apply_tick):
+        bpy.app.timers.unregister(engine._apply_tick)
+    assert engine.state(comp)["key"] == key
+    got = _stems_of(engine, scene, comp)
+    assert set(got) == set(expected)
+    for name, audio in expected.items():
+        assert np.array_equal(got[name], audio)
+
+
+def test_an_older_background_render_is_dropped(comp):
+    engine = sub("engine")
+    add_stroke(comp, 0, line(comp, 0.5, 2.5, 60))
+    engine.regenerate_background(comp)
+    old = engine._pending[-1]
+    add_stroke(comp, 0, line(comp, 3.0, 4.0, 72))
+    engine.regenerate(comp)  # a newer render (e.g. Rigenera) wins
+    key = engine.state(comp)["key"]
+    assert not old.current()
+    assert engine.wait_background()
+    if bpy.app.timers.is_registered(engine._apply_tick):
+        bpy.app.timers.unregister(engine._apply_tick)
+    assert engine.state(comp)["key"] == key
+    assert engine.state(comp)["stats"]["notes"] == 2
+
+
+def test_drawing_does_not_check_the_layers_again(comp, monkeypatch):
+    """Strokes drawn or sculpted do not run the layer settings check (only layers
+    added, renamed, moved or removed do)."""
+    handlers = sub("handlers")
+    bpy.context.view_layer.update()
+    calls = []
+    monkeypatch.setattr(handlers, "request_layer_sync", lambda data: calls.append(data.name))
+    handlers.layers_changed(comp.data)  # what was seen last
+    add_stroke(comp, 0, line(comp, 0.5, 1.5, 62))
+    bpy.context.view_layer.update()
+    assert calls == []
+    layer = sub("board").user_layers(comp.data)[1]
+    layer.name = "Rinominato"
+    comp.data.update_tag()
+    bpy.context.view_layer.update()
+    assert calls == [comp.data.name]
+    assert not handlers.brush_running()
+
+
+@pytest.mark.parametrize("setup", ["sections", "one_strip", "only_active"])
+def test_background_render_in_every_mode(comp, setup):
+    engine = sub("engine")
+    add_stroke(comp, 0, line(comp, 0.5, 2.5, 60))
+    add_stroke(comp, 1, line(comp, 1.0, 3.0, 67), material_index=1)
+    if setup == "sections":
+        add_stroke(comp, 0, line(comp, 0.5, 1.5, 72), frame=bpy.context.scene.frame_start + 48)
+        comp.gp2m.use_sections = True
+    elif setup == "one_strip":
+        comp.gp2m.layer_channels = False
+    else:
+        comp.gp2m.auto_active_layer = True
+    engine.regenerate(comp, force=True)
+    add_stroke(comp, 0, line(comp, 3.0, 3.5, 64))
+    engine.regenerate_background(comp, only_active=setup == "only_active")
+    assert engine.wait_background()
+    if bpy.app.timers.is_registered(engine._apply_tick):
+        bpy.app.timers.unregister(engine._apply_tick)
+    st = engine.state(comp)
+    assert st["error"] is None
+    key = st["key"]
+    assert st["stats"]["only_active"] == (setup == "only_active")
+    engine.regenerate(comp)  # the same strokes, computed here: the same sound
+    assert engine.state(comp)["key"] == key

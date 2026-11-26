@@ -42,7 +42,9 @@ def finish_stems(stems, sample_rate, settings, loop, want_stems=False, keys=None
 
     The master bus (or the peak guard) is computed on their sum and the same
     processing reaches every stem, so the processed stems add up to the mix.
-    ``keys`` (one per stem, or None) cache the linear part of each stem."""
+    ``keys`` (one per stem, or None) cache the linear part of each stem: a key, or
+    ``(key, scale)`` when the stem is a sound that only its volume ``scale`` tells
+    apart (the linear part of the same sound at another volume is reused, scaled)."""
     length = max((len(stem) for stem in stems), default=0)
     stems = [_pad(stem, length) for stem in stems]
     if settings is not None and settings.enabled:
@@ -53,14 +55,24 @@ def finish_stems(stems, sample_rate, settings, loop, want_stems=False, keys=None
             return effects.master_dynamics([linear], sample_rate, loop)[0], None
         linears = []
         for index, stem in enumerate(stems):
-            key = None if keys is None or keys[index] is None else (
-                keys[index], length, settings.ambience, settings.room, loop, sample_rate)
-            linear = _linear_cache.get(key) if key is not None else None
+            entry = None if keys is None else keys[index]
+            base, scale = entry if isinstance(entry, tuple) else (entry, None)
+            key = None if base is None else (
+                base, length, settings.ambience, settings.room, loop, sample_rate)
+            cached = _linear_cache.get(key) if key is not None else None
+            linear = None
+            if cached is not None:
+                linear, cached_scale = cached
+                if scale is not None and scale != cached_scale:
+                    # Linear: the same sound louder or softer has its room louder
+                    # or softer (volume, opacity, master volume: no room again).
+                    linear = (linear * (scale / cached_scale) if cached_scale
+                              else None)
             if linear is None:
                 linear = effects.master_linear(stem, sample_rate, settings.ambience, loop,
                                                settings.room)
-                if key is not None:
-                    _linear_cache.put(key, linear)
+                if key is not None and (cached is None or scale):
+                    _linear_cache.put(key, (linear, scale))
             linears.append(linear)
         return effects.master_dynamics(linears, sample_rate, loop, want_stems=True)
     total = _total(stems, length)
@@ -146,6 +158,8 @@ class LayerSound:
     curves: list = field(default_factory=list)
     voices: int = 0
     errors: int = 0
+    base_key: str = ""  # like key, without the volume: the same sound at any volume
+    scale: float = 1.0  # the volume of this sound (layer and master volume)
 
 
 def _nbytes(value):
@@ -295,14 +309,56 @@ def _interpret_stroke(stroke, spec, mapping, mode, fill_mode, radius_ref, contex
     return key, interp
 
 
+AMP_CEILING = 3.0  # interpret clips the amplitude of a voice here
+
+
+def _unit_gain(stroke, args):
+    """The instrument volume (``stroke.gain``) only scales the amplitude of the voices,
+    and the voices are linear in it, unless the amplitude reaches the ceiling where
+    interpret clips it. ``(key, interpretation)`` of the stroke at volume 1 when its
+    sound times the volume is the stroke's own sound, else None.
+
+    ``args``: the arguments of :func:`_interpret_stroke` after the stroke."""
+    gain = float(stroke.gain)
+    if gain == 1.0 or not gain > 0.0:
+        return None
+    key, interp = _interpret_stroke(replace(stroke, gain=1.0), *args)
+    peak = max((float(np.max(voice.amp)) for voice in interp.voices if len(voice.amp)),
+               default=0.0)
+    if peak * max(gain, 1.0) >= AMP_CEILING:
+        return None
+    return key, interp
+
+
+def _scaled(rendered, gain):
+    gain = np.float32(gain)
+    return [(offset, buffer * gain) for offset, buffer in rendered]
+
+
 def _render_stroke(stroke, spec, mapping, mode, fill_mode, radius_ref, sample_rate,
                    context_key, glide=0.12, transpose=0, errors=None, harmony="OFF"):
     errors = errors or _Errors()
-    key, interp = _interpret_stroke(stroke, spec, mapping, mode, fill_mode, radius_ref,
-                                    context_key, glide, transpose, errors, harmony)
+    args = (spec, mapping, mode, fill_mode, radius_ref, context_key, glide, transpose,
+            errors, harmony)
+    key, interp = _interpret_stroke(stroke, *args)
     cached = _stroke_cache.get(key)
     if cached is not None:
         return key, cached
+    unit = _unit_gain(stroke, args)
+    if unit is not None:
+        # Another instrument volume: the voices at volume 1, scaled (no synthesis
+        # again while the volume slider moves). The notes keep their velocity.
+        unit_key, unit_interp = unit
+        rendered = _stroke_cache.get(unit_key)
+        if rendered is None:
+            before = errors.count
+            voices = _render_voices(unit_interp.voices, sample_rate, mapping.vibrato_rate,
+                                    errors)
+            rendered = (voices, unit_interp.notes, _curves_of(unit_interp.voices))
+            if errors.count == before:
+                _stroke_cache.put(unit_key, rendered)
+        return key, (_scaled(rendered[0], stroke.gain), interp.notes,
+                     _curves_of(interp.voices))
     before = errors.count
     rendered = _render_voices(interp.voices, sample_rate, mapping.vibrato_rate, errors)
     value = (rendered, interp.notes, _curves_of(interp.voices))
@@ -323,16 +379,28 @@ def _render_legato(layer, spec, mapping, radius_ref, sample_rate, context_key, t
     Returns ``(stroke keys, [(fx, rendered voices)], notes, curves, voice count)``."""
     gap = layer.legato_gap * 60.0 / max(spec.bpm, 1e-6)
     keys, notes, by_fx, filled = [], [], {}, set()
+    args = (spec, mapping, layer.mode, layer.fill_mode, radius_ref, context_key, layer.glide,
+            transpose, errors)
+    # The instrument volume of a chain of effects: when every stroke of it has the same
+    # one and the voices are linear in it (see _unit_gain), the voices are joined and
+    # rendered at volume 1, then scaled.
+    gains = {}
+    for stroke in layer.strokes:
+        gains.setdefault(stroke.fx, set()).add(float(stroke.gain))
+    unit_fx = {fx for fx, values in gains.items()
+               if len(values) == 1 and next(iter(values)) != 1.0
+               and all(_unit_gain(stroke, args) is not None
+                       for stroke in layer.strokes if stroke.fx == fx)}
     for stroke in layer.strokes:
         # Harmony is added after the join: the added voices must not be joined
         # with the melody they accompany.
-        key, interp = _interpret_stroke(stroke, spec, mapping, layer.mode, layer.fill_mode,
-                                        radius_ref, context_key, layer.glide, transpose,
-                                        errors)
+        key, interp = _interpret_stroke(stroke, *args)
         keys.append(key)
         harmony = "OFF" if stroke.filled else layer.harmony
         notes.extend(harmonize(interpret.Interpretation([], interp.notes), harmony,
                                spec).notes)
+        if stroke.fx in unit_fx:
+            key, interp = _unit_gain(stroke, args)
         tags, voices = by_fx.setdefault(stroke.fx, ([], []))
         for index, voice in enumerate(interp.voices):
             tags.append((key, index))
@@ -341,6 +409,7 @@ def _render_legato(layer, spec, mapping, radius_ref, sample_rate, context_key, t
             filled.add(key)
     parts, curves, count = [], [], 0
     for fx, (tags, voices) in by_fx.items():
+        scale = next(iter(gains[fx])) if fx in unit_fx else None
         rendered = []
         for members, voice in interpret.legato_join(voices, gap, _joinable):
             vkey = hashlib.blake2b(repr(([tags[i] for i in members], round(gap, 6),
@@ -355,7 +424,7 @@ def _render_legato(layer, spec, mapping, radius_ref, sample_rate, context_key, t
                 value = _render_voices(with_harmony, sample_rate, mapping.vibrato_rate, errors)
                 if errors.count == before:
                     _stroke_cache.put(vkey, value)
-            rendered.extend(value)
+            rendered.extend(value if scale is None else _scaled(value, scale))
             curves.extend(_curves_of([voice]))
             count += len(value)
         parts.append((fx, rendered))
@@ -470,7 +539,8 @@ def render_layers(layers, spec, mapping, sample_rate=44100, loop=True, master_vo
             if errors.count == errors_before:  # incomplete layers are rendered again
                 _layer_cache.put(layer_key, buffer)
 
-        scaled = buffer * np.float32(layer.gain * master_volume)
+        scale = np.float32(layer.gain * master_volume)
+        scaled = buffer * scale
         if loop:
             # Fold echo/reverb/release tails back onto the start of the loop.
             audio = np.zeros((loop_n, 2), dtype=np.float32)
@@ -482,8 +552,10 @@ def render_layers(layers, spec, mapping, sample_rate=44100, loop=True, master_vo
         sound_key = hashlib.blake2b(
             repr((layer_key, round(layer.gain, 4), round(master_volume, 4), loop,
                   layer.name)).encode(), digest_size=16).hexdigest()
+        base_key = hashlib.blake2b(repr((layer_key, loop, layer.name)).encode(),
+                                   digest_size=16).hexdigest()
         sounds.append(LayerSound(layer.name, audio, sound_key, notes, curves, voice_count,
-                                 errors.count - errors_before))
+                                 errors.count - errors_before, base_key, float(scale)))
     return sounds
 
 
@@ -504,7 +576,8 @@ def mix_layers(sounds, spec, mapping, sample_rate=44100, loop=True, master_fx=No
     else:
         buffers = [sound.audio for sound in sounds] or [np.zeros((loop_n, 2), np.float32)]
         buffers = [_pad(buffer, loop_n) for buffer in buffers]
-        keys = [sound.key for sound in sounds] if sounds else None
+        keys = ([(sound.base_key or sound.key, sound.scale if sound.base_key else None)
+                 for sound in sounds] if sounds else None)
         mix, outs = finish_stems(buffers, sample_rate, master_fx, loop, stems, keys)
         mix = mix.astype(np.float32, copy=False)
         if not any(sound.errors for sound in sounds):  # incomplete mixes are rendered again
@@ -522,12 +595,14 @@ def mix_layers(sounds, spec, mapping, sample_rate=44100, loop=True, master_fx=No
 
 
 def render(layers, spec, mapping, sample_rate=44100, loop=True, master_volume=0.8,
-           master_fx=None, stems=False):
+           master_fx=None, stems=False, room=None):
     """Render a list of :class:`LayerInput` into a :class:`RenderResult`.
 
     ``master_fx``: :class:`MasterFx` of the finished mix, or None (peak guard only).
-    ``stems``: also return each layer after the master bus (``result.stems``)."""
-    room = master_fx.room if master_fx is not None else "HALL"
+    ``stems``: also return each layer after the master bus (``result.stems``).
+    ``room``: the room of the layer reverbs (default: the master bus's, or the hall)."""
+    if room is None:
+        room = master_fx.room if master_fx is not None else "HALL"
     sounds = render_layers(layers, spec, mapping, sample_rate, loop, master_volume, room)
     return mix_layers(sounds, spec, mapping, sample_rate, loop, master_fx, stems)
 

@@ -131,6 +131,11 @@ class GP2M_Preferences(bpy.types.AddonPreferences):
     debounce: FloatProperty(name="Ritardo aggiornamento", default=0.35, min=0.05, max=3.0,
                             description="Secondi di pausa dopo una modifica prima di "
                             "rigenerare il suono")
+    background_render: BoolProperty(
+        name="Calcola il suono in sottofondo", default=True,
+        description="L'aggiornamento automatico calcola il suono fuori dal thread di "
+        "Blender: disegno, Edit e Sculpt non si fermano mentre il mix viene calcolato "
+        "(il suono è lo stesso)")
     mp3_bitrate: IntProperty(name="Bitrate MP3 (kbps)", default=192, min=64, max=320)
 
     # Defaults for new compositions (each composition keeps its own copy).
@@ -208,6 +213,7 @@ class GP2M_Preferences(bpy.types.AddonPreferences):
         box.label(text="Avanzate", icon="PREFERENCES")
         col = box.column(align=True)
         col.prop(self, "debounce")
+        col.prop(self, "background_render")
         col.prop(self, "mp3_bitrate")
         col.prop(self, "record_thickness")
         box = layout.box()
@@ -236,6 +242,7 @@ class _Defaults:
     vibrato_depth = 0.6
     vibrato_rate = 5.5
     debounce = 0.35
+    background_render = True
     mp3_bitrate = 192
     new_bpm = 120.0
     new_length = 8.0

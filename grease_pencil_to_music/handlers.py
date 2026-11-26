@@ -54,6 +54,7 @@ def mark_dirty(obj, strokes_only=False):
     if not strokes_only:
         _full.add(obj.name)
     _dirty.add(obj.name)
+    engine.invalidate(obj.name)  # a render still running is for strokes now old
     _last_change[0] = time.monotonic()
     _ensure_timer()
 
@@ -80,8 +81,11 @@ def mark_all_dirty():
         mark_dirty(obj)
 
 
-def flush():
-    """Regenerate every pending composition now."""
+def flush(background=False):
+    """Regenerate every pending composition now. ``background``: compute the sound in
+    the worker thread (automatic updates with Blender's interface)."""
+    background = (background and not bpy.app.background
+                  and getattr(prefs.get_prefs(), "background_render", True))
     names = list(_dirty)
     full = set(_full)
     _dirty.clear()
@@ -97,8 +101,11 @@ def flush():
             feedback.sync(obj)  # also keeps every modifier off the board
         except Exception as error:
             print(f"[Doodle Music] board update failed: {error!r}")
-        engine.regenerate_safe(obj, only_active=(
-            name not in full and obj.gp2m.auto_active_layer))
+        only_active = name not in full and obj.gp2m.auto_active_layer
+        if background:
+            engine.regenerate_background(obj, only_active=only_active)
+        else:
+            engine.regenerate_safe(obj, only_active=only_active)
 
 
 def _signature():
@@ -106,16 +113,33 @@ def _signature():
     return hash(tuple(sorted(bpy.data.objects.keys())))
 
 
-def transform_running():
-    """True while an interactive transform (G, R, S) is in progress."""
+def _modal_running(test):
     wm = getattr(bpy.context, "window_manager", None)
     if wm is None:
         return False
     for window in wm.windows:
         for operator in getattr(window, "modal_operators", ()):
-            if operator.bl_idname.startswith("TRANSFORM_OT"):
+            if test(operator.bl_idname):
                 return True
     return False
+
+
+def transform_running():
+    """True while an interactive transform (G, R, S) is in progress."""
+    return _modal_running(lambda name: name.startswith("TRANSFORM_OT"))
+
+
+BRUSH_OPERATORS = frozenset((
+    "GREASE_PENCIL_OT_brush_stroke",  # Draw and Erase
+    "GREASE_PENCIL_OT_sculpt_paint",
+    "GREASE_PENCIL_OT_vertex_brush_stroke",
+    "GREASE_PENCIL_OT_weight_brush_stroke",
+))
+
+
+def brush_running():
+    """True while the pen is down in Draw or Sculpt Mode (a brush stroke is going on)."""
+    return _modal_running(lambda name: name in BRUSH_OPERATORS)
 
 
 _scale_base = {}  # composition -> (length, octaves) when its scale left 1
@@ -187,6 +211,10 @@ def _tick():
         # (board, layers, modifiers, strips) under it crashes Blender.
         # The edits stay pending and run as soon as the transform ends.
         return TRANSFORM_POLL
+    if brush_running():
+        # The pen is still down (it may just be resting): rendering now would stall
+        # the stroke. The sound follows when it is lifted.
+        return TRANSFORM_POLL
     if _scaled:
         wait = _scale_pending()
         if wait is not None:
@@ -207,12 +235,31 @@ def _tick():
         for scene in bpy.data.scenes:
             engine.resolve_channels(scene)
             engine.arrange_safe(scene)
-    flush()
+    flush(background=True)
     _show_popups()
     return None
 
 
 _layer_syncs = set()  # Grease Pencil data whose layer settings must be checked
+_layer_names = {}  # Grease Pencil data name -> names of its layers and groups last seen
+
+
+def _layer_tree(gp_data):
+    def parent(node):
+        group = getattr(node, "parent_group", None)
+        return group.name if group is not None else ""
+    return (tuple((layer.name, parent(layer)) for layer in gp_data.layers),
+            tuple((group.name, parent(group)) for group in gp_data.layer_groups))
+
+
+def layers_changed(gp_data):
+    """True when layers or groups were added, removed, renamed or reordered since the
+    last call (cheap: strokes drawn or sculpted change nothing here)."""
+    tree = _layer_tree(gp_data)
+    if _layer_names.get(gp_data.name) == tree:
+        return False
+    _layer_names[gp_data.name] = tree
+    return True
 
 
 def request_layer_sync(gp_data):
@@ -288,7 +335,8 @@ def on_depsgraph_update(_scene, depsgraph):
             for obj in comps:
                 if obj.data == original:
                     mark_dirty(obj, strokes_only=True)
-                    request_layer_sync(original)
+                    if layers_changed(original):
+                        request_layer_sync(original)
         elif isinstance(original, bpy.types.Object):
             if original.type == "GREASEPENCIL" and original.gp2m.is_composition:
                 _check_stack(original)
@@ -396,11 +444,13 @@ def on_load_post(*_args):
     _scaled.clear()
     _scale_base.clear()
     _scale_seen.clear()
+    engine.new_file()  # renders still running belong to the previous file
     engine._state.clear()  # runtime state of the previous file (keyed by object name)
     _scene_timing.clear()
     _scene_preview.clear()
     engine._linked_range.clear()
     _layer_syncs.clear()  # names of the previous file
+    _layer_names.clear()
     _shade_scenes.clear()
     board._pending.clear()
     for scene in bpy.data.scenes:
@@ -536,6 +586,7 @@ def unregister():
                   board._rebuild_pending):
         if bpy.app.timers.is_registered(timer):
             bpy.app.timers.unregister(timer)
+    engine.stop_background()
     _layer_syncs.clear()
     _shade_scenes.clear()
     board._pending.clear()
