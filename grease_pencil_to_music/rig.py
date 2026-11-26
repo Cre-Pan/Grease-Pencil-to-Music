@@ -10,11 +10,12 @@ Frame by Plane rigs.
   - on top of the playhead, a box in the theme's playhead color: moves the scene's
     current frame, like the playhead of the Timeline;
   - above and below the keyboard: show or hide keys on top / at the bottom, one key
-    at a time (Ctrl: whole octaves; the drawing never moves, see :func:`board.shift_keys`).
+    at a time (Ctrl: whole octaves; the drawing never moves, see :func:`board.shift_keys`);
+    the rows come or go at that edge while dragging, the other edge stays still.
   They show only in Object Mode (and with the viewport's Gizmos overlay on).
 * Gizmos are clicked before objects, so dragging a handle never selects the board;
-  it runs ``gp2m.rig_drag``, a modal operator: while dragging only the handle moves
-  (cheap), the board and the sound change once, on release (one Undo step).
+  it runs ``gp2m.rig_drag``, a modal operator: the board follows while dragging, the
+  sound once the handle is let go (one Undo step; Esc or right click put it back).
 
 Version 0.0.22 drew the handles as a third Grease Pencil object, "<composition> ·
 Rig": it is removed when found (:func:`remove_legacy`, :func:`remove_orphans`).
@@ -210,14 +211,15 @@ _drag = {}  # (composition name, handle) -> preview offset (dx, dz) in board uni
 
 # --- Dragging --------------------------------------------------------------------------
 
-def board_point(context, comp, mouse):
-    """Board coordinates (x, z) under the mouse, on the plane of the composition."""
+def board_point(context, comp, mouse, world=None):
+    """Board coordinates (x, z) under the mouse, on the plane of the composition
+    (measured with ``world``, its matrix when the drag started, if given)."""
     region, rv3d = context.region, context.region_data
     if region is None or rv3d is None:
         return None
     origin = view3d_utils.region_2d_to_origin_3d(region, rv3d, mouse)
     direction = view3d_utils.region_2d_to_vector_3d(region, rv3d, mouse)
-    world = comp.matrix_world
+    world = comp.matrix_world if world is None else world
     normal = (world.to_3x3() @ Vector((0.0, 1.0, 0.0))).normalized()
     hit = intersect_line_plane(origin, origin + direction, world.translation, normal)
     if hit is None:
@@ -297,10 +299,14 @@ class _HandleMove:
         if comp is None or context.area is None or context.area.type != "VIEW_3D":
             return {"CANCELLED"}
         mouse = (event.mouse_region_x, event.mouse_region_y)
-        point = board_point(context, comp, mouse)
+        # The keys below move the board origin while dragging: measure on the board
+        # as it was when the drag started.
+        self.world = comp.matrix_world.copy()
+        point = board_point(context, comp, mouse, self.world)
         if point is None:
             return {"CANCELLED"}
         self.start = point
+        self.applied = 0  # keys already shown (+) or hidden (-) while dragging
         self.mouse = mouse
         self.moved = False
         self.frame = context.scene.frame_current
@@ -320,7 +326,7 @@ class _HandleMove:
             if abs(mouse[0] - self.mouse[0]) + abs(mouse[1] - self.mouse[1]) < 4:
                 return  # a click selects the handle, it does not move it
             self.moved = True
-        point = board_point(context, comp, mouse) if comp is not None else None
+        point = board_point(context, comp, mouse, self.world) if comp is not None else None
         if point is None:
             return
         s = comp.gp2m
@@ -348,14 +354,19 @@ class _HandleMove:
             _drag[key] = (0.0, 0.0, f"{seconds:.2f} s".replace(".", ","))
         else:
             # One key at a time; Ctrl: whole octaves.
+            # The board follows while dragging (rows added or taken away at that
+            # edge, the drawing and the other edge stay where they are).
             raw = dz / max(s.row_height, 1e-9)
-            steps = 12 * round(raw / 12.0) if event.ctrl else round(raw)
+            wanted = 12 * round(raw / 12.0) if event.ctrl else round(raw)
             if self.handle == OCT_BOTTOM:
-                steps = -steps  # dragging down shows more keys below
+                wanted = -wanted  # dragging down shows more keys below
             edge = "TOP" if self.handle == OCT_TOP else "BOTTOM"
-            steps = board.key_steps(s, edge, steps)
-            if event.ctrl:
-                steps = int(steps / 12) * 12
+            delta = board.key_steps(s, edge, wanted - self.applied)
+            if event.ctrl:  # whole octaves from where the drag started
+                delta = int((self.applied + delta) / 12) * 12 - self.applied
+            if delta:
+                self.applied += board.shift_keys(comp, edge, delta)
+            steps = self.applied
             self.value = steps
             sign = "+" if steps > 0 else ""
             if not steps:
@@ -364,7 +375,7 @@ class _HandleMove:
                 label = f"{sign}{steps // 12} ott."
             else:
                 label = f"{sign}{steps} tast{'o' if abs(steps) == 1 else 'i'}"
-            _drag[key] = (0.0, steps * s.row_height * (1.0 if edge == "TOP" else -1.0), label)
+            _drag[key] = (0.0, 0.0, label)  # the handle sits on the real edge
         context.area.tag_redraw()
 
     def _reset_preview(self):
@@ -377,6 +388,10 @@ class _HandleMove:
         comp = self._comp()
         if comp is not None and self.handle == LENGTH and comp.gp2m.length != self.length:
             comp.gp2m.length = self.length
+        if comp is not None and self.handle in (OCT_TOP, OCT_BOTTOM) and self.applied:
+            edge = "TOP" if self.handle == OCT_TOP else "BOTTOM"
+            board.shift_keys(comp, edge, -self.applied)  # back as it was
+            self.applied = 0
         return {"CANCELLED"}
 
     def modal(self, context, event):
@@ -408,6 +423,8 @@ class _HandleMove:
             engine.arrange_safe(context.scene)  # the meta-clip fits its sound again
             return {"FINISHED"} if abs(comp.gp2m.length - self.length) > 1e-6 \
                 else {"CANCELLED"}
+        if self.handle in (OCT_TOP, OCT_BOTTOM):  # already applied while dragging
+            return {"FINISHED"} if self.applied else {"CANCELLED"}
         return {"FINISHED"} if apply(comp, self.handle, self.value) else {"CANCELLED"}
 
 

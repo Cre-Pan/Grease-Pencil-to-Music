@@ -358,7 +358,8 @@
 ## 0.0.32
 
 Ogni composizione si porta dietro il suo cursore, anche la copia appena fatta con Shift+D; i
-numeri del cursore stanno piatti sulla tavola.
+numeri del cursore stanno piatti sulla tavola; la tavola segue il mouse mentre ne trascini
+altezza e larghezza, anche dalla fine della clip nel Sequencer.
 
 - **Shift+D:** la copia ha subito la sua tavola, il suo cursore e le sue maniglie e li porta con
   sé mentre la sposti; resta dove la lasci. Prima, durante lo spostamento dopo Shift+D, il
@@ -369,6 +370,16 @@ numeri del cursore stanno piatti sulla tavola.
   che compare trascinando le maniglie (durata, tasti), sono disegnati sul piano della
   composizione come il cursore: guardando di lato si inclinano con il riquadro invece di girarsi
   verso la vista.
+- **Tasti in basso:** trascinando la maniglia sotto la tastiera le righe compaiono (o spariscono)
+  sotto mentre trascini; la cima della tavola e il disegno restano fermi. Prima la tavola si
+  aggiornava solo al rilascio e per un attimo veniva disegnata con le righe vecchie sulla nuova
+  origine, così saltava su o giù. Esc o clic destro la rimettono com'era.
+- **In tempo reale:** altezza (tasti sopra e sotto) e larghezza (durata) della tavola seguono
+  il mouse mentre trascini le maniglie; il suono si rifà al rilascio.
+- **Fine della clip nel Sequencer:** trascinando la maniglia destra della clip di una
+  composizione la tavola si allunga o si accorcia mentre trascini (prima solo al rilascio,
+  quando cambiava anche l'End della scena). Al rilascio l'End della scena segue come prima; con
+  Esc tavola e clip tornano come erano.
 
 ## 0.0.31
 

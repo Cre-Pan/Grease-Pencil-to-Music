@@ -382,7 +382,7 @@ def shift_keys(comp, edge, delta):
         return 0
     if edge == "TOP":
         _set_span(s, span(s) + steps)
-        return steps
+        return steps  # the top edge: the origin stays, the deferred rebuild is enough
     dz = steps * s.row_height  # local z the strokes move up (down if negative)
     for layer in user_layers(comp.data):
         for frame in layer.frames:
@@ -398,8 +398,13 @@ def shift_keys(comp, edge, delta):
     world = comp.matrix_world.copy()
     world.translation = world @ Vector((0.0, 0.0, -dz))
     comp.matrix_world = world
-    _set_span(s, span(s) + steps)  # rebuild and sound are deferred: one for both changes
+    _set_span(s, span(s) + steps)
     s.low_note -= steps
+    # The board at once, with the object that just moved: a board drawn for a moment
+    # with the old rows on the new origin jumped up or down. The sound is deferred.
+    scene = bpy.context.scene
+    build_grid(comp, scene)
+    _build_playhead(comp, scene)
     return steps
 
 
@@ -1002,9 +1007,11 @@ _pending = set()
 
 
 def _rebuild_pending():
-    from .handlers import TRANSFORM_POLL, transform_running
-    if transform_running():
-        return TRANSFORM_POLL  # never rebuild under a running G/R/S (it crashes Blender)
+    from .handlers import TRANSFORM_POLL, board_transform_running
+    if board_transform_running():
+        # Never rebuild under a running G/R/S (it crashes Blender); a clip dragged in
+        # the Sequencer is fine: the board follows its end while dragging.
+        return TRANSFORM_POLL
     names = list(_pending)
     _pending.clear()
     for name in names:

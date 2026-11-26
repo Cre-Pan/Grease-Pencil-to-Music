@@ -2642,6 +2642,38 @@ def test_meta_clip_end_changes_the_length(comp):
     assert abs(comp.gp2m.length - (before + 2.0)) < 1e-3
 
 
+def test_board_follows_the_clip_end_while_it_is_dragged(comp):
+    """Dragging the end of the clip in the Sequencer: the board follows at once; let
+    go the length is counted once; Esc puts it back."""
+    engine, seqsync = sub("engine"), sub("seqsync")
+    scene = bpy.context.scene
+    comp.gp2m.follow_scene = False
+    add_stroke(comp, 0, line(comp, 1.0, 2.0, 60))
+    engine.regenerate(comp)
+    meta = engine.meta_strip(scene, comp)
+    fps = scene.render.fps / scene.render.fps_base
+    before = comp.gp2m.length
+    meta.right_handle = meta.right_handle + int(fps)
+    seqsync._preview_lengths()  # while dragging
+    assert abs(comp.gp2m.length - (before + 1.0)) < 1e-3
+    meta.right_handle = meta.right_handle + int(fps)
+    seqsync._preview_lengths()
+    assert abs(comp.gp2m.length - (before + 2.0)) < 1e-3
+    assert seqsync.sync_scene(scene)  # let go
+    assert abs(comp.gp2m.length - (before + 2.0)) < 1e-3
+    # Esc: the clip is back where it was, so is the board.
+    engine.arrange(scene)
+    meta = engine.meta_strip(scene, comp)
+    longer = comp.gp2m.length
+    span = tuple(engine.state(comp)["meta_span"])
+    meta.right_handle = meta.right_handle - int(fps)
+    seqsync._preview_lengths()
+    assert abs(comp.gp2m.length - (longer - 1.0)) < 1e-3
+    meta.right_handle = span[1]
+    seqsync.sync_scene(scene)
+    assert abs(comp.gp2m.length - longer) < 1e-3
+
+
 # --- Cases in the Sequencer (cut, duplicate, rename, delete, trim, move) -------------------
 
 def _meta_ready(comp):

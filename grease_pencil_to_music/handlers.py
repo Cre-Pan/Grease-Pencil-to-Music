@@ -145,6 +145,23 @@ BRUSH_OPERATORS = frozenset((
 ))
 
 
+SEQUENCER_TRANSFORMS = frozenset(("TRANSFORM_OT_seq_slide",))
+
+
+def sequencer_transform_running():
+    """True while clips are dragged in the Sequencer (G, or a clip's handle): nothing
+    of the 3D drawings is held, the board may be rebuilt meanwhile."""
+    return _modal_running(lambda name: name in SEQUENCER_TRANSFORMS)
+
+
+def board_transform_running():
+    """A transform that the board must not be rebuilt under (any but the Sequencer's)."""
+    return _modal_running(lambda name: (name.startswith("TRANSFORM_OT")
+                                        and name not in SEQUENCER_TRANSFORMS)
+                          or name.endswith(("_OT_duplicate_move",
+                                            "_OT_duplicate_move_linked")))
+
+
 def brush_running():
     """True while the pen is down in Draw or Sculpt Mode (a brush stroke is going on)."""
     return _modal_running(lambda name: name in BRUSH_OPERATORS)
