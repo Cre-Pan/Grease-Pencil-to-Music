@@ -1448,3 +1448,23 @@ def test_stroke_mods_inputs_of_a_stack():
     assert values["Fade"] and values["Fade Out"] and not values["Fade In"]
     names = {name for name, _kind in stroke_mods.INPUTS}
     assert set(values) == names
+
+
+def test_array_and_transpose_keep_the_shape_of_a_glide():
+    """0.0.36: in the scale a stroke moves whole (its first point by degrees, the rest
+    by as many semitones): a glide stays a glide, no zigzags."""
+    x = np.linspace(0.5, 2.0, 80)
+    z = (61.0 - MB.low_note + 0.5) * H + np.linspace(0, 7 * H, 80)  # C#4 up to G#4
+    glide = interpret.StrokeData(x=x, z=z, radius=np.full(80, 0.03), opacity=np.ones(80))
+    board = replace(MB, scale="MAJOR", root=0)
+    for stack in (layer_mods.Stack(array=layer_mods.Array(count=4, pitch=2)),
+                  layer_mods.Stack(transpose=layer_mods.Transpose(steps=3))):
+        for out in layer_mods.apply([glide], stack, board):
+            moved = out.z - glide.z
+            assert np.allclose(moved, moved[0])  # one shift for the whole stroke
+            semis = moved[0] / H
+            assert semis == pytest.approx(round(semis))
+    # The first point lands on the degree: C#4 is read as C4, two degrees up is E4.
+    copy = layer_mods.apply([glide], layer_mods.Stack(array=layer_mods.Array(count=2, pitch=2)),
+                            board)[1]
+    assert (copy.z[0] - glide.z[0]) / H == pytest.approx(3.0)  # C#4 -> E4 + its 0 cents

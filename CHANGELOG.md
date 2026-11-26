@@ -387,6 +387,13 @@ Livelli e icone
 - Nella tendina delle categorie, la categoria in uso tiene la sua icona (prima diventava una
   spunta, che sui Piatti sembrava una "v").
 
+Modificatori sul tratto
+- **Array e Trasponi non deformano più il tratto.** Spostando "di grado" (nella scala) ogni
+  punto andava sulla sua nota della scala, così una curva diventava a zigzag e a scalini, nel
+  disegno e nel suono. Ora il tratto si sposta intero: il primo punto sale (o scende) dei gradi
+  scelti e tutto il resto lo segue dello stesso numero di semitoni, quindi le copie hanno
+  esattamente la forma dell'originale.
+
 ## 0.0.35
 
 Tutto insieme: le novità di 0.0.31, 0.0.32, 0.0.33 e 0.0.34 (qui sotto) e i modificatori sul tratto.
