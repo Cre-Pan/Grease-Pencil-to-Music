@@ -357,6 +357,23 @@
 
 ## 0.0.32
 
+**Tavola nuova, dal disegno in Figma.** La tavola ora è una finestra scura (#181818, bordo #252525,
+angoli arrotondati) con dentro la tastiera e la griglia, anche loro arrotondate:
+- **Tastiera:** tasti bianchi chiari (#DBDBDB) come su un pianoforte vero (Do, Re, Mi si dividono
+  5 semitoni, Fa, Sol, La, Si 7), tasti neri scuri arrotondati verso i bianchi, allineati alle loro
+  righe; un pallino su ogni Do (con *Etichette tasti: Solo Do*; le altre scelte scrivono ancora i
+  nomi delle note).
+- **Griglia:** righe dei tasti bianchi #2D2D2D e dei neri #262626, una linea dove due bianchi si
+  toccano (Mi-Fa, Si-Do), linee dei secondi e dei battiti appena accennate. Fuori dal Preview
+  Range la griglia è scurita al 65%. Le etichette dei secondi sopra la griglia non ci sono più.
+- **Cursore blu** (#407FB7) con il numero del fotogramma nel riquadro sopra la finestra.
+- **Maniglie a linguetta:** sopra e sotto la tastiera (tasti) e a destra (durata), linguette scure
+  con otto puntini che escono dalla finestra; sotto il mouse i puntini si accendono, trascinandole
+  diventano blu. Sono grandi quanto la tavola, ma da lontano non diventano più piccole di così.
+- **Nome:** sotto la finestra una linguetta con il nome della composizione (si allarga per i nomi
+  lunghi).
+- I colori sono quelli del disegno, qualunque sia il tema di Blender.
+
 Ogni composizione si porta dietro il suo cursore, anche la copia appena fatta con Shift+D; i
 numeri del cursore stanno piatti sulla tavola; la tavola segue il mouse mentre ne trascini
 altezza e larghezza, anche dalla fine della clip nel Sequencer.

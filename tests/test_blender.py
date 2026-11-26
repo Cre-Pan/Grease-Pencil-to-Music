@@ -129,7 +129,7 @@ def test_add_composition_has_its_grid_apart(comp):
                    if not board.is_board_material(slot.material)]
     assert len(instruments) == 25 and {"PLUCK", "KICK", "SNARE", "HIHAT"} <= set(instruments)
     labels = board.grid_object(comp).data.layers.get("GP2M Etichette").frames[0].drawing
-    assert len(labels.strokes) > 10
+    assert len(labels.strokes) == 3  # a dot on every whole C (3 octaves)
     # Empty composition: a silent strip already exists and the scene loops 8 s.
     scene = bpy.context.scene
     strip = sub("engine").find_strip(scene, comp)
@@ -2355,28 +2355,30 @@ def test_octaves_below_and_above_keep_the_drawing(comp):
 
 # --- Rig (Object Mode handles, gizmos) -------------------------------------------------
 
-def test_rig_handles_are_gizmos_with_theme_colors(comp):
+def test_rig_handles_are_gizmos_with_the_design_colors(comp):
     rig = sub("rig")
     assert rig.rig_object(comp) is None  # no object: the handles are gizmos
     assert "bl_rna" in rig.GP2M_GGT_rig.__dict__
     assert "bl_rna" in rig.GP2M_GT_handle.__dict__
+    assert "bl_rna" in rig.GP2M_GT_name.__dict__
     for handle in rig.HANDLE_NAMES:
         body, rim, glyphs = rig.handle_geometry(handle)
         assert len(body) % 3 == 0 and len(rim) % 3 == 0 and len(glyphs) % 3 == 0
-        # Drawn outside the board, beside the anchor (pixels).
+        # Grips stick out of the window edge (a hair under it), the box sits above.
         xs = [p[0] for p in rim]
         zs = [p[2] for p in rim]
         if handle == rig.LENGTH:
-            assert min(xs) > 0
+            assert min(xs) >= -3.0 and max(xs) > 30
         elif handle in (rig.OCT_TOP, rig.HEAD):
             assert min(zs) >= -3.0
         else:
-            assert max(zs) < 0
+            assert max(zs) <= 3.0
+        if handle != rig.HEAD:
+            assert len(glyphs) == 8 * 8 * 3  # eight dots
     colors = sub("theme").handle_colors(bpy.context)
     active = tuple(bpy.context.preferences.themes[0].view_3d.object_active)
     assert np.allclose(colors["active"], active)
-    playhead = tuple(bpy.context.preferences.themes[0].common.anim.playhead)[:3]
-    assert np.allclose(colors["playhead"], playhead)
+    assert np.allclose(colors["playhead"], sub("theme").hex_srgb("407FB7"))
 
 
 def test_rig_of_0_0_22_is_removed(comp):
@@ -2393,25 +2395,30 @@ def test_rig_of_0_0_22_is_removed(comp):
     assert sub("board").has_board(comp)
 
 
-def test_board_and_playhead_follow_the_theme(comp):
-    theme = sub("theme")
-    t = bpy.context.preferences.themes[0]
+def test_board_has_the_colors_of_the_design(comp):
+    theme, board = sub("theme"), sub("board")
+    def fill(name):
+        return tuple(bpy.data.materials[name].grease_pencil.fill_color)[:3]
+    for name, code in (("GP2M Finestra", "181818"), ("GP2M Riga bianca", "2D2D2D"),
+                       ("GP2M Banda tasti neri", "262626"), ("GP2M Tasto bianco", "DBDBDB"),
+                       ("GP2M Tasto nero", "1B1B1B")):
+        assert np.allclose(fill(name), theme.to_linear(theme.hex_srgb(code)), atol=1e-4)
     head = bpy.data.materials["GP2M Testina"].grease_pencil
-    assert np.allclose(tuple(head.color)[:3], theme.to_linear(t.common.anim.playhead), atol=1e-4)
-    back = bpy.data.materials["GP2M Sfondo"].grease_pencil
-    assert np.allclose(tuple(back.fill_color)[:3],
-                       theme.to_linear(t.dopesheet_editor.space.back), atol=1e-4)
-    old = tuple(t.common.anim.playhead)
-    try:
-        t.common.anim.playhead = (0.9, 0.1, 0.5, 1.0)
-        assert theme.apply_to_materials()
-        assert np.allclose(tuple(head.color)[:3], theme.to_linear(t.common.anim.playhead),
-                           atol=1e-4)
-        assert head.color[0] > 0.6 > head.color[1]
-        assert not theme.apply_to_materials()  # nothing changed since
-    finally:
-        t.common.anim.playhead = old
-        theme.apply_to_materials()
+    assert np.allclose(tuple(head.color)[:3], theme.to_linear(theme.hex_srgb("407FB7")),
+                       atol=1e-4)
+    # The window wraps keyboard and grid with the margins of the design.
+    s = comp.gp2m
+    u = board.unit(s)
+    x0, z0, x1, z1 = board.window_box(s)
+    rows, width, top = board.dimensions(s)
+    assert abs(x1 - (width + 21 * u)) < 1e-6 and abs(z1 - (top + 20 * u)) < 1e-6
+    assert abs(board.keyboard_box(s)[2] + 16 * u) < 1e-6
+    # A colour changed by hand comes back (the theme timer keeps the design).
+    material = bpy.data.materials["GP2M Testina"].grease_pencil
+    material.color = (1.0, 0.0, 0.0, 1.0)
+    assert theme.apply_to_materials(force=True)
+    assert np.allclose(tuple(material.color)[:3], theme.to_linear(theme.hex_srgb("407FB7")),
+                       atol=1e-4)
 
 
 def test_rig_handles_change_length_playhead_and_octaves(comp):
@@ -2436,12 +2443,15 @@ def test_rig_handles_change_length_playhead_and_octaves(comp):
     assert rig.apply(comp, rig.OCT_TOP, 2) and (s.octaves, s.extra_keys) == (4, 3)
     assert sub("board").dimensions(s)[0] == 4 * 12 + 3 + 1
     assert rig.apply(comp, rig.OCT_TOP, -3) and (s.octaves, s.extra_keys) == (4, 0)
-    # The handles sit outside the board: right edge, above the keys, below the keys.
+    # The grips stick out of the window: right edge, above and below the keyboard.
     rows, width, top = sub("board").dimensions(s)
-    assert rig.handle_point(comp, rig.LENGTH)[0] == width
-    assert rig.handle_point(comp, rig.OCT_TOP)[1] == top
-    assert rig.handle_point(comp, rig.OCT_BOTTOM)[1] == 0
-    assert rig.handle_point(comp, rig.HEAD, 1.5) == (1.5, top + rig.HEAD_LIFT)
+    x0, z0, x1, z1 = sub("board").window_box(s)
+    kx0, _kz0, kx1, _kz1 = sub("board").keyboard_box(s)
+    assert rig.handle_point(comp, rig.LENGTH) == (x1, (z0 + z1) / 2.0)
+    assert rig.handle_point(comp, rig.OCT_TOP) == ((kx0 + kx1) / 2.0, z1)
+    assert rig.handle_point(comp, rig.OCT_BOTTOM) == ((kx0 + kx1) / 2.0, z0)
+    assert rig.handle_point(comp, rig.HEAD, 1.5) == (1.5, top + rig.head_lift(s))
+    assert rig.handle_point(comp, rig.NAME) == (width / 2.0, z0)
 
 
 def test_rig_gizmos_only_in_object_mode(comp):
@@ -2507,9 +2517,9 @@ def test_rig_handle_selection_and_g(comp):
     # G is bound in Object Mode (before Blender's Move), so with no handle it moves objects.
     items = [item for km, item in rig._keymaps if item.idname == "gp2m.rig_grab"]
     assert items and items[0].type == "G"
-    # Idle handles are muted, not the full white of a hovered one.
+    # Grips: dark tabs with light dots.
     colors = sub("theme").handle_colors(bpy.context)
-    assert sum(colors["idle"]) < sum(colors["hover"]) and colors["rim_idle"][3] < colors["rim"][3]
+    assert sum(colors["tab"]) < sum(colors["grip_dot"])
     rig.select(None, None)
     assert rig.selected() is None
 

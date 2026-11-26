@@ -5,8 +5,9 @@
   plus the layer group "GP2M Testina" on top (locked) with the playhead, moved by
   a driver on the layer translation;
 * its grid, "<composition> · Tavola", a child of the composition (since 0.0.21):
-  layer group "Tavola Composizione" with background, grid, note rows, piano keys,
-  labels and the dark boxes outside the scene Preview Range. Its transform is
+  layer group "Tavola Composizione" with the window, grid rows, lines, piano keys,
+  the dots on C (or note names) and the dark boxes outside the scene Preview Range,
+  drawn after the Figma design of the board (see the "window" section below). Its transform is
   locked and clicking it selects the composition, so Draw Mode always opens on the
   drawing, never on the grid. The composition is drawn in front of it.
 
@@ -330,12 +331,13 @@ def dimensions(settings):
 
 
 def vertical_extent(settings):
-    """(bottom, top) of the board in local z: labels, playhead and room for the rig
-    handles (drawn at a fixed size on screen, see rig.handle_point)."""
+    """(bottom, top) of the board in local z: the window, the tab with the name below
+    it and the playhead box above it."""
     from . import rig
-    _rows, _width, top = dimensions(settings)
-    room = rig.handle_room(settings)
-    return -0.12 - room, top + rig.HEAD_LIFT + room
+    _x0, z0, _x1, z1 = window_box(settings)
+    u = unit(settings)
+    return z0 - NAME_TAB_OUT * u - rig.handle_room(settings), \
+        z1 + HEAD_BOX_UP * u + rig.handle_room(settings)
 
 
 MIN_LOW_NOTE, MAX_LOW_NOTE, MAX_OCTAVES = 12, 96, 7
@@ -408,8 +410,50 @@ def shift_keys(comp, edge, delta):
     return steps
 
 
+# --- The window (Figma "Tavola": FINESTRA, KEYBOARD, GRIGLIA...) -------------------
+# Measures in design pixels: one octave of the keyboard is 210 px (12 rows), so one
+# design pixel is row_height / 17.5 board units.
+
+DESIGN_ROW = 17.5  # design pixels in a row (a semitone)
+KEYBOARD_W = 173.0  # keyboard width
+KEY_GAP = 16.0  # between keyboard and grid
+MARGIN_LEFT, MARGIN_RIGHT = 23.0, 21.0  # window edge to keyboard / grid
+MARGIN_TOP, MARGIN_BOTTOM = 20.0, 22.0
+WINDOW_RADIUS, KEYBOARD_RADIUS, GRID_RADIUS = 47.0, 25.0, 25.0
+BLACK_KEY_W = 85.0  # from the grid side
+BLACK_KEY_RADIUS = 4.0
+DOT_X, DOT_R = 14.0, 7.0  # the dot on C, from the keyboard's left edge
+TAB_OUT = 40.0  # how far the grips stick out of the window
+NAME_TAB_OUT = 50.0  # the tab with the composition's name, at the bottom
+HEAD_BOX_UP = 52.0  # the top of the playhead box above the window (it is 32 tall)
+# White keys of a realistic piano over the semitones of an octave (from C):
+# C D E share 5 semitones, F G A B share 7.
+WHITE_KEYS = ((0.0, 5 / 3), (5 / 3, 10 / 3), (10 / 3, 5.0), (5.0, 6.75), (6.75, 8.5),
+              (8.5, 10.25), (10.25, 12.0))
+
+
+def unit(settings):
+    """Board units in one design pixel."""
+    return settings.row_height / DESIGN_ROW
+
+
 def key_width(settings):
-    return max(0.6, 6.0 * settings.row_height)
+    """Keyboard plus the gap before the grid: the keyboard ends at x = -KEY_GAP."""
+    return (KEYBOARD_W + KEY_GAP) * unit(settings)
+
+
+def keyboard_box(settings):
+    u = unit(settings)
+    top = dimensions(settings)[2]
+    return (-(KEYBOARD_W + KEY_GAP) * u, 0.0, -KEY_GAP * u, top)
+
+
+def window_box(settings):
+    """(x0, z0, x1, z1) of the window around keyboard and grid."""
+    u = unit(settings)
+    _rows, width, top = dimensions(settings)
+    x0 = -(KEYBOARD_W + KEY_GAP + MARGIN_LEFT) * u
+    return (x0, -MARGIN_BOTTOM * u, width + MARGIN_RIGHT * u, top + MARGIN_TOP * u)
 
 
 def _first_frame(scene):
@@ -421,19 +465,103 @@ def _note_style():
     return prefs.get_prefs().note_naming
 
 
+# --- Rounded shapes ------------------------------------------------------------------
+
+def _arc_steps(radius, u):
+    return max(3, min(10, int(radius / max(u, 1e-9) / 5.0)))
+
+
+def _rounded_rect(x0, z0, x1, z1, radius, steps=8, corners=(True, True, True, True)):
+    """Corners: bottom-left, bottom-right, top-right, top-left."""
+    radius = max(0.0, min(radius, (x1 - x0) / 2.0, (z1 - z0) / 2.0))
+    centres = ((x0 + radius, z0 + radius, math.pi), (x1 - radius, z0 + radius, 1.5 * math.pi),
+               (x1 - radius, z1 - radius, 0.0), (x0 + radius, z1 - radius, 0.5 * math.pi))
+    plain = ((x0, z0), (x1, z0), (x1, z1), (x0, z1))
+    points = []
+    for (cx, cz, a0), corner, round_it in zip(centres, plain, corners):
+        if not round_it or radius <= 0.0:
+            points.append(corner)
+            continue
+        for i in range(steps + 1):
+            a = a0 + 0.5 * math.pi * i / steps
+            points.append((cx + radius * math.cos(a), cz + radius * math.sin(a)))
+    return points
+
+
+def _inset(box, radius, z):
+    """Horizontal inset of a rounded box at height z (0 away from the corners)."""
+    _x0, z0, _x1, z1 = box
+    d = max(z0 + radius - z, z - (z1 - radius), 0.0)
+    return radius - math.sqrt(max(radius * radius - d * d, 0.0))
+
+
+def _clip_rect(rx0, rz0, rx1, rz1, box, radius, steps=6):
+    """The rectangle cut by a box with rounded corners, as a polygon (or None)."""
+    x0, z0, x1, z1 = box
+    za, zb = max(rz0, z0), min(rz1, z1)
+    if zb - za <= 1e-9 or min(rx1, x1) - max(rx0, x0) <= 1e-9:
+        return None
+    zs = {za, zb}
+    for lo, hi in ((z0, z0 + radius), (z1 - radius, z1)):
+        for i in range(steps + 1):
+            z = lo + (hi - lo) * i / steps
+            if za < z < zb:
+                zs.add(z)
+    zs = sorted(zs)
+    left, right = [], []
+    for z in zs:
+        inset = _inset(box, radius, z)
+        a, b = max(rx0, x0 + inset), min(rx1, x1 - inset)
+        if b - a <= 1e-9:
+            continue
+        left.append((a, z))
+        right.append((b, z))
+    if len(left) < 2:
+        return None
+    return left + right[::-1]
+
+
+def _vline(x, box, radius):
+    """A vertical line across a rounded box, cut at its corners."""
+    x0, z0, x1, z1 = box
+    if not x0 < x < x1:
+        return None
+    d = max(x0 + radius - x, x - (x1 - radius), 0.0)
+    inset = radius - math.sqrt(max(radius * radius - d * d, 0.0))
+    return [(x, z0 + inset), (x, z1 - inset)]
+
+
 # --- Pieces of the board -------------------------------------------------------
 
+def grid_box(settings):
+    _rows, width, top = dimensions(settings)
+    return (0.0, 0.0, width, top)
+
+
 def _background(s, index, rows, width):
+    """Window, grid area and the darker rows of the black keys (FINESTRA, GRIGLIA)."""
+    u = unit(s)
     h = s.row_height
-    specs = [(_rect(0.0, 0.0, width, rows * h), 0.01, index["GP2M Sfondo"], "fill")]
+    window = window_box(s)
+    box = grid_box(s)
+    gr = GRID_RADIUS * u
+    specs = [(_rounded_rect(*window, WINDOW_RADIUS * u, _arc_steps(WINDOW_RADIUS, 1.0)),
+              u, index["GP2M Finestra"], "both"),
+             (_rounded_rect(*box, gr, _arc_steps(GRID_RADIUS, 1.0)), 0.001,
+              index["GP2M Riga bianca"], "fill")]
     for r in range(rows):
         if music.is_black(s.low_note + r):
-            specs.append((_rect(0.0, r * h, width, (r + 1) * h), 0.001,
-                          index["GP2M Banda tasti neri"], "fill"))
+            band = _clip_rect(0.0, r * h, width, (r + 1) * h, box, gr)
+            if band:
+                specs.append((band, 0.001, index["GP2M Banda tasti neri"], "fill"))
     return specs
 
 
 def _grid(s, index, width, top):
+    """Vertical lines: beats and seconds (LINEE VERTICALI)."""
+    u = unit(s)
+    box = grid_box(s)
+    gr = GRID_RADIUS * u
     specs = []
     if s.show_beats and s.bpm > 0:
         beat = 60.0 / s.bpm
@@ -441,93 +569,117 @@ def _grid(s, index, width, top):
         while k * beat < s.length - 1e-6:
             t = k * beat
             if abs(t - round(t)) > 1e-3:
-                x = t * s.seconds_width
-                specs.append(([(x, 0.0), (x, top)], 0.0025, index["GP2M Linea battito"], "line"))
+                line = _vline(t * s.seconds_width, box, gr)
+                if line:
+                    specs.append((line, u, index["GP2M Linea battito"], "line"))
             k += 1
-    for sec in range(int(math.floor(s.length + 1e-6)) + 1):
-        x = sec * s.seconds_width
-        specs.append(([(x, 0.0), (x, top)], 0.008 if sec == 0 else 0.005,
-                      index["GP2M Linea secondo"], "line"))
-    if abs(s.length - round(s.length)) > 1e-6:
-        specs.append(([(width, 0.0), (width, top)], 0.008, index["GP2M Linea secondo"], "line"))
+    for sec in range(1, int(math.floor(s.length - 1e-6)) + 1):
+        line = _vline(sec * s.seconds_width, box, gr)
+        if line:
+            specs.append((line, u, index["GP2M Linea secondo"], "line"))
     return specs
 
 
 def _rows(s, index, rows, width):
+    """Lines between two white rows (E-F, B-C), the frames of grid and keyboard."""
+    u = unit(s)
     h = s.row_height
-    kw = key_width(s)
+    box = grid_box(s)
+    gr = GRID_RADIUS * u
     specs = []
-    for r in range(rows + 1):
-        is_c = (s.low_note + r) % 12 == 0
-        name = "GP2M Linea Do" if is_c else "GP2M Linea nota"
-        # C lines also cross the keyboard, so octaves read at a glance.
-        x0 = -kw if is_c else 0.0
-        specs.append(([(x0, r * h), (width, r * h)], 0.007 if is_c else 0.0025,
-                      index[name], "line"))
+    for r in range(1, rows):
+        if (s.low_note + r) % 12 in (0, 5):  # C or F: under it a white key too
+            inset = _inset(box, gr, r * h)
+            specs.append(([(inset, r * h), (width - inset, r * h)], u,
+                          index["GP2M Linea ottava"], "line"))
+    for frame, radius in ((box, GRID_RADIUS), (keyboard_box(s), KEYBOARD_RADIUS)):
+        outline = _rounded_rect(*frame, radius * u, _arc_steps(radius, 1.0))
+        specs.append((outline + outline[:1], u, index["GP2M Bordo"], "line"))
     return specs
 
 
-KEY_SPLIT = 0.58  # fraction of the keyboard width taken by black keys (grid side)
+def white_keys(settings):
+    """(z0, z1, midi) of the white keys drawn on the keyboard, bottom up."""
+    h = settings.row_height
+    rows = span(settings) + 1
+    top = rows * h
+    low = settings.low_note
+    keys = []
+    first_c = low - (low % 12)
+    c = first_c
+    while (c - low) * h < top:
+        base = (c - low) * h
+        for k, (a, b) in enumerate(WHITE_KEYS):
+            z0, z1 = max(base + a * h, 0.0), min(base + b * h, top)
+            if z1 - z0 > 1e-9:
+                keys.append((z0, z1, c + (0, 2, 4, 5, 7, 9, 11)[k]))
+        c += 12
+    return keys
 
 
 def _keys(s, index, rows):
-    """A vertical piano.
-
-    Grid side: one key per row, white and black, aligned with the note rows.
-    Free side: the white keys widen over half of the neighbouring black rows,
-    like on a real piano.
-    """
+    """The keyboard (KEYBOARD / OTTAVE): white keys of a real piano, black keys on
+    their rows, rounded at the free end."""
+    u = unit(s)
     h = s.row_height
-    kw = key_width(s)
-    split = -kw * KEY_SPLIT
-    top = rows * h
-    inset = 0.06 * h
-    specs = []
-
-    def black(r):
-        return 0 <= r < rows and music.is_black(s.low_note + r)
-
-    for r in range(rows):
-        if black(r):
+    kb = keyboard_box(s)
+    x0, _z0, x1, top = kb
+    kr = KEYBOARD_RADIUS * u
+    specs = [(_rounded_rect(*kb, kr, _arc_steps(KEYBOARD_RADIUS, 1.0)), 0.001,
+              index["GP2M Tasto bianco"], "fill")]
+    for z0, _z1, _midi in white_keys(s):
+        if z0 <= 1e-9:
             continue
-        z0 = r * h - (h / 2.0 if black(r - 1) else 0.0)
-        z1 = (r + 1) * h + (h / 2.0 if black(r + 1) else 0.0)
-        specs.append((_rect(-kw, max(z0, 0.0), split, min(z1, top)), 0.0015,
-                      index["GP2M Tasto bianco"], "both"))
+        inset = _inset(kb, kr, z0)
+        specs.append(([(x0 + inset, z0), (x1 - inset, z0)], u, index["GP2M Tasto bianco"],
+                      "line"))
+    bx = x1 - BLACK_KEY_W * u
     for r in range(rows):
-        if black(r):
-            specs.append((_rect(split, r * h + inset, 0.0, (r + 1) * h - inset), 0.001,
-                          index["GP2M Tasto nero"], "fill"))
-        else:
-            specs.append((_rect(split, r * h, 0.0, (r + 1) * h), 0.0015,
-                          index["GP2M Tasto bianco"], "both"))
+        if not music.is_black(s.low_note + r):
+            continue
+        z0, z1 = r * h - 0.07 * h, (r + 1) * h + 0.07 * h  # 20 px of 17.5
+        key = _clip_rect(bx, max(z0, 0.0), x1, min(z1, top), kb, kr)
+        if key is None:
+            continue
+        if z0 >= 0.0 and z1 <= top:
+            key = _rounded_rect(bx, z0, x1, z1, BLACK_KEY_RADIUS * u, 3,
+                                corners=(True, False, False, True))
+        specs.append((key, u, index["GP2M Tasto nero"], "both"))
     return specs
 
 
+def _dot(cx, cz, radius, steps=16):
+    return [(cx + radius * math.cos(2 * math.pi * i / steps),
+             cz + radius * math.sin(2 * math.pi * i / steps)) for i in range(steps)]
+
+
 def _labels(s, index, rows, top):
+    """A dot on every C ("Solo Do", DO in the design), or the note names."""
+    u = unit(s)
     h = s.row_height
     style = _note_style()
+    x0, _z0, x1, _top = keyboard_box(s)
     specs = []
     mode = s.key_labels
-    height = 0.55 * h
+    if mode == "C":
+        for z0, z1, midi in white_keys(s):
+            if midi % 12 == 0 and z1 - z0 > (5 / 3) * h - 1e-6:  # a whole key
+                points = _dot(x0 + DOT_X * u, (z0 + z1) / 2.0, DOT_R * u)
+                specs.append((points, u, index["GP2M Pallino Do"], "both"))
+        return specs
+    height = 0.5 * h
     for r in range(rows):
         midi = s.low_note + r
         black = music.is_black(midi)
-        show = (mode == "ALL" or (mode == "WHITE" and not black)
-                or (mode == "C" and midi % 12 == 0))
-        if not show:
+        if mode not in ("ALL", "WHITE") or (mode == "WHITE" and black):
             continue
         text = music.note_name(midi, style)
         baseline = r * h + (h - height) / 2.0
-        # White notes on the free side, black notes on their black key.
-        x = -key_width(s) * KEY_SPLIT + 0.02 if black else -key_width(s) + 0.03
+        # White notes at the free end, black notes on their black key.
+        x = x1 - BLACK_KEY_W * u + 6 * u if black else x0 + 8 * u
+        name = "GP2M Etichetta tasti neri" if black else "GP2M Etichetta tasti"
         for line in glyphs.text_polylines(text, x, baseline, height, "LEFT"):
-            specs.append((line, height * 0.06, index["GP2M Etichetta tasti"], "line"))
-    height = 0.12
-    for sec in range(int(math.floor(s.length + 1e-6)) + 1):
-        for line in glyphs.text_polylines(f"{sec}s", sec * s.seconds_width, top + 0.05,
-                                          height, "CENTER"):
-            specs.append((line, 0.006, index["GP2M Etichetta tempo"], "line"))
+            specs.append((line, height * 0.06, index[name], "line"))
     return specs
 
 
@@ -588,9 +740,10 @@ def _shade(s, index, lit, top):
     if cursor < s.length - 1e-6:
         dark.append((cursor, s.length))
     sw = s.seconds_width
-    # Up to the time labels, not over the keyboard.
-    return [(_rect(a * sw, 0.0, b * sw, top + 0.2), 0.001, index["GP2M Fuori anteprima"],
-             "fill") for a, b in dark]
+    box = grid_box(s)
+    gr = GRID_RADIUS * unit(s)
+    shapes = [_clip_rect(a * sw, 0.0, b * sw, top, box, gr) for a, b in dark]
+    return [(shape, 0.001, index["GP2M Fuori anteprima"], "fill") for shape in shapes if shape]
 
 
 def _shade_signature(s, lit):
@@ -859,11 +1012,12 @@ def rename_legacy_board(gp):
 
 # Board layer -> materials its strokes may use.
 _LAYER_MATERIALS = {
-    "GP2M Sfondo": {"GP2M Sfondo", "GP2M Banda tasti neri"},
+    "GP2M Sfondo": {"GP2M Finestra", "GP2M Riga bianca", "GP2M Banda tasti neri"},
     "GP2M Griglia": {"GP2M Linea battito", "GP2M Linea secondo"},
-    "GP2M Righe": {"GP2M Linea Do", "GP2M Linea nota"},
+    "GP2M Righe": {"GP2M Linea ottava", "GP2M Bordo"},
     "GP2M Tasti": {"GP2M Tasto bianco", "GP2M Tasto nero"},
-    "GP2M Etichette": {"GP2M Etichetta tasti", "GP2M Etichetta tempo"},
+    "GP2M Etichette": {"GP2M Pallino Do", "GP2M Etichetta tasti",
+                       "GP2M Etichetta tasti neri"},
     SHADE_LAYER: {"GP2M Fuori anteprima"},
     HEAD_LAYER: {"GP2M Testina"},
 }
@@ -942,6 +1096,12 @@ def build_grid(comp, scene=None):
     s = comp.gp2m
     grid = ensure_grid(comp)
     grid_gp = grid.data
+    palette = theme.board_palette()
+    if any(m is None or m.name not in palette for m in grid_gp.materials):
+        # A board of an older version (other materials): its strokes go anyway.
+        for layer in [layer for layer in grid_gp.layers if is_board_layer(layer)]:
+            grid_gp.layers.remove(layer)
+        grid_gp.materials.clear()
     index = _ensure_materials(grid_gp)
     rows, width, top = dimensions(s)
     frame = _first_frame(scene)
@@ -982,9 +1142,11 @@ def _build_playhead(comp, scene):
     head.use_lights = False
     head.pass_index = BOARD_PASS
     head_index = _ensure_materials(gp, HEAD_MATERIALS)
+    u = unit(s)
+    # CURSORE BLU: 5 px, across the grid and up to the box above the window.
     _add_strokes(head.frames.new(frame).drawing,
-                 [([(0.0, -0.12), (0.0, top + rig_lift())], 0.012, head_index["GP2M Testina"],
-                   "line")])
+                 [([(0.0, 0.0), (0.0, top + rig_lift(s))], 2.5 * u,
+                   head_index["GP2M Testina"], "line")])
     head.lock = True
     from . import engine
     offset = engine.state(comp).get("offset_frames", 0)
@@ -1037,10 +1199,10 @@ def apply_grid_opacity(comp):
             layer.opacity = value
 
 
-def rig_lift():
-    """The playhead line reaches up to the playhead handle of the rig."""
+def rig_lift(settings):
+    """Height of the playhead box's foot above the grid: the line reaches it."""
     from . import rig
-    return rig.HEAD_LIFT
+    return rig.head_lift(settings)
 
 
 def tag_redraw_views():
