@@ -163,10 +163,10 @@ fusione di Procreate):
 - **Canone** (per livello): il livello si ripete in 2–4 voci che entrano dopo N battiti,
   ognuna trasposta di N semitoni rispetto alla precedente; in loop le voci rientrano
   dall'inizio, come in un canone a ruota.
-- **Sezioni da keyframe** (*Tavola e tempo*): ogni keyframe Grease Pencil apre una sezione
+- **Sezioni da keyframe** (*Tavola e tempo → Tempo*): ogni keyframe Grease Pencil apre una sezione
   (strofa, ritornello…) che ripete il suo disegno fino al keyframe successivo; l'ultima
   suona un loop. La testina riparte a ogni sezione e la scena dura quanto il brano.
-- **Segui In/Out della scena** (*Tavola e tempo*): la composizione dura da Start a End della
+- **Segui In/Out della scena** (*Tavola e tempo → Tempo*): la composizione dura da Start a End della
   scena; spostando In o Out tavola e suono si adattano, cambiando la *Durata* si sposta l'End.
 - **Colore del livello**: il pallino nella lista dei livelli; la strip del livello nel
   Sequencer ha lo stesso colore.

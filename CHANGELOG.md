@@ -355,6 +355,22 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.36
+
+Pannelli più ordinati, a tendine come in Blender
+- **Tavola e tempo** è diviso in tre sottopannelli: *Tempo* (BPM, durata, In/Out della scena,
+  Loop e sezioni da keyframe), *Estensione* (nota più bassa, ottave, tasti in più; nella
+  Composizione Ritmica le corsie con le loro percussioni) e *Aspetto* (etichette, opacità della
+  griglia, altezza riga, larghezza secondo, battiti; chiuso all'inizio). *Ricostruisci tavola* è
+  l'icona ↻ nell'intestazione del pannello.
+- **Ottave in cima / in fondo**: la riga "Sopra + − Sotto + −" diventa due righe allineate alle
+  altre proprietà, con l'etichetta a sinistra e i pulsanti *Mostra* / *Nascondi* a destra
+  (*Aggiungi* / *Togli* per le corsie). L'etichetta non esce più dal bordo.
+- **Sequencer e ascolto** è diviso in *Ascolto* (tutte insieme, solo l'attiva, una dopo l'altra) e
+  *Clip nel Sequencer* (un canale per livello, canale, partenza, ordine).
+- **Effetti dello strumento** (Materiale) ha un sottopannello per effetto, come gli effetti del
+  livello: *Eco*, *Riverbero* e *Lo-fi*, con l'elenco di quelli accesi in cima.
+
 ## 0.0.35
 
 Tutto insieme: le novità di 0.0.31, 0.0.32, 0.0.33 e 0.0.34 (qui sotto) e i modificatori sul tratto.

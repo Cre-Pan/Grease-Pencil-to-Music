@@ -699,64 +699,93 @@ def draw_actions(layout, comp):
         row.prop(p, "draw_sound", text="", icon="GREASEPENCIL", toggle=True)
 
 
-def draw_board(layout, s):
-    style = prefs.get_prefs().note_naming
+def _split_layout(layout):
     layout.use_property_split = True
     layout.use_property_decorate = False
+    return layout
+
+
+def draw_board_time(layout, s):
+    """Tavola e tempo → Tempo: how fast and how long, and what repeats."""
+    _split_layout(layout)
     col = layout.column(align=True)
     col.prop(s, "bpm")
     col.prop(s, "length")
     col = layout.column(align=True)
-    col.prop(s, "follow_scene")
+    col.prop(s, "follow_scene", text="Segui In/Out")
     scene = bpy.context.scene
     if s.follow_scene and scene is not None:
         sub = col.column(align=True)
         sub.active = scene.gp2m_play.mode != "SEQUENCE"
-        sub.prop(scene, "frame_start", text="In (Start)")
-        sub.prop(scene, "frame_end", text="Out (End)")
+        sub.prop(scene, "frame_start", text="In")
+        sub.prop(scene, "frame_end", text="Out")
     col = layout.column(heading="Ripeti", align=True)
     col.prop(s, "loop")
     col.prop(s, "use_sections")
+
+
+def draw_board_range(layout, s):
+    """Tavola e tempo → Estensione (Corsie in the rhythm composition)."""
+    _split_layout(layout)
     if beat.is_beat(s):
         draw_lanes(layout, s)
+        return
+    style = prefs.get_prefs().note_naming
+    col = layout.column(align=True)
+    low = s.low_note
+    col.prop(s, "low_note", text=f"Nota più bassa ({music.note_name(low, style)})")
+    col.prop(s, "octaves",
+             text=f"Ottave (fino a {music.note_name(low + board.span(s), style)})")
+    if s.extra_keys:
+        col.prop(s, "extra_keys")
+    _octave_buttons(layout, beat_lanes=False)
+
+
+def draw_board_look(layout, s):
+    """Tavola e tempo → Aspetto: how the board is drawn (the sound does not change)."""
+    _split_layout(layout)
+    if beat.is_beat(s):
+        layout.prop(s, "key_labels", text="Nomi delle corsie")
     else:
-        col = layout.column(align=True)
-        low = s.low_note
-        col.prop(s, "low_note", text=f"Nota più bassa ({music.note_name(low, style)})")
-        col.prop(s, "octaves",
-                 text=f"Ottave (fino a {music.note_name(low + board.span(s), style)})")
-        if s.extra_keys:
-            col.prop(s, "extra_keys")
-        _octave_buttons(col)
-        col.prop(s, "key_labels")
+        layout.prop(s, "key_labels")
     layout.prop(s, "grid_opacity", slider=True)
     col = layout.column(align=True)
     col.prop(s, "row_height")
     col.prop(s, "seconds_width")
     layout.prop(s, "show_beats")
+
+
+def draw_board(layout, s):
+    """Every board setting in one column (used outside the panels)."""
+    for draw in (draw_board_time, draw_board_range, draw_board_look):
+        draw(layout.column(), s)
     layout.operator("gp2m.rebuild_board", icon="GRID")
 
 
 def draw_lanes(layout, s):
     """Bit: the lanes from the top, each with its percussion."""
-    col = layout.column(align=True)
-    col.prop(s, "lanes")
-    _octave_buttons(col)
+    layout.prop(s, "lanes")
+    _octave_buttons(layout, beat_lanes=True)
     col = layout.column(align=True)
     for lane in reversed(range(beat.lane_count(s))):
         if lane < len(s.lane_drums):
             col.prop(s.lane_drums[lane], "drum", text=f"Corsia {beat.lane_count(s) - lane}")
-    layout.prop(s, "key_labels", text="Nomi delle corsie")
 
 
-def _octave_buttons(layout):
-    """Octaves on top / at the bottom: the drawing stays where it is."""
-    row = layout.row(align=True)
-    for edge, label in (("TOP", "Sopra"), ("BOTTOM", "Sotto")):
-        sub = row.row(align=True)
-        sub.label(text=label)
-        for delta, icon in ((1, "ADD"), (-1, "REMOVE")):
-            op = sub.operator("gp2m.board_octaves", text="", icon=icon)
+def _octave_buttons(layout, beat_lanes=False):
+    """Octaves (or lanes) on top / at the bottom: the drawing stays where it is. Two rows
+    lined up with the split properties: the label on the left, the buttons on the right."""
+    what = "Corsie" if beat_lanes else "Ottave"
+    add, remove = ("Aggiungi", "Togli") if beat_lanes else ("Mostra", "Nascondi")
+    col = layout.column(align=True)
+    for edge, where in (("TOP", "in cima"), ("BOTTOM", "in fondo")):
+        split = col.split(factor=0.4, align=True)
+        left = split.row()
+        left.alignment = "RIGHT"
+        left.label(text=f"{what} {where}")
+        right = split.row(align=True)
+        for delta, icon, text in ((1, "ADD", add), (-1, "REMOVE", remove)):
+            op = right.operator("gp2m.board_octaves", text=text, icon=icon)
             op.edge, op.delta = edge, delta
 
 
@@ -791,20 +820,39 @@ def draw_master(layout, s):
     layout.prop(s, "ambience", slider=True)
 
 
-def draw_effects(layout, fx):
-    """Instrument effects (no checkboxes: an amount at zero is off)."""
-    col = layout.column(align=True)
-    col.prop(fx, "delay_mix", slider=True)
+def draw_fx_instrument_echo(layout, fx):
+    col = _split(layout).column(align=True)
+    col.prop(fx, "delay_mix", text="Quantità", slider=True)
     sub = col.column(align=True)
     sub.active = fx.delay_mix > 0
     sub.prop(fx, "delay_beats")
     sub.prop(fx, "delay_feedback", slider=True)
-    col = layout.column(align=True)
-    col.prop(fx, "reverb_mix", slider=True)
+
+
+def draw_fx_instrument_reverb(layout, fx):
+    col = _split(layout).column(align=True)
+    col.prop(fx, "reverb_mix", text="Quantità", slider=True)
     sub = col.column(align=True)
     sub.active = fx.reverb_mix > 0
     sub.prop(fx, "reverb_size", slider=True)
-    layout.prop(fx, "lofi", slider=True)
+
+
+def draw_fx_instrument_lofi(layout, fx):
+    _split(layout).prop(fx, "lofi", text="Quantità", slider=True)
+
+
+# (label, draw, amount) of the instrument effects: no checkboxes, an amount at zero is off.
+INSTRUMENT_FX = (
+    ("Eco", draw_fx_instrument_echo, "delay_mix"),
+    ("Riverbero", draw_fx_instrument_reverb, "reverb_mix"),
+    ("Lo-fi", draw_fx_instrument_lofi, "lofi"),
+)
+
+
+def draw_effects(layout, fx):
+    """Instrument effects in one column (used outside the panels)."""
+    for _label, draw, _amount in INSTRUMENT_FX:
+        draw(layout, fx)
 
 
 def draw_layer_details(layout, gp, layer):
@@ -849,23 +897,32 @@ def draw_instrument_details(layout, material):
         col.prop(material, "gp2m_library_preset")
 
 
-def draw_play(layout, scene, comp=None):
+def draw_listening(layout, scene, comp=None):
+    """How the compositions of the scene are played together."""
     play = scene.gp2m_play
     layout.row().prop(play, "mode", expand=True)
-    col = layout.column()
-    col.use_property_split = True
-    col.use_property_decorate = False
+    col = _split_layout(layout.column())
     row = col.row()
     row.active = not (comp is not None and engine.follows_scene(comp, scene))
     row.prop(play, "fit_range")
+
+
+def draw_sequencer(layout, scene, comp):
+    """Where the composition's clip goes in the Video Sequencer."""
+    _split_layout(layout)
+    layout.prop(comp.gp2m, "layer_channels")
+    col = layout.column(align=True)
+    col.prop(comp.gp2m, "channel", text="Canale (0 = auto)")
+    col.prop(comp.gp2m, "start_delay")
+    row = col.row(align=True)
+    row.active = scene.gp2m_play.mode == "SEQUENCE"
+    row.prop(comp.gp2m, "order")
+
+
+def draw_play(layout, scene, comp=None):
+    draw_listening(layout, scene, comp)
     if comp is not None:
-        col.prop(comp.gp2m, "layer_channels")
-        sub = col.column(align=True)
-        sub.prop(comp.gp2m, "channel", text="Canale (0 = auto)")
-        sub.prop(comp.gp2m, "start_delay")
-        row = sub.row(align=True)
-        row.active = play.mode == "SEQUENCE"
-        row.prop(comp.gp2m, "order")
+        draw_sequencer(layout.column(), scene, comp)
 
 
 def draw_export(layout):
@@ -927,8 +984,36 @@ class GP2M_PT_data_board(_DataPanel, bpy.types.Panel):
     bl_parent_id = "GP2M_PT_data"
     bl_options = {"DEFAULT_CLOSED"}
 
+    def draw_header_preset(self, _context):
+        self.layout.operator("gp2m.rebuild_board", text="", icon="FILE_REFRESH", emboss=False)
+
+    def draw(self, _context):
+        pass  # everything is in the sub-panels
+
+
+class GP2M_PT_data_board_time(_DataPanel, bpy.types.Panel):
+    bl_label = "Tempo"
+    bl_parent_id = "GP2M_PT_data_board"
+
     def draw(self, context):
-        draw_board(self.layout, active_composition(context).gp2m)
+        draw_board_time(self.layout, active_composition(context).gp2m)
+
+
+class GP2M_PT_data_board_range(_DataPanel, bpy.types.Panel):
+    bl_label = "Estensione"
+    bl_parent_id = "GP2M_PT_data_board"
+
+    def draw(self, context):
+        draw_board_range(self.layout, active_composition(context).gp2m)
+
+
+class GP2M_PT_data_board_look(_DataPanel, bpy.types.Panel):
+    bl_label = "Aspetto"
+    bl_parent_id = "GP2M_PT_data_board"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context):
+        draw_board_look(self.layout, active_composition(context).gp2m)
 
 
 class GP2M_PT_data_reading(_DataPanel, bpy.types.Panel):
@@ -968,8 +1053,24 @@ class GP2M_PT_data_play(_DataPanel, bpy.types.Panel):
     bl_parent_id = "GP2M_PT_data"
     bl_options = {"DEFAULT_CLOSED"}
 
+    def draw(self, _context):
+        pass  # everything is in the sub-panels
+
+
+class GP2M_PT_data_play_listen(_DataPanel, bpy.types.Panel):
+    bl_label = "Ascolto"
+    bl_parent_id = "GP2M_PT_data_play"
+
     def draw(self, context):
-        draw_play(self.layout, context.scene, active_composition(context))
+        draw_listening(self.layout, context.scene, active_composition(context))
+
+
+class GP2M_PT_data_play_sequencer(_DataPanel, bpy.types.Panel):
+    bl_label = "Clip nel Sequencer"
+    bl_parent_id = "GP2M_PT_data_play"
+
+    def draw(self, context):
+        draw_sequencer(self.layout, context.scene, active_composition(context))
 
 
 class _MaterialPanel:
@@ -1003,10 +1104,27 @@ class GP2M_PT_material_fx(_MaterialPanel, bpy.types.Panel):
     bl_options = {"DEFAULT_CLOSED"}
 
     def draw(self, context):
-        layout = self.layout
-        layout.use_property_split = True
-        layout.use_property_decorate = False
-        draw_effects(layout, context.material.gp2m_fx)
+        fx = context.material.gp2m_fx
+        on = [label for label, _draw, amount in INSTRUMENT_FX if getattr(fx, amount) > 0]
+        row = self.layout.row()
+        row.active = bool(on)
+        row.label(text=", ".join(on) if on else "Nessuno attivo")
+
+
+def _instrument_fx_panel(index, label, draw, amount):
+    idname = f"GP2M_PT_material_fx_{amount}"
+
+    def draw_panel(self, context):
+        fx = context.material.gp2m_fx
+        self.layout.active = getattr(fx, amount) > 0
+        draw(self.layout, fx)
+
+    return type(idname, (_MaterialPanel, bpy.types.Panel), {
+        "bl_idname": idname, "bl_label": label, "bl_parent_id": "GP2M_PT_material_fx",
+        "bl_options": {"DEFAULT_CLOSED"}, "bl_order": index, "draw": draw_panel})
+
+
+MATERIAL_FX_PANELS = tuple(_instrument_fx_panel(i, *spec) for i, spec in enumerate(INSTRUMENT_FX))
 
 
 class GP2M_PT_output(bpy.types.Panel):
@@ -1199,12 +1317,18 @@ classes = CHANGE_FAMILY_MENUS + (
     GP2M_PT_data_layers,
 ) + DATA_LAYER_PANELS + (
     GP2M_PT_data_board,
+    GP2M_PT_data_board_time,
+    GP2M_PT_data_board_range,
+    GP2M_PT_data_board_look,
     GP2M_PT_data_reading,
     GP2M_PT_data_mix,
     GP2M_PT_data_master,
     GP2M_PT_data_play,
+    GP2M_PT_data_play_listen,
+    GP2M_PT_data_play_sequencer,
     GP2M_PT_material,
     GP2M_PT_material_fx,
+) + MATERIAL_FX_PANELS + (
     GP2M_PT_output,
     GP2M_PT_scene,
     GP2M_PT_main,
