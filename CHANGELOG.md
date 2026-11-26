@@ -355,6 +355,26 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.38
+
+- **Testi "fisici" sulla tavola.** Il nome della composizione (sulla linguetta sotto la
+  tavola), il fotogramma nel riquadro blu della testina e i nomi di tasti e corsie non sono
+  più disegnati sopra il viewport: sono riempimenti Grease Pencil della tavola, col font di
+  Blender (anche i buchi di o, e, 8). Si muovono, ruotano e scalano con la composizione,
+  si vedono anche in Draw Mode e compaiono nei render. Il riquadro della testina è grande
+  quanto la tavola (come le linguette) e si allarga col numero; il numero si aggiorna a ogni
+  fotogramma, anche nel render di un'animazione. Rinominando la composizione, il nome sulla
+  tavola cambia da solo. Le tavole dei file salvati prima si rifanno all'apertura.
+- **Use Preview Range aggiorna subito la tavola**: attivandolo o spegnendolo (o cambiandone
+  inizio e fine) la zona fuori anteprima si scurisce o si schiarisce subito, senza aspettare
+  il prossimo aggiornamento della scena.
+- **Lista dei livelli a scaletta**: i livelli e i gruppi dentro un gruppo sono rientrati di due
+  icone vuote per livello; i gruppi si aprono e chiudono con le frecce ▾ / ▸
+  (`DOWNARROW_HLT` / `RIGHTARROW`).
+- **Grip**: sotto il mouse e mentre li trascini (o selezionati) i pallini si illuminano del
+  giallo-arancio dell'oggetto attivo del tema di Blender, come il bordo del riquadro della
+  testina.
+
 ## 0.0.37
 
 Tutto insieme: le novità di 0.0.36 (pannelli a tendine e Array/Trasponi che spostano il

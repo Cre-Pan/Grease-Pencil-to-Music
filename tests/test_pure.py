@@ -290,30 +290,13 @@ def test_midi_file_structure():
 
 # --- 0.0.2 ---------------------------------------------------------------------
 
-from grease_pencil_to_music import glyphs, timeline  # noqa: E402
+from grease_pencil_to_music import timeline  # noqa: E402
 
 
 def test_italian_note_names():
     assert music.note_name(60, "IT") == "Do4"
     assert music.note_name(67, "IT") == "Sol4"
     assert music.note_name(70, "IT") == "La#4"
-
-
-def test_every_label_character_has_a_glyph():
-    for style in ("EN", "IT"):
-        for midi in range(12, 120):
-            for char in music.note_name(midi, style).replace("-", ""):
-                assert char in glyphs.GLYPHS, (style, char)
-    for char in "0123456789s":
-        assert char in glyphs.GLYPHS
-
-
-def test_text_alignment():
-    right = glyphs.text_polylines("C4", 0.0, 0.0, 1.0, "RIGHT")
-    assert max(x for line in right for x, _y in line) == pytest.approx(0.0, abs=1e-9)
-    centered = glyphs.text_polylines("8s", 2.0, 0.0, 1.0, "CENTER")
-    xs = [x for line in centered for x, _y in line]
-    assert (min(xs) + max(xs)) / 2 == pytest.approx(2.0, abs=0.1)
 
 
 @pytest.mark.parametrize("ident", ["KICK", "SNARE", "HIHAT", "CRASH", "CLAP", "TOM", "COWBELL"])

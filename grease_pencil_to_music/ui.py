@@ -284,9 +284,12 @@ def _audio_prop(layout, gp, item):
              icon=mute_icon(item.mute or silent))
 
 
+INDENT_ICONS = 2  # empty icons per level: the rows inside a group make a staircase
+
+
 def _indent(layout, depth):
-    for _ in range(depth):
-        layout.separator(factor=1.6)
+    for _ in range(depth * INDENT_ICONS):
+        layout.label(text="", icon="BLANK1")
 
 
 def _lock_and_eye(layout, node):
@@ -333,7 +336,7 @@ class GP2M_UL_layers(bpy.types.UIList):
         row = layout.row(align=True)
         _indent(row, len(board.ancestors(group)))
         row.prop(group, "is_expanded", text="", emboss=False,
-                 icon="DISCLOSURE_TRI_DOWN" if group.is_expanded else "DISCLOSURE_TRI_RIGHT")
+                 icon="DOWNARROW_HLT" if group.is_expanded else "RIGHTARROW")
         row.label(text="", icon="FILE_FOLDER")
         _lock_and_eye(row, group)
         name = row.row(align=True)

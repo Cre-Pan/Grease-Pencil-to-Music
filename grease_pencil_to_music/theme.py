@@ -116,8 +116,8 @@ def board_palette(context=None):
         "GP2M Tasto bianco": (rgba(d["white_key_rim"]), rgba(d["white_key"])),
         "GP2M Tasto nero": (rgba(d["black_key_rim"]), rgba(d["black_key"])),
         "GP2M Pallino Do": (rgba((1.0, 1.0, 1.0), 0.35), rgba(d["dot"])),
-        "GP2M Etichetta tasti": (rgba(mix(d["white_key"], (0.0, 0.0, 0.0), 0.55)), None),
-        "GP2M Etichetta tasti neri": (rgba(mix(d["black_key"], (1.0, 1.0, 1.0), 0.55)), None),
+        "GP2M Etichetta tasti": (None, rgba(mix(d["white_key"], (0.0, 0.0, 0.0), 0.55))),
+        "GP2M Etichetta tasti neri": (None, rgba(mix(d["black_key"], (1.0, 1.0, 1.0), 0.55))),
         "GP2M Testina": (rgba(d["playhead"]), None),
         "GP2M Fuori anteprima": (None, (0.0, 0.0, 0.0, 0.65)),
         "GP2M Presa": (None, (0.0, 0.0, 0.0, 0.0)),
@@ -128,7 +128,11 @@ def board_palette(context=None):
         "GP2M Corsia": (None, rgba(d["lane"])),
         "GP2M Corsia alterna": (None, rgba(d["lane_alt"])),
         "GP2M Bordo corsia": (rgba(d["lane_rim"]), None),
-        "GP2M Etichetta corsia": (rgba(d["lane_text"]), None),
+        "GP2M Etichetta corsia": (None, rgba(d["lane_text"])),
+        # Texts and playhead box of the board (filled strokes of the grid object)
+        "GP2M Nome composizione": (None, rgba((1.0, 1.0, 1.0), 0.5)),
+        "GP2M Cursore": (rgba(d["playhead"]), rgba(d["playhead"])),
+        "GP2M Numero cursore": (None, rgba((1.0, 1.0, 1.0), 0.9)),
     }
 
 

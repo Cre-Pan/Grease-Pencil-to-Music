@@ -726,6 +726,107 @@ def test_preview_range_darkens_the_grid_only(comp):
     assert len(_grid(comp).layers.get(board.SHADE_LAYER).frames[0].drawing.strokes) == 0
 
 
+def test_use_preview_button_darkens_the_board_at_once(comp):
+    """Use Preview Range only redraws the Timeline (no depsgraph update): a message bus
+    subscription asks for the shade at once."""
+    board, handlers = sub("board"), sub("handlers")
+    scene = bpy.context.scene
+    fps = scene.render.fps / scene.render.fps_base
+    scene.frame_preview_start = scene.frame_start + int(round(1.0 * fps))
+    scene.frame_preview_end = scene.frame_start + int(round(2.0 * fps)) - 1
+    handlers._on_preview_range()
+    handlers._shade_tick()
+    scene.use_preview_range = True
+    try:
+        handlers._on_preview_range()  # what the message bus calls
+        assert scene.name in handlers._shade_scenes
+        handlers._shade_tick()
+        shade = _grid(comp).layers.get(board.SHADE_LAYER)
+        assert len(shade.frames[0].drawing.strokes) >= 1
+    finally:
+        scene.use_preview_range = False
+    handlers._on_preview_range()
+    handlers._shade_tick()
+    assert len(_grid(comp).layers.get(board.SHADE_LAYER).frames[0].drawing.strokes) == 0
+
+
+def _text_strokes(comp, layer_name, material):
+    gp = _grid(comp)
+    names = [m.name for m in gp.materials]
+    drawing = gp.layers.get(layer_name).frames[0].drawing
+    return [stroke for stroke in drawing.strokes
+            if names[stroke.material_index] == material]
+
+
+def test_board_texts_are_filled_strokes_of_the_grid(comp):
+    """Name, frame number and key names are part of the board (they show in renders):
+    each text is one fill with its holes, in Blender's font."""
+    board, handlers = sub("board"), sub("handlers")
+    scene = bpy.context.scene
+    assert board.has_texts(comp)
+    name = _text_strokes(comp, board.NAME_LAYER, "GP2M Nome composizione")
+    assert len(name) > len(comp.name.replace(" ", ""))  # o, e... have holes
+    assert all(stroke.hide_stroke and stroke.cyclic for stroke in name)
+    assert len({stroke.fill_id for stroke in name}) == 1
+    # The name sits on its tab, under the window.
+    _x0, z0, _x1, _z1 = board.window_box(comp.gp2m)
+    zs = [p.position.z for stroke in name for p in stroke.points]
+    assert max(zs) < z0 and min(zs) > z0 - board.NAME_TAB_OUT * board.unit(comp.gp2m)
+    # Renamed: the board writes the new name.
+    old = len(name)
+    comp.name = "Ninna nanna"
+    assert board.update_name(comp)
+    assert _grid(comp).get(board.NAME_KEY) == "Ninna nanna"
+    assert len(_text_strokes(comp, board.NAME_LAYER, "GP2M Nome composizione")) != old
+    assert not board.update_name(comp)
+    # The frame number follows the frame (also while rendering: frame_change_pre).
+    assert handlers.on_frame_change in bpy.app.handlers.frame_change_pre
+    scene.frame_set(7)
+    assert _grid(comp).get(board.CURSOR_KEY) == "7"
+    one = len(_text_strokes(comp, board.CURSOR_LAYER, "GP2M Numero cursore"))
+    scene.frame_set(1288)
+    assert _grid(comp).get(board.CURSOR_KEY) == "1288"
+    assert len(_text_strokes(comp, board.CURSOR_LAYER, "GP2M Numero cursore")) > one
+    assert board.cursor_half_width("1288") > board.cursor_half_width("7")
+    assert not board.update_cursor(comp, scene)  # nothing changed
+    # The box moves with the playhead (driver on the layer, like the line).
+    data = _grid(comp).animation_data
+    assert data.drivers.find(f'layers["{board.CURSOR_LAYER}"].translation', index=0)
+    scene.frame_set(scene.frame_start)
+    assert board.board_materials_ok(comp)
+    # Key names: one fill per name.
+    comp.gp2m.key_labels = "ALL"
+    board.rebuild(comp, scene)
+    labels = _text_strokes(comp, "GP2M Etichette", "GP2M Etichetta tasti")
+    assert labels and all(stroke.hide_stroke for stroke in labels)
+    assert len({stroke.fill_id for stroke in labels}) == sum(
+        1 for midi in range(comp.gp2m.low_note, comp.gp2m.low_note + board.span(comp.gp2m) + 1)
+        if not sub("music").is_black(midi))
+    comp.gp2m.key_labels = "C"
+    board.rebuild(comp, scene)
+
+
+def test_board_of_0_0_37_gets_its_texts(comp):
+    board = sub("board")
+    gp = _grid(comp)
+    gp.layers.remove(gp.layers.get(board.NAME_LAYER))
+    assert not board.has_texts(comp)
+    board.rebuild(comp)
+    assert board.has_texts(comp)
+
+
+def test_layer_list_indents_with_empty_icons(addon):
+    ui = sub("ui")
+    icons = []
+
+    class Row:
+        def label(self, text="", icon="NONE"):
+            icons.append(icon)
+
+    ui._indent(Row(), 2)
+    assert icons == ["BLANK1"] * (2 * ui.INDENT_ICONS)
+
+
 def _fresh(addon):
     assert bpy.ops.gp2m.add_composition() == {"FINISHED"}
     return bpy.context.view_layer.objects.active
@@ -2482,7 +2583,6 @@ def test_rig_handles_are_gizmos_with_the_design_colors(comp):
     assert rig.rig_object(comp) is None  # no object: the handles are gizmos
     assert "bl_rna" in rig.GP2M_GGT_rig.__dict__
     assert "bl_rna" in rig.GP2M_GT_handle.__dict__
-    assert "bl_rna" in rig.GP2M_GT_name.__dict__
     for handle in rig.HANDLE_NAMES:
         body, rim, glyphs = rig.handle_geometry(handle)
         assert len(body) % 3 == 0 and len(rim) % 3 == 0 and len(glyphs) % 3 == 0
@@ -2746,9 +2846,11 @@ def test_grid_opacity_and_layer_pan(comp):
     s = comp.gp2m
     s.grid_opacity = 0.4
     grid = board.grid_object(comp)
-    assert all(abs(layer.opacity - 0.4) < 1e-6 for layer in grid.data.layers)
+    assert all(abs(layer.opacity - (1.0 if layer.name == board.CURSOR_LAYER else 0.4)) < 1e-6
+               for layer in grid.data.layers)
     board.rebuild(comp)
-    assert all(abs(layer.opacity - 0.4) < 1e-6 for layer in board.grid_object(comp).data.layers)
+    assert all(abs(layer.opacity - (1.0 if layer.name == board.CURSOR_LAYER else 0.4)) < 1e-6
+               for layer in board.grid_object(comp).data.layers)
     # The drawing is not touched.
     assert all(layer.opacity == 1.0 for layer in board.user_layers(comp.data))
     item = sub("props").find_layer_settings(comp.data, "Livello 1")

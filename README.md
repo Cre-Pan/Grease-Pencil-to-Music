@@ -27,7 +27,10 @@ disegna su una tavola, e la tavola suona.
 1. Nel viewport 3D: **Shift+A → Doodle Music → Composizione Musicale**.
    Viene creata *Composizione Musicale 1*, il Grease Pencil su cui disegni (con la testina in
    cima), e sua figlia *Composizione Musicale 1 · Tavola*, un Grease Pencil a parte con
-   tastiera, griglia ed etichette. La tavola è bloccata e cliccandola selezioni la
+   tastiera, griglia ed etichette. Anche i testi (nomi dei tasti e delle corsie, nome della
+   composizione sotto la tavola, fotogramma nel riquadro blu della testina) sono tratti della
+   tavola, col font di Blender: si muovono e ruotano con la composizione e compaiono nei
+   render. La tavola è bloccata e cliccandola selezioni la
    composizione: entrando in **Draw Mode** disegni sempre sulla composizione, mai sulla griglia.
    La composizione parte **vuota**: un livello con un solo strumento (Flauto). La vista
    passa a frontale, *Solid → Texture*; si resta in Object Mode (passa a **Draw Mode** per

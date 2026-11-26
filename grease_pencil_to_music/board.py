@@ -23,7 +23,7 @@ import warnings
 
 import bpy
 
-from . import beat, glyphs, music, synth, theme
+from . import beat, fonttext, music, synth, theme
 
 BOARD_GROUP = "Tavola Composizione"
 LEGACY_BOARD_GROUP = "GP2M Tavola"  # name up to 0.0.12, renamed when found
@@ -248,19 +248,25 @@ def _rect(x0, z0, x1, z1):
 
 
 def _add_strokes(drawing, specs):
-    """``specs``: list of (points [(x, z), ...], radius, material_index, kind) where
-    kind is "line", "fill" (closed, filled, no outline) or "both"."""
+    """``specs``: list of (points [(x, z), ...], radius, material_index, kind[, group])
+    where kind is "line", "fill" (closed, filled, no outline) or "both". Fills with the
+    same ``group`` are one fill (the outlines of a text: holes stay empty)."""
     if not specs:
         return
     first = len(drawing.strokes)
-    drawing.add_strokes([len(points) for points, _r, _m, _k in specs])
-    for k, (points, radius, material_index, kind) in enumerate(specs):
+    drawing.add_strokes([len(spec[0]) for spec in specs])
+    groups = {}
+    for k, spec in enumerate(specs):
+        points, radius, material_index, kind = spec[:4]
         stroke = drawing.strokes[first + k]
         stroke.material_index = material_index
         if kind in ("fill", "both"):
             # Blender 5.x fills strokes per stroke (fill_id), not per material.
             stroke.cyclic = True
-            stroke.fill_id = first + k + 1
+            fill_id = first + k + 1
+            if len(spec) > 4:
+                fill_id = groups.setdefault(spec[4], fill_id)
+            stroke.fill_id = fill_id
             stroke.hide_stroke = kind == "fill"
         for point, (x, z) in zip(stroke.points, points):
             point.position = (x, 0.0, z)
@@ -816,19 +822,24 @@ def _labels(s, index, rows, top):
                 points = _dot(x0 + DOT_X * u, (z0 + z1) / 2.0, DOT_R * u)
                 specs.append((points, u, index["GP2M Pallino Do"], "both"))
         return specs
-    height = 0.5 * h
+    height = 0.5 * h  # capital height
+    size = height / fonttext.metrics()["cap"]
+    wanted = []
     for r in range(rows):
         midi = s.low_note + r
         black = music.is_black(midi)
         if mode not in ("ALL", "WHITE") or (mode == "WHITE" and black):
             continue
-        text = music.note_name(midi, style)
+        wanted.append((r, black, music.note_name(midi, style)))
+    fonttext.prepare(text for _r, _b, text in wanted)
+    for r, black, text in wanted:
         baseline = r * h + (h - height) / 2.0
         # White notes at the free end, black notes on their black key.
         x = x1 - BLACK_KEY_W * u + 6 * u if black else x0 + 8 * u
         name = "GP2M Etichetta tasti neri" if black else "GP2M Etichetta tasti"
-        for line in glyphs.text_polylines(text, x, baseline, height, "LEFT"):
-            specs.append((line, height * 0.06, index[name], "line"))
+        lines, width = fonttext.outline(text)
+        specs += fonttext.specs(fonttext.place(lines, width, x, baseline, size),
+                                index[name], ("key", r))
     return specs
 
 
@@ -945,13 +956,6 @@ def _beat_rows(s, index, lanes, width):
     return specs
 
 
-def _plain_upper(text):
-    """Capitals without accents (the single-stroke font of the board)."""
-    import unicodedata
-    text = unicodedata.normalize("NFKD", text)
-    return "".join(c for c in text if not unicodedata.combining(c)).upper()
-
-
 def _beat_labels(s, index, lanes):
     """The name of each lane's percussion, on the left panel ("Nessuna": none)."""
     if s.key_labels == "NONE":
@@ -959,18 +963,18 @@ def _beat_labels(s, index, lanes):
     u = unit(s)
     h = beat.lane_height(s)
     x0, _z0, x1, _z1 = keyboard_box(s)
-    height = LANE_LABEL * u
+    cap = fonttext.metrics()["cap"]
     room = (x1 - x0) - 2 * LANE_LABEL_X * u
+    texts = [synth.get_instrument(ident).label.upper() for ident in beat.lane_drums(s)]
+    fonttext.prepare(texts)
     specs = []
-    for lane, ident in enumerate(beat.lane_drums(s)):
-        text = _plain_upper(synth.get_instrument(ident).label)
-        size = height
-        width = glyphs.text_width(text, size)
-        if width > room > 0:
-            size *= room / width
-        baseline = lane * h + (h - size) / 2.0
-        for line in glyphs.text_polylines(text, x0 + LANE_LABEL_X * u, baseline, size, "LEFT"):
-            specs.append((line, size * 0.07, index["GP2M Etichetta corsia"], "line"))
+    for lane, text in enumerate(texts):
+        lines, width = fonttext.outline(text)
+        size = fonttext.fit_size(width, LANE_LABEL * u / cap, room)
+        baseline = lane * h + (h - size * cap) / 2.0
+        specs += fonttext.specs(fonttext.place(lines, width, x0 + LANE_LABEL_X * u, baseline,
+                                               size), index["GP2M Etichetta corsia"],
+                                ("lane", lane))
     return specs
 
 
@@ -1074,6 +1078,170 @@ def update_preview_shade(comp, scene=None):
     layer.lock = True
     gp[SHADE_KEY] = signature
     return True
+
+
+# --- Texts of the board: the composition's name and the playhead box -------------
+# Filled strokes of the grid in Blender's font (see fonttext): they move and turn
+# with the board and show in renders, like the lane and key names.
+
+NAME_LAYER = "GP2M Nome"
+NAME_KEY = "gp2m_name"  # on the grid data: the name drawn
+NAME_TEXT = 20.0  # design px (font size) of the name
+CURSOR_LAYER = "GP2M Cursore"
+CURSOR_KEY = "gp2m_cursor"  # on the grid data: the frame number drawn
+CURSOR_TEXT = 20.0  # design px (font size) of the frame number
+CURSOR_BOX_H, CURSOR_RADIUS = 32.0, 9.0  # the playhead box (CURSORE BLU)
+CURSOR_STEM = 5.0  # width of the stem, as the playhead line
+
+
+def cursor_half_width(text):
+    """Half width (design px) of the playhead box: it widens with the frame number."""
+    _lines, width = fonttext.number_outline(text)
+    return max(22.0, width * CURSOR_TEXT / 2.0 + 10.0)
+
+
+def cursor_foot(settings):
+    """z of the bottom of the playhead box (20 design px above the window)."""
+    return dimensions(settings)[2] + (MARGIN_TOP + 20.0) * unit(settings)
+
+
+def _name_specs(s, index, name):
+    """The composition's name, centred on the tab under the window."""
+    u = unit(s)
+    x, z, _direction = tab_anchors(s)["NAME"]
+    cap = fonttext.metrics()["cap"]
+    lines, width = fonttext.outline(name)
+    size = fonttext.fit_size(width, NAME_TEXT * u, 2.0 * (NAME_HW - 18.0) * u)
+    centre = z - NAME_TAB_OUT * u / 2.0  # the middle of the tab's visible part
+    baseline = centre - cap * size / 2.0
+    return fonttext.specs(fonttext.place(lines, width, x, baseline, size, "CENTER"),
+                          index["GP2M Nome composizione"], "name")
+
+
+def _cursor_specs(s, index, text):
+    """The playhead box with the current frame (x = 0: the layer follows the playhead)."""
+    u = unit(s)
+    top = dimensions(s)[2]
+    foot = cursor_foot(s)
+    hw = cursor_half_width(text) * u
+    box = _rounded_rect(-hw, foot, hw, foot + CURSOR_BOX_H * u, CURSOR_RADIUS * u,
+                        8)
+    specs = [([(0.0, top + (MARGIN_TOP - 1.0) * u), (0.0, foot + 2.0 * u)],
+              CURSOR_STEM / 2.0 * u, index["GP2M Cursore"], "line"),
+             (box, 0.001, index["GP2M Cursore"], "fill")]
+    lines, width = fonttext.number_outline(text)
+    size = CURSOR_TEXT * u
+    baseline = foot + CURSOR_BOX_H * u / 2.0 - fonttext.metrics()["digit"] * size / 2.0
+    specs += fonttext.specs(fonttext.place(lines, width, 0.0, baseline, size, "CENTER"),
+                            index["GP2M Numero cursore"], "number")
+    return specs
+
+
+def _cursor_expression(comp):
+    from . import engine
+    s = comp.gp2m
+    st = engine.state(comp)
+    expression = _playhead_expression(s.seconds_width, st.get("offset_frames", 0),
+                                      st.get("sections"), s.length)
+    return f"{local_offset(s)[0]:.6f} + {expression}"
+
+
+def _cursor_path():
+    return f'layers["{CURSOR_LAYER}"].translation'
+
+
+def _remove_cursor_driver(grid_gp):
+    data = grid_gp.animation_data
+    curve = data.drivers.find(_cursor_path(), index=0) if data is not None else None
+    if curve is not None:
+        data.drivers.remove(curve)
+
+
+def _set_cursor_driver(comp, grid_gp, scene):
+    """The playhead box follows the playhead (same expression, on the grid layer)."""
+    _remove_cursor_driver(grid_gp)
+    driver = grid_gp.driver_add(_cursor_path(), 0).driver
+    driver.type = "SCRIPTED"
+    for name, prop in (("start", "frame_start"), ("fps", "render.fps"),
+                       ("base", "render.fps_base")):
+        var = driver.variables.new()
+        var.name = name
+        var.targets[0].id_type = "SCENE"
+        var.targets[0].id = scene
+        var.targets[0].data_path = prop
+    driver.expression = _cursor_expression(comp)
+
+
+def _rewrite_layer(grid_gp, name, specs):
+    layer = grid_gp.layers.get(name)
+    if layer is None or not is_board_layer(layer) or not len(layer.frames):
+        return False
+    drawing = layer.frames[0].drawing
+    layer.lock = False
+    if len(drawing.strokes):
+        drawing.remove_strokes()
+    _add_strokes(drawing, specs)
+    layer.lock = True
+    return True
+
+
+def _texts_ready(comp):
+    grid = grid_object(comp)
+    gp = grid.data if grid is not None else None
+    if gp is None or gp.get(BOARD_KEY) is None:
+        return None, None
+    index = {m.name: i for i, m in enumerate(gp.materials) if m is not None}
+    if not {"GP2M Nome composizione", "GP2M Cursore", "GP2M Numero cursore"} <= set(index):
+        request_rebuild(comp)  # a board of an older version
+        return None, None
+    return gp, index
+
+
+def has_texts(comp):
+    """False for a board of 0.0.37 or older (name and frame number were drawn over
+    the viewport): it needs a rebuild."""
+    grid = grid_object(comp)
+    gp = grid.data if grid is not None else None
+    return gp is not None and gp.layers.get(NAME_LAYER) is not None \
+        and gp.layers.get(CURSOR_LAYER) is not None
+
+
+def update_cursor(comp, scene):
+    """Write the current frame in the playhead box (only when it changed).
+    True if the board was touched."""
+    text = str(scene.frame_current)
+    grid = grid_object(comp)
+    gp = grid.data if grid is not None else None
+    if gp is None or gp.get(CURSOR_KEY) == text:
+        return False
+    gp, index = _texts_ready(comp)
+    if gp is None:
+        return False
+    if gp.layers.get(CURSOR_LAYER) is None:
+        request_rebuild(comp)
+        return False
+    if _rewrite_layer(gp, CURSOR_LAYER, _cursor_specs(comp.gp2m, index, text)):
+        gp[CURSOR_KEY] = text
+        return True
+    return False
+
+
+def update_name(comp):
+    """Write the composition's name again after a rename. True if it changed."""
+    grid = grid_object(comp)
+    gp = grid.data if grid is not None else None
+    if gp is None or gp.get(NAME_KEY) == comp.name:
+        return False
+    gp, index = _texts_ready(comp)
+    if gp is None:
+        return False
+    if gp.layers.get(NAME_LAYER) is None:
+        request_rebuild(comp)
+        return False
+    if _rewrite_layer(gp, NAME_LAYER, _name_specs(comp.gp2m, index, comp.name)):
+        gp[NAME_KEY] = comp.name
+        return True
+    return False
 
 
 # --- Assembly ------------------------------------------------------------------
@@ -1227,6 +1395,13 @@ def set_playhead_offset(comp, offset_frames, sections=None):
                                       comp.gp2m.length)
     if curve.driver.expression != expression:
         curve.driver.expression = expression
+    grid = grid_object(comp)
+    data = grid.data.animation_data if grid is not None and grid.data is not None else None
+    curve = data.drivers.find(_cursor_path(), index=0) if data is not None else None
+    if curve is not None:
+        expression = f"{local_offset(comp.gp2m)[0]:.6f} + {expression}"
+        if curve.driver.expression != expression:
+            curve.driver.expression = expression
 
 
 def _set_playhead_driver(gp, scene, seconds_width, offset_frames=0):
@@ -1317,6 +1492,8 @@ _LAYER_MATERIALS = {
     SHADE_LAYER: {"GP2M Fuori anteprima"},
     HEAD_LAYER: {"GP2M Testina"},
     CATCH_LAYER: {"GP2M Presa"},
+    NAME_LAYER: {"GP2M Nome composizione"},
+    CURSOR_LAYER: {"GP2M Cursore", "GP2M Numero cursore"},
     "GP2M Linguette": {"GP2M Linguetta", "GP2M Puntino grip"},
 }
 
@@ -1411,6 +1588,7 @@ def build_grid(comp, scene=None):
     grid_gp[SHADE_KEY] = _shade_signature(s, lit)
     grid_gp[BOARD_KEY] = board_signature(s)
 
+    _remove_cursor_driver(grid_gp)  # before its layer goes (no "invalid driver")
     for layer in [layer for layer in grid_gp.layers if is_board_layer(layer)]:
         grid_gp.layers.remove(layer)
     board_group = _ensure_group(grid_gp, BOARD_GROUP, bottom=True)
@@ -1429,13 +1607,20 @@ def build_grid(comp, scene=None):
                   ("GP2M Etichette", _labels(s, index, rows, top)))
     pieces = (("GP2M Linguette", _tabs(s, index)),) + pieces  # under the window
     dx, dz = local_offset(s)
-    for name, specs in pieces + ((SHADE_LAYER, _shade(s, index, lit, top)),):
+    cursor_text = str(scene.frame_current)
+    grid_gp[NAME_KEY] = comp.name
+    grid_gp[CURSOR_KEY] = cursor_text
+    pieces += ((SHADE_LAYER, _shade(s, index, lit, top)),
+               (NAME_LAYER, _name_specs(s, index, comp.name)),
+               (CURSOR_LAYER, _cursor_specs(s, index, cursor_text)))
+    for name, specs in pieces:
         layer = grid_gp.layers.new(name, set_active=False, layer_group=board_group)
         layer.translation = (dx, 0.0, dz)  # board coordinates -> the object's (C4 dot)
         layer.use_lights = False
         layer.pass_index = BOARD_PASS
         _add_strokes(layer.frames.new(frame).drawing, specs)
         layer.lock = True
+    _set_cursor_driver(comp, grid_gp, scene)
 
     apply_grid_opacity(comp)
 
@@ -1516,8 +1701,9 @@ def apply_grid_opacity(comp):
     grid = grid_object(comp)
     if grid is None or grid.data is None:
         return
-    value = comp.gp2m.grid_opacity
     for layer in grid.data.layers:
+        # The playhead box stays as opaque as the playhead line.
+        value = 1.0 if layer.name == CURSOR_LAYER else comp.gp2m.grid_opacity
         if abs(layer.opacity - value) > 1e-6:
             layer.opacity = value
 
