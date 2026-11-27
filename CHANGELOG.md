@@ -358,6 +358,14 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.46
+
+- **Le copie di Array e Simmetria si selezionano in Edit Mode**: un box (trascinando, con
+  Shift o Ctrl, o con B), un lazo o un clic su una copia selezionano il tratto da cui è
+  copiata. Modificandolo si muovono tutte le copie, come in Blender; per staccare le copie
+  dal tratto c'è sempre *Applica* nel modificatore. I file salvati prima si aggiornano da
+  soli all'apertura.
+
 ## 0.0.45
 
 - **In e Out cambiati dalla Timeline restano**: con *Adatta l'intervallo della scena* acceso

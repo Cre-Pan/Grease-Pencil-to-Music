@@ -8,7 +8,7 @@ sound. Inspired by the drawn sound of Norman McLaren and Daphne Oram.
 
 import bpy
 
-from . import (draw_sound, handlers, help, icons, keyboard, midi_import, midi_input,  # noqa: F401
+from . import (copy_select, draw_sound, handlers, help, icons, keyboard, midi_import, midi_input,  # noqa: F401
                operators, prefs, props, rig, samples, seqsync, table, theme, timeline, ui,
                web_io)
 
@@ -33,9 +33,11 @@ def register():
     draw_sound.register()
     theme.register()
     rig.register_keymap()
+    copy_select.register()
 
 
 def unregister():
+    copy_select.unregister()
     rig.unregister_keymap()
     theme.unregister()
     draw_sound.unregister()
