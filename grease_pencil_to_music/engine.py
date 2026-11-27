@@ -344,6 +344,22 @@ def _set_linked_range(scene):
         scene[LINKED_RANGE_KEY] = [float(start), float(end), float(fps)]
 
 
+# How long (in frames) the compositions were when 'Adatta l'intervallo della scena' last
+# moved the scene End, kept in the file so that Ctrl+Z gives it back with the End.
+FITTED_FRAMES_KEY = "gp2m_fitted_frames"  # on the scene
+
+
+def _fitted_frames(scene):
+    value = scene.get(FITTED_FRAMES_KEY)
+    return int(value) if isinstance(value, (int, float)) else None
+
+
+def forget_fitted_range(scene):
+    """The next arrangement fits the scene End again (the option switched on)."""
+    if FITTED_FRAMES_KEY in scene:
+        del scene[FITTED_FRAMES_KEY]
+
+
 def _linked_frames(obj):
     value = obj.get(LINKED_FRAMES_KEY)
     return int(value) if isinstance(value, (int, float)) else None
@@ -1596,9 +1612,13 @@ def _arrange(scene):
             total = next(end for obj, end in ends if obj == solo)
         else:
             total = max(end for _obj, end in ends)
-        end = scene.frame_start + total - 1
-        if scene.frame_end != end:
-            scene.frame_end = end
+        # Only when what is heard got longer or shorter: a Start or End changed by
+        # hand (in the Timeline...) stays as it is.
+        if _fitted_frames(scene) != total:
+            end = scene.frame_start + total - 1
+            if scene.frame_end != end:
+                scene.frame_end = end
+            scene[FITTED_FRAMES_KEY] = int(total)
 
 
 def fit_groups(scene):

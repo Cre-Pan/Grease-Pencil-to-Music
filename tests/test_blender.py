@@ -2486,6 +2486,41 @@ def test_follow_scene_in_and_out(comp):
     bpy.data.objects.remove(other, do_unlink=True)
 
 
+def test_start_and_end_changed_by_hand_stay(comp):
+    """'Adatta l'intervallo della scena' moves the End only when the compositions get
+    longer or shorter: a Start or End set in the Timeline is not put back."""
+    engine = sub("engine")
+    _only(comp)
+    scene = bpy.context.scene
+    scene.gp2m_play.mode = "TOGETHER"
+    assert scene.gp2m_play.fit_range and not comp.gp2m.follow_scene
+    fps = scene.render.fps / scene.render.fps_base
+    start = scene.frame_start
+    comp.gp2m.length = 8.0
+    engine.arrange(scene)
+    assert scene.frame_end == start + round(8 * fps) - 1
+    try:
+        scene.frame_end = start + 300  # new Out in the Timeline
+        engine.arrange(scene)
+        assert scene.frame_end == start + 300
+        scene.frame_start = start + 20  # new In
+        engine.arrange(scene)
+        assert (scene.frame_start, scene.frame_end) == (start + 20, start + 300)
+        comp.gp2m.length = 6.0  # the composition got shorter: the End follows it
+        engine.regenerate(comp)
+        engine.arrange(scene)
+        assert scene.frame_end == scene.frame_start + round(6 * fps) - 1
+        scene.frame_end = start + 400
+        scene.gp2m_play.fit_range = False
+        scene.gp2m_play.fit_range = True  # switched on: the End fits at once
+        assert scene.frame_end == scene.frame_start + round(6 * fps) - 1
+    finally:
+        scene.frame_start = start
+        comp.gp2m.length = 8.0
+        engine.regenerate(comp)
+        engine.arrange(scene)
+
+
 def test_follow_scene_with_sections(comp):
     """With keyframe sections the loop keeps its length and the last one reaches Out."""
     engine = sub("engine")

@@ -48,6 +48,14 @@ def _instrument_changed(self, _context):
     feedback.sync_material(self)
 
 
+def _fit_range_changed(self, context):
+    from . import engine
+    scene = self.id_data if isinstance(self.id_data, bpy.types.Scene) else context.scene
+    if scene is not None:
+        engine.forget_fitted_range(scene)  # switched on: the End fits at once
+        engine.arrange_safe(scene)
+
+
 def _arrangement_changed(self, context):
     from . import engine
     scene = self.id_data if isinstance(self.id_data, bpy.types.Scene) else context.scene
@@ -979,9 +987,11 @@ class GP2M_PlaySettings(bpy.types.PropertyGroup):
     mode: EnumProperty(name="Ascolto", items=PLAY_MODES, default="TOGETHER",
                        update=_arrangement_changed)
     fit_range: BoolProperty(name="Adatta l'intervallo della scena", default=True,
-                            description="La fine della scena segue le composizioni (così il "
-                            "play va in loop). Non serve quando le composizioni seguono "
-                            "In/Out della scena", update=_arrangement_changed)
+                            description="Quando le composizioni si allungano o si accorciano la fine "
+                            "della scena le segue (così il play va in loop). Start ed End "
+                            "cambiati a mano, per esempio nella Timeline, restano come li "
+                            "hai messi. Non serve quando le composizioni seguono In/Out "
+                            "della scena", update=_fit_range_changed)
 
 
 TIMELINE_SOURCES = (
