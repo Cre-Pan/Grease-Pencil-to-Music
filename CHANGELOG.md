@@ -358,6 +358,14 @@
   tenendo premuto uno strumento lo senti suonare di più: un accordo arpeggiato che resta, o un
   piccolo ritmo per le percussioni.
 
+## 0.0.45
+
+- **In e Out cambiati dalla Timeline restano**: con *Adatta l'intervallo della scena* acceso
+  (e la composizione che non segue In/Out della scena) l'End tornava subito alla fine delle
+  composizioni appena si cambiavano Start o End. Ora la fine della scena le segue solo quando
+  si allungano o si accorciano (Durata, tavola scalata, ordine, Solo...); Start ed End messi a
+  mano restano. Riaccendendo l'opzione l'End si adatta subito.
+
 ## 0.0.44
 
 - **Forza quantizzazione** (*Ritmica*, sotto lo Swing): quanto le note si spostano verso la
