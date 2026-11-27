@@ -2325,6 +2325,7 @@ def test_modifier_copy_paste_and_apply(comp):
     drawing = comp.data.layers[first].frames[0].drawing
     assert len(drawing.strokes) == 3
     assert comp.modifiers.get(stroke_mods.BAKE_NAME) is None
+    assert drawing.attributes.get(stroke_mods.SOURCE_ATTRIBUTE) is None  # evaluated only
     assert sorted((round(n.start, 3), n.pitch) for n in notes()) == heard
     # Fade too: the radius of the points is thin at the end; nothing left on the layer.
     assert bpy.ops.gp2m.mod_apply(kind="FADE") == {"FINISHED"}
@@ -2356,11 +2357,56 @@ def test_layer_modifiers_keep_edit_mode_selection(comp):
     first = sub("board").user_layers(comp.data)[0].name
     props.find_layer_settings(comp.data, first).use_array = True
     tree = comp.modifiers[stroke_mods.MODIFIER_PREFIX + first].node_group
-    # The strokes as drawn go straight into the copies (Duplicate Elements) and nowhere else.
-    readers = [link.to_node.bl_idname for link in tree.links
+    # The strokes as drawn go into the copies (Duplicate Elements) and nowhere else: only
+    # through the node that stores the index of each point (it moves nothing).
+    readers = [link.to_node for link in tree.links
                if link.from_node.bl_idname == "NodeGroupInput"
                and link.from_socket.name == "Geometry"]
-    assert readers == ["GeometryNodeDuplicateElements"]
+    assert [node.bl_idname for node in readers] == ["GeometryNodeStoreNamedAttribute"]
+    after = [link.to_node.bl_idname for link in tree.links if link.from_node == readers[0]]
+    assert after == ["GeometryNodeDuplicateElements"]
+
+
+def test_array_copies_know_their_stroke(comp):
+    """Every evaluated point (the copies of Array and Simmetria too) carries the index of
+    the point of the drawing it comes from: a box / click on a copy selects that one."""
+    props, stroke_mods = sub("props"), sub("stroke_mods")
+    add_stroke(comp, 0, line(comp, 0.5, 1.0, 60, n=5))
+    add_stroke(comp, 0, line(comp, 1.0, 1.5, 64, n=7))
+    first = sub("board").user_layers(comp.data)[0].name
+    settings = props.find_layer_settings(comp.data, first)
+    settings.use_array = True
+    settings.array_count = 3
+    settings.use_mirror = True
+    bpy.context.view_layer.update()
+    gp = comp.evaluated_get(bpy.context.evaluated_depsgraph_get()).data
+    drawing = gp.layers[first].current_frame().drawing
+    source = drawing.attributes[stroke_mods.SOURCE_ATTRIBUTE]
+    original = comp.data.layers[first].frames[0].drawing
+    drawn = [tuple(round(c, 4) for c in p.position) for s in original.strokes for p in s.points]
+    assert len(drawing.strokes) > len(original.strokes)  # copies were made
+    offsets = [item.value for item in drawing.curve_offsets]
+    for start, end in zip(offsets, offsets[1:]):
+        indices = {source.data[i].value for i in range(start, end)}
+        assert len(indices) == end - start
+        # all of them in one stroke of the drawing
+        assert indices in ({0, 1, 2, 3, 4}, {5, 6, 7, 8, 9, 10, 11})
+    assert len(drawn) == 12
+
+
+def test_copy_select_hits():
+    """The screen tests of the selection of the copies (box, lasso, circle, click)."""
+    cs = sub("copy_select")
+    points = [(10, 10), (50, 50), None, (100, 20)]
+    assert cs.hits(points, "BOX", {"xmin": 0, "xmax": 60, "ymin": 0, "ymax": 60}) == [0, 1]
+    square = [(40, 40), (120, 40), (120, 0), (40, 0)]
+    assert cs.hits(points, "LASSO", {"path": square}) == [3]
+    assert cs.hits(points, "CIRCLE", {"x": 12, "y": 12, "radius": 5}) == [0]
+    assert cs.hits(points, "CLICK", {"location": (55, 52)}) == [1]
+    assert cs.hits(points, "CLICK", {"location": (300, 300)}) == []
+    # Stroke mode: the whole stroke of each point found.
+    assert cs.stroke_points([0, 3, 7], [4]) == {3, 4, 5, 6}
+    assert cs.stroke_points([0, 3, 7], [0, 6]) == {0, 1, 2, 3, 4, 5, 6}
 
 
 def test_instrument_icons_are_loaded(addon):

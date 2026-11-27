@@ -21,9 +21,11 @@ from . import music
 
 MODIFIER_PREFIX = "GP2M Modificatori "
 GROUP_NAME = "GP2M Modificatori"
-GROUP_VERSION = 4  # 2: board coordinates (origin on the C4 dot); 3: a stroke moves whole;
-# 4: copies made before moving to the board (Edit Mode selection)
+GROUP_VERSION = 5  # 2: board coordinates (origin on the C4 dot); 3: a stroke moves whole;
+# 4: copies made before moving to the board (Edit Mode selection); 5: the points remember
+# their index (a copy selects its stroke)
 VERSION_KEY = "gp2m_version"
+SOURCE_ATTRIBUTE = "gp2m_source"  # on the evaluated points: their index in the drawing
 
 
 def is_stroke_modifier(modifier):
@@ -332,8 +334,17 @@ def _build(tree):
     fill = b.math("MINIMUM", b.math("MAXIMUM", b.add(fill, 1.0), 1.0), float(lm.MAX_COPIES))
     count = b.switch("FLOAT", gi("Array Fill"), gi("Array Count"), fill)
     count = b.switch("FLOAT", selected, 1.0, count)
+    # Every point of the layer remembers its index in the drawing: the copies (Array,
+    # Simmetria) keep it, so a box / lasso / click on a copy selects the stroke it was
+    # copied from (copy_select). Storing an attribute moves nothing: the copies are
+    # still made on the strokes as drawn (edit hints, above).
+    source = b.node("GeometryNodeStoreNamedAttribute", data_type="INT", domain="POINT")
+    b.put(source, "Geometry", gi("Geometry"))
+    b.put(source, "Selection", selected)
+    b.put(source, "Name", SOURCE_ATTRIBUTE)
+    b.put(source, "Value", b.node("GeometryNodeInputIndex").outputs[0])
     array = b.node("GeometryNodeDuplicateElements", domain="SPLINE")
-    b.put(array, "Geometry", gi("Geometry"))
+    b.put(array, "Geometry", source.outputs[0])
     b.put(array, "Amount", b.to_int(count))
     k = b.socket(array.outputs, "Duplicate Index")
     # Object -> board coordinates (x = 0 where the loop starts, z = 0 the lowest row).
@@ -586,4 +597,9 @@ def bake(obj, layer_name, stack, context):
         leftover = obj.modifiers.get(name)
         if leftover is not None:
             obj.modifiers.remove(leftover)
+        for layer in obj.data.layers:  # the index is for the evaluated strokes only
+            for frame in layer.frames:
+                attribute = frame.drawing.attributes.get(SOURCE_ATTRIBUTE)
+                if attribute is not None:
+                    frame.drawing.attributes.remove(attribute)
     return result == {"FINISHED"}

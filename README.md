@@ -54,7 +54,8 @@ disegna su una tavola, e la tavola suona.
 3. Disegna. Appena stacchi la penna il suono viene rigenerato.
 4. Premi **Spazio**: la testina rossa scorre e senti il disegno, in loop.
    Nella **Timeline** vedi la forma d'onda e i blocchetti delle note (vedi sotto).
-5. Modifica in **Edit Mode** o **Sculpt Mode**: il suono si aggiorna.
+5. Modifica in **Edit Mode** o **Sculpt Mode**: il suono si aggiorna. Box, lazo o clic su una
+   copia di Array o Simmetria selezionano il tratto originale.
 6. **Shift+D** duplica tutta la composizione: ogni copia è un nuovo "piano di lavoro"
    con le sue regole (strumenti, volumi, muti) e il suo suono.
 7. **Ascolto** (pannello principale): *Tutte insieme*, *Solo l'attiva* oppure

@@ -413,6 +413,11 @@ def _undo_tick_timer():
 
 @persistent
 def on_depsgraph_update(_scene, depsgraph):
+    try:  # Edit Mode: a box / lasso / click on a copy of Array selects its stroke
+        from . import copy_select
+        copy_select.check()
+    except Exception as error:
+        print(f"[Doodle Music] selecting the copies failed: {error!r}")
     try:
         tick_undo(only_scenes=transform_running() or brush_running())
     except Exception as error:
