@@ -816,6 +816,35 @@ def test_board_of_0_0_37_gets_its_texts(comp):
     assert board.has_texts(comp)
 
 
+def test_playhead_width_while_drawing_needs_no_data_block_writes(addon, monkeypatch):
+    """Gizmos refresh while Blender draws, where writing to a data-block raises:
+    the frame number's width is estimated, then laid out by a timer (0.0.42 filled
+    the console with "Writing to ID classes in this context is not allowed")."""
+    fonttext, board = sub("fonttext"), sub("board")
+    real = fonttext._Helper.contours
+
+    def refused(self, text):
+        raise AttributeError("Writing to ID classes in this context is not allowed")
+
+    monkeypatch.setattr(fonttext, "_chars", {})
+    monkeypatch.setattr(fonttext, "_metrics", {})
+    monkeypatch.setattr(fonttext._Helper, "contours", refused)
+    curves = len(bpy.data.curves)
+    estimate = 4 * fonttext.FALLBACK_ADVANCE * board.CURSOR_TEXT / 2.0 + 10.0
+    assert board.cursor_half_width("1288") == pytest.approx(estimate)
+    assert fonttext.metrics() == fonttext.FALLBACK_METRICS
+    assert not fonttext._chars and not fonttext._metrics
+    assert bpy.app.timers.is_registered(fonttext.warm_up)
+    assert len(bpy.data.curves) == curves  # the helper did not stay behind
+    # Out of the draw, the timer lays the digits out.
+    monkeypatch.setattr(fonttext._Helper, "contours", real)
+    assert fonttext.warm_up() is None
+    assert set(fonttext.DIGITS) <= set(fonttext._chars) and fonttext._metrics
+    assert board.cursor_half_width("1288") > board.cursor_half_width("7")
+    fonttext.unregister()
+    assert not bpy.app.timers.is_registered(fonttext.warm_up)
+
+
 def test_layer_list_indents_with_empty_icons(addon):
     ui = sub("ui")
     icons = []
